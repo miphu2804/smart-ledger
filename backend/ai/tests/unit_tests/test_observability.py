@@ -20,7 +20,7 @@ from opentelemetry.sdk.trace import TracerProvider
 from opentelemetry.sdk.trace.export import SimpleSpanProcessor
 from opentelemetry.sdk.trace.export.in_memory_span_exporter import InMemorySpanExporter
 from pydantic_ai import Agent, Embedder
-from pydantic_ai.messages import ModelResponse, ToolCallPart
+from pydantic_ai.messages import ModelResponse, TextPart, ToolCallPart
 from pydantic_ai.models.function import FunctionModel
 from pydantic_ai.models.instrumented import InstrumentationSettings
 from tests.support import TEST_GUARDRAIL_LIMITS, ScriptedModel
@@ -269,7 +269,6 @@ async def test_turn_opens_a_session_with_the_redacted_question() -> None:
     assert remote["start_time"] == pytest.approx(time.time() * 1000, abs=60_000)
     assert remote["inputs"] == {"question": "mail [redacted:email]"}
     assert remote["user_properties"] == {"user_id": 3}
-    assert isinstance(remote["metadata"].pop("history_ms"), int)
     assert remote["metadata"] == {
         "shop_id": 15,
         "conversation_id": None,
@@ -295,7 +294,9 @@ async def test_turn_closes_its_session_with_the_answer_and_tokens() -> None:
     result = await agent.chat(user_id=3, shop_id=15, message=QUESTION)
     await asyncio.gather(*agent.observability._background)
 
-    finished, linked = tracer.enrichments
+    timed, finished, linked = tracer.enrichments
+    assert isinstance(timed["metadata"].pop("history_ms"), int)
+    assert timed == {"metadata": {}}
     assert finished["outputs"] == {"answer": ANSWER}
     assert finished["metrics"]["tool_calls"] == 1
     assert finished["metrics"]["model_requests"] == 2
@@ -311,8 +312,48 @@ async def test_session_updates_wait_until_the_session_exists() -> None:
     while agent.observability._background:
         await asyncio.gather(*agent.observability._background)
 
-    assert len(tracer.enrichments) == 2
+    assert len(tracer.enrichments) == 3
     assert all(enrichment["after_creation"] for enrichment in tracer.enrichments)
+
+
+async def test_first_span_waits_until_the_session_exists() -> None:
+    tracer = SlowTracer()
+    sessions_at_model_call: list[int] = []
+
+    def reply(messages, info) -> ModelResponse:
+        sessions_at_model_call.append(len(tracer.sessions))
+        return ModelResponse(parts=[TextPart(ANSWER)])
+
+    agent = traced_agent(tracer)
+    agent.agent = Agent(FunctionModel(reply))
+
+    await agent.chat(user_id=3, shop_id=15, message=QUESTION)
+
+    # The skipped local call plus the real start, both done before the model ran.
+    assert sessions_at_model_call == [2]
+
+
+async def test_session_start_is_sent_while_the_history_is_read() -> None:
+    sent = threading.Event()
+
+    class SignallingTracer(RecordingTracer):
+        async def acreate_session(self, **kwargs) -> str | None:
+            if not kwargs.get("skip_api_call"):
+                sent.set()
+            return await super().acreate_session(**kwargs)
+
+    class WaitingConversations(FakeConversationRepository):
+        def recent_messages(self, *args):
+            self.sent_during_read = sent.wait(timeout=1)
+            return super().recent_messages(*args)
+
+    conversations = WaitingConversations()
+    agent = traced_agent(SignallingTracer())
+    agent.conversations = conversations
+
+    await agent.chat(user_id=3, shop_id=15, conversation_id=41, message=QUESTION)
+
+    assert conversations.sent_during_read
 
 
 async def test_a_refused_message_opens_no_session() -> None:
@@ -332,7 +373,7 @@ async def test_streamed_turn_records_the_wait_for_the_first_words() -> None:
     await collect(await agent.stream_chat(user_id=3, shop_id=15, message=QUESTION))
     await asyncio.gather(*agent.observability._background)
 
-    finished = tracer.enrichments[0]
+    finished = tracer.enrichments[1]
     assert finished["outputs"] == {"answer": ANSWER}
     assert finished["metrics"]["first_text_ms"] >= 0
 
@@ -349,7 +390,7 @@ async def test_a_turn_past_the_timeout_marks_its_session(streamed) -> None:
             await agent.chat(user_id=3, shop_id=15, message="m")
     await asyncio.gather(*agent.observability._background)
 
-    assert tracer.enrichments == [{"metadata": {"error": "answer_timeout"}}]
+    assert tracer.enrichments[1:] == [{"metadata": {"error": "answer_timeout"}}]
 
 
 async def test_a_closed_stream_marks_its_session_cancelled() -> None:
@@ -361,7 +402,7 @@ async def test_a_closed_stream_marks_its_session_cancelled() -> None:
     await events.aclose()
     await asyncio.gather(*agent.observability._background)
 
-    assert tracer.enrichments == [{"metadata": {"error": "cancelled"}}]
+    assert tracer.enrichments[1:] == [{"metadata": {"error": "cancelled"}}]
 
 
 async def test_a_turn_left_out_of_the_sample_sends_nothing() -> None:
@@ -432,7 +473,7 @@ async def test_flush_sends_session_updates_before_the_spans_then_stops() -> None
     await agent.chat(user_id=3, shop_id=15, message=QUESTION)
     await agent.observability.flush()
 
-    assert tracer.enrichments_at_flush == 2
+    assert tracer.enrichments_at_flush == 3
     assert tracer.stopped
 
 
@@ -461,10 +502,11 @@ async def test_calls_match_the_honeyhive_sdk() -> None:
     )
 
 
-async def test_hung_honeyhive_does_not_hold_the_turn() -> None:
+async def test_hung_honeyhive_holds_the_turn_only_for_the_session_wait() -> None:
     agent = traced_agent(HangingTracer())
+    agent.observability.SESSION_WAIT_SECONDS = 0.05
 
-    async with asyncio.timeout(5):
+    async with asyncio.timeout(1):
         result = await agent.chat(user_id=3, shop_id=15, message=QUESTION)
 
     assert result.answer == ANSWER
@@ -520,7 +562,7 @@ async def test_concurrent_turns_keep_their_own_sessions() -> None:
     assert len(session_ids) == 2
     # Each turn finishes and links its own session, never the other turn's.
     seen = Counter(enrichment["seen"] for enrichment in tracer.enrichments)
-    assert seen == dict.fromkeys(session_ids, 2)
+    assert seen == dict.fromkeys(session_ids, 3)
     assert baggage.get_baggage("session_id") is None
 
 

@@ -1,3 +1,12 @@
+### 2026-11-05 — Open each HoneyHive session before the turn's first span
+
+| Area | Change |
+|---|---|
+| AI | • `Observability.wait_for_session` holds the turn before its first span until HoneyHive has the session, at most `SESSION_WAIT_SECONDS`, because a span that landed first made HoneyHive create the session itself with source `api`, start time 0 and no inputs<br>• `AgentService._prepare_turn` sends the session start before reading the history, so the read hides part of the wait, and `history_ms` moves from the start metadata to a `tag_turn` update |
+| Docs | • The AI README says the turn waits once for its session |
+
+Check: `uv run pytest tests/unit_tests -q` (495 passed, 1 skipped), `ruff check` and `ruff format --check`; the two new ordering tests fail on the old code. Three turns through the real `AgentService` with a scripted model and real HoneyHive (source `repro-fix`, from Vietnam) all read back with source `repro-fix`, a real start time, the question as input, the answer and `history_ms`; the wait cost 970 ms on a new conversation and 692 and 710 ms behind a 50 ms history read. Not verified: the wait from the production host. Commit: the one that adds this entry.
+
 ### 2026-11-05 — Keep the shop time out of chat answers
 
 | Area | Change |
@@ -187,12 +196,3 @@ Check: unit tests 457 passed, ruff check and format pass; startup wiring checked
 | Docs | • `evaluation/README.md` explains the layout and how to add an evaluation; ADR-0002, ADR-0008, ADR-0009, `ci-cd.md`, `.honeyhive/README.md` and the AI README point at the new paths |
 
 Check: `agent_chat --dry-run` prints the same plan as before except `suite_version`, which moves from `7a34fe0c0744` to `f459b4c569b6` because the SQL in `cases.yaml` lost its stray indentation and trailing spaces (the expected values are unchanged); `memory --gate` gives recall 0.860, by form 0.951 / 0.899 / 0.627, stale-only 0.039, equal to the numbers ADR-0002 recorded, and leaves no row in the local database; unit tests 452 passed; ruff check and format pass. Not verified: a full paid `agent_chat` run, `--sync`, and the CI workflow. Commit: the one that adds this entry.
-
-### 2026-11-04 — Assistant chats wait with the thought line again
-
-| Area | Change |
-|---|---|
-| Mobile | • The Trợ lý screen and the quick-ask sheet show the thought line (`ThoughtLine`: rotating waiting phrases and tool step labels) again instead of the three typing dots<br>• Restored `ThoughtLine`, the waiting phrases and tool step labels with their tests; removed `TypingDots`<br>• Kept the shared `ChatComposer` and answers without the Bobi icon and label |
-| Docs | • `api-contracts.md` and `AC-118` describe the thought line again |
-
-Check: `tsc` reports no error in `src` (only the missing `@playwright/test` module in `e2e/`); `node --test tests/thinkingPhrases.test.ts tests/toolSteps.test.ts` passes 9/9. Not verified on a device.
