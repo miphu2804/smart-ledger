@@ -116,7 +116,8 @@ class AgentConversationRepository:
             if entry["limit"] == limit:
                 return entry["messages"]
 
-        with self.postgres.session() as session:
+        # Two autocommit statements: a delete between them only shortens the history.
+        with self.postgres.read_session() as session:
             self._owned_conversation(session, conversation_id, user_id, shop_id)
             messages = session.scalars(
                 select(ChatMessage)

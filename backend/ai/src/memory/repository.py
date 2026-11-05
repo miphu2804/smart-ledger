@@ -145,7 +145,7 @@ class AgentMemoryRepository:
         """
         # One scan answers both parts: every round trip costs 35-46 ms between the
         # servers, and the owner's memories are few enough to rank in Python.
-        with self.postgres.session() as session:
+        with self.postgres.read_session() as session:
             rows = session.execute(
                 select(
                     AgentMemory.id,
@@ -527,7 +527,7 @@ class AgentMemoryRepository:
         has_memory = (
             select(AgentMemory.id).where(*self._live(shop_id, user_id)).exists()
         )
-        with self.postgres.session() as session:
+        with self.postgres.read_session() as session:
             return bool(session.scalar(select(has_memory & ~switched_off)))
 
     def memory_enabled(self, shop_id: int, user_id: int) -> bool:
