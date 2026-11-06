@@ -4,7 +4,7 @@ title: "Diagram guide"
 description: "How each architecture diagram is edited, exported and scoped, and what evidence each one carries."
 owner: Technical owner
 status: stable
-generated: { by: human:miphu2804, at: 2026-11-06T22:18:48+07:00 }
+author: miphu2804
 stale_after: 2027-01-05T22:18:48+07:00
 ---
 # Diagram guide
@@ -20,9 +20,11 @@ Sources live in [`src/`](src/), exports in [`images/`](images/). Reference: [`sr
 | `vps-network.drawio/svg` | Docker networks, DNS aliases and ports on the VPS | Drawn from `deploy/*/compose.yaml`, the Caddy sites the playbook writes, and `docker network inspect` on the VPS on 2026-10-29 |
 | `auth-request-flow.drawio/svg` | Firebase browser sign-in, CORS and project matching | The image is not the Zalo OAuth/App Link flow; see [Zalo contract](../../contracts/api-contracts.md#zalo-core-015) and the Core service map. A permitted origin does not grant an application role |
 | `service-walkthrough/README.md` and its 14 SVG exports | Core/AI reading notes with dated source reviews | The two Core overview figures include current modules; detailed transaction diagrams keep their stated review scope, not FE or staging acceptance |
-| `erd.dbml` | Logical Core/AI schema and explicitly planned tables | Current branch adds V19 daily activity (CORE-018) to V1–V18; 23 Core tables. SQL owns actual RLS, checks, triggers and partial indexes that DBML cannot fully express; no shared-DB migration implied |
+| `erd.dbml` | Logical Core/AI schema and explicitly planned tables | The current checked-in Core schema is V1–V20 with 25 tables, including the two V20 quota tables. V19/23-table references in dated review notes are historical snapshots. SQL owns actual RLS, checks, triggers and partial indexes that DBML cannot fully express; no shared-DB migration or production activation is implied |
 | `erd.dbdiagram` | dbdiagram editor layout only | It does not contain schema definitions; table positions must cover the DBML tables, including newer media/Zalo/refund tables |
 | `agent-memory.drawio/svg`, `apk-release.drawio/svg` | Related AI design and mobile release pipeline | Separate from Core API implementation; retain their ADR/release ownership and dated evidence |
+
+The [ERD description](../erd-description.md#1-overview) owns the V20/25 current-schema and V19/23 historical-snapshot distinction; this guide only classifies diagram evidence.
 
 Product images in [marketing](../../marketing/README.md) are dated mock captures;
 the [mobile reference image](../../design/mobile-ui-style-migration.md) is design

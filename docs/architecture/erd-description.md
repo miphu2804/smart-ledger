@@ -4,7 +4,7 @@ title: "SmartLedger — ERD Description"
 description: "Database entities, relationships, data flows and migration alignment, paired with `diagrams/src/erd.dbml`."
 owner: Technical owner
 status: stable
-generated: { by: human:miphu2804, at: 2026-11-06T22:18:48+07:00 }
+author: miphu2804
 stale_after: 2027-01-05T22:18:48+07:00
 ---
 # SmartLedger — ERD Description
@@ -13,7 +13,7 @@ stale_after: 2027-01-05T22:18:48+07:00
 
 CORE-019 adds owner-approved V20 on 2026-10-31: private `user_rate_limit_windows` and `user_rate_limit_reservations`, bringing the checked-in Core schema to 25 tables. Quota is committed with business changes; the feature remains default-off and this document does not establish shared-DB rollout. [Policy and recovery](../../backend/core/docs/user-rate-limits.md) describe activation and retention. The two tables below are additive; the earlier V19 review remains a dated snapshot.
 
-CORE-018 on `feat/core-daily-activity` adds V19 and `user_daily_activity` on 2026-10-29, bringing the checked-in Core schema to 23 tables. The previous full mapping review was V1–V18 (22 tables) against `feat/admin-dashboard-growth` at `3e93dd1` on 2026-10-26; this change does not re-audit every older mapping or establish shared-database migration.
+CORE-018 on `feat/core-daily-activity` added V19 and `user_daily_activity` on 2026-10-29; its historical review counted 23 Core tables at that revision. The previous full mapping review was V1–V18 (22 tables) against `feat/admin-dashboard-growth` at `3e93dd1` on 2026-10-26. These dated reviews do not override the current V1–V20/25-table mapping or establish shared-database migration.
 The dated feature notes below preserve their original preparation boundaries.
 The `.dbml` file owns the logical schema; `.dbdiagram` is only the editor's table
 layout. AI tables and the planned `ai_requests` table retain their own status.
@@ -26,17 +26,21 @@ CORE-012 #163/#164 on `feat/core-barcode`, reviewed 2026-10-12: V16 replaces arc
 
 This ERD describes the target PostgreSQL database for **SmartLedger Phase 1**, an AI-assisted bookkeeping system for small businesses. It includes planned tables and relationships that are not yet in Core's Flyway migrations.
 
-The logical ERD includes authentication, shops, products, customers, drafts, sales, payments, refunds, debts, expenses, media cleanup jobs, Agent chat history, Agent long-term memory, AI request traces, idempotency, and audit logs. Core migrations V1–V19 implement the business tables, idempotency, shared OWNER/ADMIN audit logs, nullable sale-item estimated-cost snapshot, Cloudinary media references/outbox, OWNER notifications, ACTIVE-only barcode uniqueness, external Zalo mappings and WEB/ANDROID OAuth sessions, plus V19 daily user activity; the AI baseline `supabase/migrations/20261005000000_ai_baseline.sql` creates the chat tables, enables the `vector` extension (pgvector), creates the read-only `ai_read` views (including `v_sales` and `v_sale_items`) and the `ai_sql_reader` role; later AI migrations in the same folder add `v_debts`, `v_payments` and `v_expenses` and the `agent_memories` and `agent_memory_settings` tables. V15 adds OWNER notification events/recipients and nullable product thresholds; `ai_requests` remains target design. This does not assert deployment.
+The logical ERD includes authentication, shops, products, customers, drafts, sales, payments, refunds, debts, expenses, media cleanup jobs, Agent chat history, Agent long-term memory, AI request traces, idempotency, and audit logs. The current checked-in Core migration set is V1–V20 and contains 25 Core tables, including V20 quota tables; V19/23-table wording below is a historical review snapshot, not the current schema count. The AI baseline `supabase/migrations/20261005000000_ai_baseline.sql` creates the chat tables, enables the `vector` extension (pgvector), creates the read-only `ai_read` views (including `v_sales` and `v_sale_items`) and the `ai_sql_reader` role; later AI migrations add `v_debts`, `v_payments`, `v_expenses`, `agent_memories` and `agent_memory_settings`. `ai_requests` remains target design. Checked-in migrations do not establish deployment to a shared or production database.
 
 Business decisions are owned by the [BRD](../product/business-requirements.md) and [PRD](../product/product-requirements.md); endpoint/JSON details are owned by the [API contract](../contracts/api-contracts.md). Core audit/schema alignment reviewed against `staging` commit `b1de421c461d59473b3bb73aae103027afd67a89` on 2026-10-06; AI sections were re-checked against `supabase/migrations/` and `backend/ai/src` at `staging` commit `f1a4818` on 2026-10-16.
 
 A sale record in SmartLedger is an internal business record. It is **not an electronic invoice**.
 
+## CORE-019 V20
+
+The checked-in V20 migration adds the two private quota tables `user_rate_limit_windows` and `user_rate_limit_reservations`, bringing the current Core schema to 25 tables. Windows belong to a user and group and hold a durable time window and successful count; reservations use a fenced lease and complete with the protected business transaction. V20 enables RLS and revokes public access. The feature defaults off; the checked-in migration and tests do not establish a shared-DB migration, activation, or production acceptance. See the [quota policy and recovery guide](../../backend/core/docs/user-rate-limits.md).
+
 ## CORE-018 V19
 
-Owner approval on 2026-10-29 covers an additive `user_daily_activity(user_id BIGINT NOT NULL, activity_date DATE NOT NULL)` table, composite PK `(user_id, activity_date)`, FK to `users.id` with `ON DELETE CASCADE` for this telemetry only, and `(activity_date, user_id)` index. There is no backfill or business-data mutation. V19 enables RLS and revokes PUBLIC/anon/authenticated access; Grafana needs a separately reviewed read-only policy/column grant. Core must use its trusted SQL role.
+**Historical 23-table snapshot.** The V19 review below is retained as historical evidence of the additive `user_daily_activity` change; it is not the current Core table count. Owner approval on 2026-10-29 covers an additive `user_daily_activity(user_id BIGINT NOT NULL, activity_date DATE NOT NULL)` table, composite PK `(user_id, activity_date)`, FK to `users.id` with `ON DELETE CASCADE` for this telemetry only, and `(activity_date, user_id)` index. There is no backfill or business-data mutation. V19 enables RLS and revokes PUBLIC/anon/authenticated access; Grafana needs a separately reviewed read-only role/column grant. Core must use its trusted SQL role.
 
-The date is initial successful-request admission in `Asia/Ho_Chi_Minh`, not UTC or a timestamp. The recorder resolves an ACTIVE Core user after controller completion and only counts authenticated handled business API 2xx/3xx responses. Public OAuth, health, OPTIONS and failed requests are excluded. Only user/day is persisted. The bounded cache is an optimization; PostgreSQL PK and `ON CONFLICT DO NOTHING` preserve uniqueness across instances and restarts.
+The date is initial successful-request admission in `Asia/Ho_Chi_Minh`, not UTC or a timestamp. The recorder resolves an ACTIVE Core user after controller completion and only counts authenticated handled business API 2xx/3xx responses. Public OAuth, health, OPTIONS and failed requests are excluded. Only user/day is persisted. The bounded cache is an optimization; PostgreSQL PK and `ON CONFLICT DO NOTHING` preserve uniqueness across instances and restarts. V20 is the current checked-in successor; no production migration is inferred.
 
 The 90-day window includes today and 89 previous Vietnam dates. Hourly cleanup deletes older rows; SQL always bounds its window even if cleanup is unavailable. Recovery disables `USER_ACTIVITY_ENABLED` and retains V19; the flag defaults false and must only be enabled after the merged migration succeeds. See [Core rollout/retention/Grafana handoff](../../backend/core/docs/user-daily-activity.md) for limits, read-only role and operator acceptance; this is not shared-DB rollout evidence.
 
