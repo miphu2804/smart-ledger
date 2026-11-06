@@ -4,6 +4,7 @@ Bảng trả lời cho form **Play Console → Nội dung ứng dụng → An to
 
 - Người đứng tên duyệt nội dung pháp lý: Minh Thọ.
 - Đối chiếu ngày 2026-11-01 với code trên `staging`, [hướng dẫn của Google](https://support.google.com/googleplay/android-developer/answer/10787469) và [khai báo của Firebase](https://firebase.google.com/docs/android/play-data-disclosure).
+- Phần Google Analytics đối chiếu ngày 2026-11-06 với nhánh `feat/mobile-ga4-analytics` ([ADR-0010](../architecture/adr/0010-mobile-usage-analytics-ga4.md)) và [danh sách dữ liệu của Google Analytics for Firebase](https://support.google.com/analytics/answer/11582702); các dòng đó chỉ đúng khi bản có Analytics được phát hành.
 - Đổi SDK, nhà cung cấp hay dữ liệu thu thập thì cập nhật cả tài liệu này, trang chính sách và form.
 
 ## Câu hỏi chung
@@ -35,7 +36,8 @@ Mọi loại dưới đây: **Thu thập: có. Chia sẻ: không. Xử lý tạm
 | Tài chính | Thông tin tài chính khác | Bắt buộc | Chức năng, Phân tích | Doanh thu, chi phí, công nợ; phần trợ lý đã đọc nằm trong bản ghi HoneyHive |
 | Tin nhắn | Tin nhắn khác trong ứng dụng | Tuỳ chọn | Chức năng, Phân tích | Hội thoại với trợ lý Bobi; câu hỏi đã che email, số thẻ, khoá truy cập được ghi trên HoneyHive |
 | Ảnh và video | Ảnh | Tuỳ chọn | Chức năng | Ảnh sản phẩm tải lên |
-| Hoạt động trong ứng dụng | Lượt tương tác với ứng dụng | Bắt buộc | Phân tích, Chống gian lận và bảo mật | Nhật ký thao tác, ngày hoạt động để đếm người dùng |
+| Hoạt động trong ứng dụng | Lượt tương tác với ứng dụng | Bắt buộc | Phân tích, Chống gian lận và bảo mật | Nhật ký thao tác, ngày hoạt động để đếm người dùng; màn đã mở và sự kiện gửi Google Analytics khi người dùng đồng ý |
+| ID thiết bị hoặc ID khác | ID thiết bị hoặc ID khác | Tuỳ chọn | Phân tích | App-instance ID của Google Analytics, chỉ khi người dùng đồng ý. ID quảng cáo bị chặn |
 | Hoạt động trong ứng dụng | Lịch sử tìm kiếm trong ứng dụng | Tuỳ chọn | Chức năng | Từ khoá tìm hàng và đơn gửi lên Core, có thể nằm trong log |
 | Hoạt động trong ứng dụng | Nội dung khác do người dùng tạo | Bắt buộc | Chức năng | Tên tiệm, hàng hoá, danh mục, nội dung đơn |
 | Thông tin và hiệu suất | Chẩn đoán | Bắt buộc | Phân tích | Log request, mã lỗi, độ trễ trên máy chủ |
@@ -46,9 +48,8 @@ Mọi loại dưới đây: **Thu thập: có. Chia sẻ: không. Xử lý tạm
 |---|---|---|
 | Bản ghi âm giọng nói | Chuyển thành chữ ngay trên máy, không gửi đi; Google không yêu cầu khai dữ liệu chỉ xử lý trên thiết bị | `src/lib/speech/`, không có đường gửi audio. Phần văn bản đã khai ở các loại trên |
 | Thông tin thanh toán của người dùng | Không có thanh toán trong app. Số tài khoản ngân hàng của tiệm chỉ lưu trên máy | `localProfile`, không gửi lên Core |
-| Vị trí | Không xin quyền vị trí, không suy ra vị trí từ địa chỉ IP | `app.json` chỉ có `CAMERA`, `RECORD_AUDIO`; không có GeoIP trong `deploy/` và Core |
+| Vị trí | Không xin quyền vị trí; nhóm không suy ra vị trí từ địa chỉ IP. Google Analytics suy ra vị trí gần đúng từ IP đã che, xem mục cần xác nhận | `app.json` chỉ có `CAMERA`, `RECORD_AUDIO`; không có GeoIP trong `deploy/` và Core |
 | Danh bạ | Không xin quyền danh bạ; tên khách do chủ tiệm tự nhập | `app.json` |
-| ID thiết bị hoặc ID khác | Không có Firebase Analytics hay SDK quảng cáo. Firebase Auth không tạo loại ID này theo khai báo của Firebase | `package.json` |
 | Nhật ký sự cố | Không có SDK báo lỗi | `package.json` |
 | Hình từ camera lúc quét mã | Chỉ xử lý trên máy | Trang chính sách, mục 5 |
 
@@ -59,6 +60,7 @@ Theo Google, chuyển dữ liệu cho **bên xử lý thay mình theo chỉ dẫ
 | Bên nhận | Dữ liệu | Căn cứ |
 |---|---|---|
 | Firebase, Supabase, Cloudinary, VPS, Vercel, Cloudflare R2 | Tuỳ dịch vụ | Bên xử lý cho hệ thống của nhóm |
+| Google Analytics (qua Firebase) | Màn đã mở, sự kiện trong `analyticsEvents.ts`, ID tài khoản Core, app-instance ID, IP đã che; chỉ khi người dùng đồng ý | Bên xử lý, với điều kiện Google signals, liên kết Google Ads và chia sẻ dữ liệu với sản phẩm Google đều tắt |
 | OpenAI, Inception | Câu hỏi và dữ liệu cửa hàng liên quan, khi người dùng hỏi Bobi | Bên xử lý, và do người dùng chủ động hỏi |
 | HoneyHive | Câu hỏi đã che, dữ liệu trợ lý đã đọc, câu trả lời; có thể chứa tên và số điện thoại khách (`backend/ai/src/observability.py`). Không gồm ảnh hay âm thanh | Bên xử lý để nhóm tìm lỗi và cải thiện chất lượng |
 | Google, Zalo | Thông tin đăng nhập | Người dùng chủ động chọn cách đăng nhập |
@@ -69,3 +71,4 @@ Theo Google, chuyển dữ liệu cho **bên xử lý thay mình theo chỉ dẫ
 2. **Facebook SDK:** chưa xác nhận được bản production có kèm SDK không, vì giá trị `FACEBOOK_APP_ID` nằm trong secret. Trong code, SDK đã tắt tự ghi sự kiện và mã quảng cáo, nên bảng trên không khai thêm gì. Kiểm tra lại trên file AAB trước khi nộp.
 3. **Bản Android phân phối:** chưa kiểm tra trên AAB production thật, phần bằng chứng ở trên đọc từ code và cấu hình.
 4. **Thời gian lưu trên HoneyHive:** chưa biết, và mục 13 của trang chính sách chưa nêu. Lịch sử hội thoại xoá trong app không kéo theo bản ghi trên HoneyHive, nên kiểm tra việc này khi xử lý yêu cầu xoá tài khoản.
+5. **Google Analytics:** trước khi nộp bản có Analytics, kiểm trên AAB rằng không còn quyền `AD_ID`; xác nhận trong GA4 rằng Google signals, liên kết Google Ads và chia sẻ dữ liệu với sản phẩm Google đều tắt, nếu không thì đổi các loại dữ liệu gửi Google Analytics sang **có chia sẻ**. Quyết định có khai **Vị trí gần đúng** không, vì Google Analytics suy ra vị trí gần đúng từ IP đã che. Cập nhật trang chính sách để nêu Google Analytics, dữ liệu gửi đi và cách tắt ở Cài đặt, và xác nhận hồ sơ chuyển dữ liệu ra nước ngoài theo Luật Bảo vệ dữ liệu cá nhân 2025.

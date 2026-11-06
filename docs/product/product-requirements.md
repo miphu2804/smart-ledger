@@ -5,7 +5,7 @@
 | Trạng thái | Core: hành vi đã chốt dưới đây; AI/dashboard và FE: cần nghiệm thu tích hợp |
 | Chủ sở hữu | Chủ sản phẩm |
 | Người phê duyệt | Chủ sản phẩm; người rà soát kỹ thuật |
-| Cập nhật lần cuối | 2026-11-02 (CORE-021: FR-038, AC-111–115; không rà soát lại các feature khác) |
+| Cập nhật lần cuối | 2026-11-06 (số liệu sử dụng mobile: FR-039, NFR-011, AC-116–118, chờ duyệt; không rà soát lại các feature khác) |
 
 ## Tài liệu liên quan
 
@@ -102,6 +102,7 @@ Luồng hỗ trợ: ADMIN đăng nhập dashboard web, tìm OWNER hoặc cơ s�
 | `FR-036` | `BO-003`, `BR-023` | Khi được bật sau migration, Core ghi tối đa một ngày hoạt động cho mỗi user ACTIVE có request API nghiệp vụ đã xác thực và phản hồi 2xx/3xx, gồm API đọc; ngày theo Asia/Ho_Chi_Minh tại lúc nhận request. Không tính public OAuth, health, OPTIONS hoặc 4xx/5xx. Lưu mã user/ngày trong 90 ngày gồm hôm nay; cache có giới hạn, lỗi ghi không đổi response nghiệp vụ và được thử lại. Grafana đọc DAU/MAU tách OWNER/ADMIN, bỏ email bắt đầu loadtest+; MAU là 30 ngày lịch gồm hôm nay. Không thêm API FE, không đo CCU hay hiệu quả câu trả lời AI. | CORE-018 #409; chủ sản phẩm duyệt ngày 2026-10-29; nhánh feat/core-daily-activity, chưa nghiệm thu staging |
 | `FR-037` | `BR-024` | Core giới hạn thao tác thành công theo tài khoản; dùng chung giữa các instance, giữ qua restart và miễn replay hợp lệ. Nhóm, cửa sổ, lease, lỗi và retry theo [contract](../contracts/api-contracts.md#giới-hạn-thao-tác-core-019). | CORE-019 #430; đã duyệt ngày 2026-10-31, mặc định tắt, chưa nghiệm thu staging |
 | `FR-038` | `BO-002`, `BR-009`, `BR-016`, `BR-017`, `BR-025` | OWNER giảm tồn bằng lượng dương tối đa 12 chữ số nguyên và 3 thập phân, có lý do không rỗng tối đa 500 ký tự. Core khóa sản phẩm, không cho tồn âm, yêu cầu Idempotency-Key và ghi STOCK_ADJUSTED/source STOCK_ADJUSTMENT cùng cảnh báo tồn trong transaction; giữ nguyên các khoản tiền và giá vốn. | CORE-021 #457; triển khai trong nhánh, chưa nghiệm thu FE/staging |
+| `FR-039` | `BO-001`, `BO-003`, `BR-026` | App Android/iOS hỏi một lần trên máy, ngay sau khi đăng nhập, có cho gửi số liệu sử dụng lên Google Analytics 4 không; đóng hộp thoại tính là không. Cài đặt có công tắc "Gửi số liệu sử dụng" để đổi ý. Khi đồng ý, app gửi màn đã mở và các sự kiện trong [`analyticsEvents.ts`](../../frontend/mobile/src/lib/analyticsEvents.ts) kèm ID tài khoản Core. Bản web không gửi và không hỏi. | Đề xuất, nhánh feat/mobile-ga4-analytics; [ADR-0010](../architecture/adr/0010-mobile-usage-analytics-ga4.md); chờ chủ sản phẩm duyệt |
 
 `FR-001`–`FR-009` giữ nguyên mã. `FR-007` không bị tái sử dụng cho yêu cầu khác.
 
@@ -148,6 +149,7 @@ Các mục này **chưa thuộc delivery scope**. Chỉ chuyển sang P0/P1 sau 
 | `NFR-008` | `BR-012` | Không gửi token hoặc media thô vào trace; nội dung chat và kết quả tool, gồm tên và số điện thoại khách, chỉ được gửi tới HoneyHive; dữ liệu gửi model phải theo cấu hình đã duyệt. |
 | `NFR-009` | `BR-014` | ADMIN không thể tự cấp role từ client; quyền lấy từ profile ACTIVE trong DB sau xác thực Firebase. Mọi GET dashboard thành công, kể cả tìm kiếm/trang rỗng, và thao tác đổi trạng thái tiệm ghi audit trong cùng transaction trước khi trả dữ liệu. Không ghi được audit thì từ chối trả dữ liệu/rollback thay đổi. ADMIN chỉ xem lịch sử truy cập của chính mình bằng projection hỗ trợ, không trả metadata nghiệp vụ; metadata audit đọc chỉ ghi sự hiện diện của query và số kết quả, không lưu query hoặc liên hệ thô. |
 | `NFR-010` | `BR-019` | Credential Cloudinary chỉ có ở Core/runtime secret store, không có trong FE, response, audit metadata hay log nghiệp vụ. Core kiểm tra bytes JPEG/PNG, dung lượng và kích thước trước upload. Khi media disabled/unavailable, write media trả lỗi rõ ràng nhưng auth/session không thất bại chỉ vì avatar đã lưu. |
+| `NFR-011` | `BR-026` | Trước khi người dùng đồng ý, SDK Analytics không thu thập gì; ID quảng cáo luôn tắt (Android chặn quyền `AD_ID`, iOS build không có IDFA). Tham số sự kiện chỉ là giá trị liệt kê hoặc số đếm; `user_id` là ID tài khoản Core. Rút lại đồng ý thì tắt thu thập và xoá dữ liệu Analytics còn trên máy. |
 
 ## 8. Tiêu chí nghiệm thu cốt lõi
 
@@ -312,6 +314,16 @@ Các tiêu chí dưới đây kiểm chứng `FR-038`; triển khai Core trong n
 | `AC-113` | Retry cùng key/người dùng/product, quantity tương đương (2 và 2.000) và reason đã trim trả snapshot 200 ban đầu dù tồn đã đổi. Đổi quantity/reason/product với key cũ trả 409 idempotency_key_conflict; key hết hạn trả 409 idempotency_key_expired. Không nhân đôi trừ tồn, audit hoặc cảnh báo. | `FR-038`, `BR-016` |
 | `AC-114` | Hai điều chỉnh đồng thời khóa cùng sản phẩm, không mất cập nhật hoặc làm tồn âm; retry cùng key chỉ trừ một lần. Checkout/void/PATCH/stock-in đồng thời giữ tác động hợp lệ của cả hai thao tác. Audit chứa đúng OWNER/shop/product, reason/key và quantity/beforeStock/afterStock/source; lỗi audit/notification/idempotency rollback toàn bộ và cho retry lại. | `FR-038`, `FR-028`, `FR-032`, `BR-017` |
 | `AC-115` | Giảm tồn qua ngưỡng cập nhật LOW_STOCK/OUT_OF_STOCK theo cơ chế episode hiện có; replay không thêm notification/recipient. API dùng lại schema/idempotency/audit hiện có, không thêm migration, không mở PATCH stockQuantity và không cho AI tự ghi giảm tồn. Test Core không tự nghiệm thu UI, shared DB hoặc production. | `FR-038`, `FR-032`, `BR-025` |
+
+### Số liệu sử dụng mobile — chờ duyệt
+
+Các tiêu chí dưới đây kiểm chứng `FR-039` và `NFR-011`; kiểm bằng DebugView của Firebase trên bản build Android/iOS, không phải Expo Go hay bản web.
+
+| ID | Tiêu chí | Truy vết |
+|---|---|---|
+| `AC-116` | Cài mới rồi đăng nhập: hộp thoại "Giúp app tốt hơn" hiện một lần, kể cả khi tài khoản chưa có tiệm. Chọn "Không" hoặc bấm back thì DebugView không nhận sự kiện nào; mở lại app không hỏi lại. | `FR-039`, `NFR-011` |
+| `AC-117` | Chọn "Cho phép": DebugView nhận `screen_view` với `screen_name` như `home`, `checkout` hay `invoice/[id]` (không có mã hoá đơn thật), và các sự kiện trong `analyticsEvents.ts` khi làm đúng thao tác; `user_id` là ID tài khoản Core. Không tham số nào chứa tên, số điện thoại, email, tên tiệm, tên món hay số tiền. Đơn khôi phục từ lần bấm trước không gửi thêm `sale_completed`. | `FR-039`, `NFR-011` |
+| `AC-118` | Tắt "Gửi số liệu sử dụng" ở Cài đặt: DebugView ngừng nhận sự kiện. File AAB không khai quyền `com.google.android.gms.permission.AD_ID`. | `FR-039`, `NFR-011` |
 
 ## 9. Phạm vi và câu hỏi mở
 

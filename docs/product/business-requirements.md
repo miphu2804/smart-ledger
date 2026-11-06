@@ -5,7 +5,7 @@
 | Trạng thái | Core: quy tắc dưới đây đã chốt; AI/dashboard: đích MVP, cần nghiệm thu tích hợp |
 | Chủ sở hữu | Chủ kinh doanh/sản phẩm |
 | Người phê duyệt | Chủ sản phẩm; chủ thuế cho `BR-INV-*` |
-| Cập nhật lần cuối | 2026-11-02 (CORE-021: BR-025; không rà soát lại căn cứ pháp lý) |
+| Cập nhật lần cuối | 2026-11-06 (số liệu sử dụng mobile: BR-026, chờ duyệt; không rà soát lại căn cứ pháp lý) |
 
 ## Tài liệu liên quan
 
@@ -126,6 +126,12 @@ Truy vết CORE-019 đã được chủ dự án chốt ngày 2026-10-31: `BR-02
 
 Truy vết: `BO-002`, `BR-009`, `BR-016`, `BR-017`, `BR-025` → `FR-038` → `AC-111`–`AC-115`. CORE-021 #457 mở rộng phạm vi giảm tồn đơn lẻ; không bổ sung sổ kiểm kê, ledger kho riêng, điều chỉnh tăng hoặc hoàn tiền từng phần.
 
+| ID | Quy tắc |
+|---|---|
+| `BR-026` | Nhóm sản phẩm đo cách chủ tiệm dùng app mobile (màn đã mở, đăng nhập, tạo tiệm, lưu đơn, đọc đơn bằng giọng nói, hỏi trợ lý, thêm sản phẩm, ghi chi) bằng Google Analytics 4, chỉ khi người dùng đồng ý trên máy đó. Mặc định không gửi; người dùng rút lại đồng ý bất cứ lúc nào. Không gửi tên, số điện thoại, email, tên tiệm, tên món, số tiền, nội dung chat hay ID quảng cáo. Số liệu này chỉ tính người đã đồng ý nên là ước lượng, không thay ngày hoạt động của `BR-023` hay sổ nghiệp vụ. |
+
+Truy vết: `BO-001`, `BO-003`, `BR-026` → `FR-039`, `NFR-011` → `AC-116`–`AC-118`. Trạng thái: đề xuất, chờ chủ sản phẩm duyệt và người đứng tên pháp lý xác nhận căn cứ đồng ý theo Luật Bảo vệ dữ liệu cá nhân trước khi phát hành; quyết định kỹ thuật ở [ADR-0010](../architecture/adr/0010-mobile-usage-analytics-ga4.md).
+
 ### Barcode Core đã chốt — 2026-10-12
 
 - CORE-012 #159 chọn D1b: unique barcode chỉ trên ACTIVE; không thêm API restore. D4 dùng chi tiết lỗi tùy chọn `productId`/`status`; lỗi tranh chấp ở DB vẫn có thể không có chi tiết. Quy ước cụ thể nằm trong [contract Product](../contracts/api-contracts.md#barcode-core-012).
@@ -232,6 +238,7 @@ Copy UI viện dẫn nghị định trên màn bản ghi bán hàng **không** b
 | `BO-002`, `BR-007`, `BR-009`, `BR-021` | `FR-009`, `FR-034`, `AC-064`–`AC-067` | Barcode Core #163/#164 trên feat/core-barcode; V16/FE/staging cần review và nghiệm thu |
 | `BO-002`, `BR-007`, `BR-009`, `BR-016`, `BR-017`, `BR-018` | `FR-009`, `FR-030`, `AC-044`–`AC-048` | Nhập kho Core; FE/staging cần nghiệm thu |
 | `BO-002`, `BR-009`, `BR-016`, `BR-017`, `BR-025` | `FR-038`, `AC-111`–`AC-115` | CORE-021 #457 giảm tồn độc lập trong nhánh feat/core-stock-adjustment; chưa nghiệm thu FE/staging |
+| `BO-001`, `BO-003`, `BR-026` | `FR-039`, `NFR-011`, `AC-116`–`AC-118` | Đề xuất trong nhánh feat/mobile-ga4-analytics; chờ duyệt sản phẩm, pháp lý và nghiệm thu trên máy thật |
 | `BR-007`, `BR-009`, `BR-017`, `BR-019` | `FR-011`, `FR-031`, `NFR-003`, `NFR-010`, `AC-053`–`AC-054` | Media Core có trên nhánh; FE/staging và migration shared DB cần nghiệm thu |
 | `BR-009` | `FR-010`, `FR-011`, `NFR-003` | tạm thời — MVP đã chấp nhận; không tuyên bố sẵn sàng sản xuất |
 | `BR-009`, `BR-022` | `FR-010`, `NFR-003`, `AC-081`–`AC-086` | CORE-015 #238: backend Zalo web-popup trên feat/zalo-login; LOGIN local do người dùng xác nhận, FE/LINK thật/staging còn nghiệm thu |

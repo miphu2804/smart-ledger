@@ -10,18 +10,28 @@ import {
 } from '../src/lib/appSettings.ts';
 
 describe('tuỳ chọn của app', () => {
-  it('mặc định bật rung và mọi nhóm thông báo', () => {
+  it('mặc định bật rung và mọi nhóm thông báo, tắt gửi số liệu sử dụng', () => {
     assert.deepEqual(DEFAULT_APP_SETTINGS, {
       haptics: true,
       stockAlerts: true,
       orderAlerts: true,
       debtAlerts: true,
       financeAlerts: true,
+      analytics: false,
+      analyticsAsked: false,
     });
   });
 
   it('đọc lại đúng lựa chọn đã lưu', () => {
-    const saved = { haptics: false, stockAlerts: false, orderAlerts: true, debtAlerts: false, financeAlerts: true };
+    const saved = {
+      haptics: false,
+      stockAlerts: false,
+      orderAlerts: true,
+      debtAlerts: false,
+      financeAlerts: true,
+      analytics: true,
+      analyticsAsked: true,
+    };
     assert.deepEqual(parseAppSettings(saved), saved);
   });
 

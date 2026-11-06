@@ -152,6 +152,10 @@ Profile trong `eas.json`:
 
 Nơi code: `src/lib/auth/` (giao diện `AuthClient`; `mock.ts`, `firebase.ts` cho native, `firebase.web.ts` cho web), `src/lib/api.ts` (Bearer + `X-Shop-Id` + lỗi `{code,message,traceId}`, 401 → đăng xuất), `src/lib/sessionApi.ts` (`/auth/session`, `/me`, `/shops`), luồng đăng nhập trong `src/store/AppStore.tsx` (`signIn`, `logout`, khởi động chờ Firebase khôi phục phiên).
 
+### Google Analytics
+
+`@react-native-firebase/analytics` gửi số liệu sử dụng lên GA4 của cùng project Firebase, chỉ khi người dùng đồng ý ở hộp thoại hỏi một lần sau khi đăng nhập hoặc ở Cài đặt ([ADR-0010](../../docs/architecture/adr/0010-mobile-usage-analytics-ga4.md)). `firebase.json` tắt thu thập từ lúc mở app và tắt ID quảng cáo; đổi file này hay plugin trong `app.json` cần build lại bản native. Danh mục sự kiện ở `src/lib/analyticsEvents.ts`, lời gọi SDK ở `src/lib/analytics.ts`; bản web không gửi. Để xem sự kiện trong DebugView trên Android, đồng ý trong app rồi chạy `adb shell setprop debug.firebase.analytics.app vn.teamhexa.songheloi`.
+
 ### Nối Core thật
 
 Luồng: Firebase xác thực (email hoặc Facebook) → FE gửi **Firebase ID token** (`Authorization: Bearer …`) xuống Core → Core xác thực bằng Firebase Admin SDK, tạo/tìm tài khoản, trả phiên.

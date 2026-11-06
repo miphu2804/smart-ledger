@@ -32,6 +32,7 @@ import type {
   ThoughtStep,
 } from '../src/data/types';
 import { agentApi, agentErrorMessage } from '../src/lib/agentApi';
+import { track } from '../src/lib/analytics';
 import { ApiError } from '../src/lib/api';
 import { splitActions } from '../src/lib/chatMarkdown';
 import { hhmm, relDay } from '../src/lib/format';
@@ -187,6 +188,7 @@ export default function Ai() {
         undefined,
         (event) => setSteps((turnSteps = applyToolEvent(turnSteps, event))),
       );
+      track('ai_message_sent', { conversation: conversationId ? 'existing' : 'new' });
       setConversationId(reply.conversation_id);
       setMsgs((m) => [...m, { id: `a${reply.message_id}`, from: 'ai', text: reply.answer }]);
     } catch (err) {

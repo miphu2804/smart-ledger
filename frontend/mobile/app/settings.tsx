@@ -7,7 +7,7 @@ import { useApp } from '../src/store/AppStore';
 import { colors } from '../src/theme';
 
 /**
- * Cài đặt của app. Rung phản hồi và cảnh báo sắp hết hàng là công tắc thật (lưu trên máy, `settings` của AppStore); cảnh báo
+ * Cài đặt của app. Rung phản hồi, cảnh báo sắp hết hàng và gửi số liệu sử dụng (Google Analytics, `analytics.ts`) là công tắc thật (lưu trên máy, `settings` của AppStore); cảnh báo
  * hàng cũng là nhóm Kho hàng ở Cài đặt thông báo. Các mục app chưa có (âm thanh, đọc lại đơn, in hoá đơn, sao lưu) ghi "Sắp có".
  */
 export default function Settings() {
@@ -50,6 +50,20 @@ export default function Settings() {
           onChange={(on) => setSetting('stockAlerts', on)}
         />
         <SettingRow icon="cloud" title="Sao lưu tự động" subtitle="Đồng bộ dữ liệu khi có kết nối mạng" soon last />
+      </Card>
+
+      <T w="bold" size={14} color={colors.muted} style={styles.sectionTitle}>
+        Quyền riêng tư
+      </T>
+      <Card style={styles.card}>
+        <SettingRow
+          icon="bar-chart-2"
+          title="Gửi số liệu sử dụng"
+          subtitle="Gửi màn đã mở và thao tác lên Google Analytics để cải thiện app. Không gửi tên, số điện thoại, tên món hay số tiền"
+          value={settings.analytics}
+          onChange={(on) => setSetting('analytics', on)}
+          last
+        />
       </Card>
 
       {/* Màn kết nối máy in mới là bản mẫu (In thử luôn báo chưa kết nối); máy in nằm ngoài PRD MVP */}

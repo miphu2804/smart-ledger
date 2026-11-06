@@ -22,6 +22,7 @@ import { AddItemSheet } from '../src/components/AddItemSheet';
 import { useToast } from '../src/components/brand';
 import { Button, Dialog, Field, KEYBOARD_AVOID_BEHAVIOR, Row, T } from '../src/components/ui';
 import type { LineItem, ProductView } from '../src/data/types';
+import { track } from '../src/lib/analytics';
 import { productApi } from '../src/lib/catalogApi';
 import { debugLog } from '../src/lib/debug';
 import { errorMessage } from '../src/lib/errors';
@@ -746,6 +747,7 @@ export default function Voice() {
           tracked: false,
           stockQuantity: null,
         });
+        track('product_created', { via: 'voice' });
         setProducts((cur) => [...cur, created]);
         mergeItems([{ productId: created.id, name: created.name, price: created.sellingPriceVnd, qty }]);
         push('ai', `Đã thêm ${qty} "${first.name}" (${vnd(price)}) vào danh mục và vào đơn.`, 'excited');
@@ -777,6 +779,7 @@ export default function Voice() {
     for (const e of pendingExpenses) {
       try {
         await expenseApi.create({ category: e.category, description: e.title, amountVnd: e.amount });
+        track('expense_created', { via: 'voice' });
         saved.push(e);
       } catch (err) {
         failure = errorMessage(err);
@@ -800,6 +803,7 @@ export default function Voice() {
   const checkout = () => {
     triggerFeedback('selection');
     app.setDraft({ items, source: 'voice', transcript: transcripts.join(' · ') });
+    track('voice_order_reviewed', { item_count: items.length });
     router.push('/checkout');
   };
 

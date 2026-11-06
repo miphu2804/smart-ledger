@@ -23,6 +23,7 @@ import {
   Toggle,
 } from '../src/components/ui';
 import type { CategoryView, ProductView } from '../src/data/types';
+import { track } from '../src/lib/analytics';
 import { categoryApi, productApi } from '../src/lib/catalogApi';
 import { errorMessage } from '../src/lib/errors';
 import { capMoney, normalizeText, vnd } from '../src/lib/format';
@@ -469,6 +470,7 @@ function ProductForm({
           stockQuantity: tracked ? num(stock) : null,
           lowStockThreshold: tracked ? lowStockThreshold : null,
         });
+        track('product_created', { via: 'products' });
         // Core nhận ảnh qua endpoint riêng sau khi mặt hàng đã có id. Lỗi ảnh không làm mất mặt hàng vừa tạo.
         if (pendingPhoto) {
           try {

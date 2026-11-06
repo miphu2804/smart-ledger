@@ -13,6 +13,10 @@ export interface AppSettings {
   debtAlerts: boolean;
   /** Nhóm Thu chi: tổng kết hôm qua và khoản chi hôm nay (tính trên máy) */
   financeAlerts: boolean;
+  /** Gửi số liệu sử dụng lên Google Analytics (`analytics.ts`). Mặc định tắt: chỉ bật khi người dùng đồng ý */
+  analytics: boolean;
+  /** Đã hỏi đồng ý gửi số liệu sử dụng chưa, để hộp thoại hỏi chỉ hiện một lần trên máy này */
+  analyticsAsked: boolean;
 }
 
 export const DEFAULT_APP_SETTINGS: AppSettings = {
@@ -21,6 +25,8 @@ export const DEFAULT_APP_SETTINGS: AppSettings = {
   orderAlerts: true,
   debtAlerts: true,
   financeAlerts: true,
+  analytics: false,
+  analyticsAsked: false,
 };
 
 const KEYS = Object.keys(DEFAULT_APP_SETTINGS) as (keyof AppSettings)[];
