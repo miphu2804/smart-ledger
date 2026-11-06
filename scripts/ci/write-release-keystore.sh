@@ -5,7 +5,7 @@
 set -euo pipefail
 . "$(dirname "$0")/lib.sh"
 
-[ -n "$ANDROID_KEYSTORE_BASE64" ] || { echo "No release keystore in this environment: signing with the debug keystore."; exit 0; }
+[ -n "${ANDROID_KEYSTORE_BASE64:-}" ] || { echo "No release keystore in this environment: signing with the debug keystore."; exit 0; }
 file="$(ci_temp_dir)/release.keystore"
 printf '%s' "$ANDROID_KEYSTORE_BASE64" | base64 -d > "$file"
 ci_env RELEASE_KEYSTORE "$file"

@@ -41,12 +41,17 @@ jobs:
       - name: Build the runtime image
         run: docker build --tag smartledger-infra deploy/ansible
       # The container runs as the runner's own user so the files it writes in the workspace can be cleaned up.
+      - uses: ./.github/actions/setup-dopbase
+      # The VPS host and its pinned host keys are the vps group's values, shared with deploy-backend.yml.
+      - name: Load the VPS keys from Dopbase
+        env:
+          DOPBASE_URL: ${{ vars.DOPBASE_URL }}
+          DOPBASE_TOKEN: ${{ secrets.DOPBASE_TOKEN_VPS }}
+        run: scripts/ci/load-dopbase.sh vps/${{ fromJSON(inputs.run).environment }} '(VPS_HOST|VPS_KNOWN_HOSTS)'
       - name: Run
         env:
-          SMARTLEDGER_VPS_HOST: ${{ vars.SMARTLEDGER_VPS_HOST }}
           SMARTLEDGER_VPS_USER: ${{ vars.SMARTLEDGER_VPS_USER }}
           SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
-          SSH_KNOWN_HOSTS: ${{ secrets.SSH_KNOWN_HOSTS }}
           DOPBASE_URL: ${{ vars.DOPBASE_URL }}
           DOPBASE_TOKEN_CORE: ${{ secrets.DOPBASE_TOKEN_CORE }}
           DOPBASE_TOKEN_AI: ${{ secrets.DOPBASE_TOKEN_AI }}
@@ -57,6 +62,7 @@ jobs:
           SMARTLEDGER_ENVIRONMENT: ${{ fromJSON(inputs.run).environment }}
           SCOPE: ${{ fromJSON(inputs.run).scope }}
         run: |
+          export SMARTLEDGER_VPS_HOST="$VPS_HOST" SSH_KNOWN_HOSTS="$VPS_KNOWN_HOSTS"
           docker run --rm --user "$(id -u):$(id -g)" -e HOME=/tmp -v "$PWD:/work" -w /work \
             -e SMARTLEDGER_VPS_HOST -e SMARTLEDGER_VPS_USER -e SSH_PRIVATE_KEY -e SSH_KNOWN_HOSTS -e DOPBASE_URL \
             -e DOPBASE_TOKEN_CORE -e DOPBASE_TOKEN_AI -e DOPBASE_TOKEN_BIFROST -e DOPBASE_TOKEN_VPS -e DOPBASE_TOKEN_MONITOR \
