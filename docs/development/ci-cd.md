@@ -32,7 +32,7 @@ Branch and review rules are in [CONTRIBUTING](../../CONTRIBUTING.md). Workflow d
 
 ![CI/CD flow](../architecture/diagrams/images/ci-cd.svg)
 
-Green numbers are the deploy, purple the VPS setup with Ansible, from `infra.yml` or `scripts/infra/run.sh`, and orange the runtime requests. Gray dashed arrows are secrets: the deploy exports `core` and `ai` from Dopbase with runner tokens kept in the GitHub environment, and `scripts/infra/run.sh` exports the VPS files for Ansible. The app stack is drawn once and runs twice, as the separate staging and production Compose projects; the VPS network diagram below shows both. The diagram shows the target setup; [technical design §1](../architecture/technical-design.md#1-scope) records what is implemented. Edit [`ci-cd.drawio`](../architecture/diagrams/src/ci-cd.drawio) and re-export:
+Green numbers are the deploy, purple the VPS setup with Ansible, from `infra.yml` or `scripts/infra/run.sh`, and orange the runtime requests. Gray dashed arrows are secrets: the deploy exports `core` and `ai` from Dopbase with runner tokens kept in the GitHub environment, and `scripts/infra/run.sh` exports the VPS files for Ansible. The Production | Staging box is one app stack that runs as two separate Compose projects, each with its own Supabase database; the VPS network diagram below shows both. The diagram shows the target setup; [technical design §1](../architecture/technical-design.md#1-scope) records what is implemented. Edit [`ci-cd.drawio`](../architecture/diagrams/src/ci-cd.drawio) and re-export:
 
 ```bash
 drawio -x -f svg -e --embed-svg-images --svg-theme light -b ffffff -o docs/architecture/diagrams/images/ci-cd.svg docs/architecture/diagrams/src/ci-cd.drawio
