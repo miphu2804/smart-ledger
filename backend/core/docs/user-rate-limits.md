@@ -1,8 +1,17 @@
+---
+type: Runbook
+title: "CORE-019: shared success quotas"
+description: "Core rollout for success quotas: V20 schema, activation and recovery."
+owner: Core owner
+status: stable
+generated: { by: human:miphu2804, at: 2026-11-06T22:18:48+07:00 }
+stale_after: 2027-01-05T22:18:48+07:00
+---
 # CORE-019: shared success quotas
 
 The owner approved commit-based, cross-instance quotas and the two-table migration on 2026-10-31. This supersedes the in-memory/request-counting proposal in [issue #430](https://github.com/miphu2804/smart-ledger/issues/430). Enforcement defaults off; no shared-DB migration or activation is implied.
 
-The [API contract](../../../docs/contracts/api-contracts.md#giới-hạn-thao-tác-core-019) owns limits, responses, retry and fixed-window semantics. Traceability is BR-024 → FR-037 → AC-104–108.
+The [API contract](../../../docs/contracts/api-contracts.md#core-019-operation-limits) owns limits, responses, retry and fixed-window semantics. Traceability is BR-024 → FR-037 → AC-104–108.
 
 ## Architecture
 

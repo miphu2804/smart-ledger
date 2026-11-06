@@ -74,7 +74,7 @@ jobs:
         working-directory: .
         env:
           DOPBASE_URL: ${{ vars.DOPBASE_URL }}
-          DOPBASE_TOKEN: ${{ secrets.DOPBASE_AI_TOKEN }}
+          DOPBASE_TOKEN: ${{ secrets.DOPBASE_TOKEN_AI }}
           SYNC: ${{ inputs.sync }}
         run: scripts/ci/write-eval-settings.sh
       - name: Run the eval

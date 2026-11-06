@@ -3,7 +3,7 @@
 - **Trạng thái:** Proposed. Code nằm trong nhánh `feat/mobile-ga4-analytics`, chưa merge và chưa build ra máy thật. Cần chủ sản phẩm duyệt `BR-026`, `FR-039`, `NFR-011`, và người đứng tên pháp lý xác nhận căn cứ đồng ý trước khi phát hành.
 - **Ngày:** 2026-11-06
 - **Owner:** chủ sản phẩm giữ danh mục sự kiện và cách đọc chỉ số; owner mobile giữ code và test; người đứng tên pháp lý giữ khai báo Data safety và trang chính sách.
-- **Liên quan:** [`BR-026`](../../product/business-requirements.md), [`FR-039`, `NFR-011`, `AC-116`–`AC-118`](../../product/product-requirements.md), [ADR-0003](0003-product-analytics-grafana.md), [Data safety](../../product/google-play-data-safety.md), [`analyticsEvents.ts`](../../../frontend/mobile/src/lib/analyticsEvents.ts), [`analytics.ts`](../../../frontend/mobile/src/lib/analytics.ts).
+- **Liên quan:** [`BR-026`](../../product/business-requirements.md), [`FR-039`, `NFR-011`, `AC-119`–`AC-121`](../../product/product-requirements.md), [ADR-0003](0003-product-analytics-grafana.md), [Data safety](../../product/google-play-data-safety.md), [`analyticsEvents.ts`](../../../frontend/mobile/src/lib/analyticsEvents.ts), [`analytics.ts`](../../../frontend/mobile/src/lib/analytics.ts).
 
 ## 1. Bối cảnh
 

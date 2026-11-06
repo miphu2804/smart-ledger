@@ -1,3 +1,12 @@
+---
+type: Runbook
+title: "CI/CD"
+description: "Flow from feature branch to the VPS and Vercel, GitHub environments, VPS provisioning and Core CORS origins."
+owner: Technical owner
+status: stable
+generated: { by: human:miphu2804, at: 2026-11-06T22:18:48+07:00 }
+stale_after: 2027-01-05T22:18:48+07:00
+---
 # CI/CD
 
 `backend/core` and `backend/ai` deploy to a VPS; the mobile web and the landing page (with the admin dashboard at `/admin`) deploy to Vercel. The Android app has its own manual workflow, see [Android build](#android-build). Branch and review rules are in [CONTRIBUTING](../../CONTRIBUTING.md).
@@ -92,6 +101,8 @@ Off GitHub they print to the terminal, and `ci_env` and `ci_add_path` print `exp
 | `SMARTLEDGER_RUN_ID` | Id of the CI run; `SMARTLEDGER_RUN_URL`, `SMARTLEDGER_JOB`, `SMARTLEDGER_ACTOR` and `SMARTLEDGER_REPOSITORY` (`owner/name`) describe it |
 | `DOPBASE_URL`, `DOPBASE_TOKEN` | Dopbase address and the runner token of one environment |
 
+CI reads every shared value from Dopbase ([secrets-and-env.md](secrets-and-env.md#7-ci-reads-dopbase)). A workflow stores a group's runner token as `DOPBASE_TOKEN_<GROUP>` in its GitHub environment (`CORE`, `AI`, `VPS`, `BIFROST`, `MONITOR`, `RELEASE`), and [`scripts/ci/load-dopbase.sh`](../../scripts/ci/load-dopbase.sh) loads the matching keys into the job.
+
 Names that only one script reads (`VPS_HOST`, `APP_DIR`, `VERCEL_TOKEN` and the like) are documented at the top of that script.
 Never name a variable `CI_*`: GitLab predefines them.
 
@@ -127,8 +138,8 @@ Production still needs its approval: run the production deploy only after a revi
 
 | Environment | Branch | Approval | Secrets | Variables |
 |---|---|---|---|---|
-| `backend-staging` | `staging` | No | `VPS_SSH_KEY`, `VPS_KNOWN_HOSTS`, `DOPBASE_CORE_TOKEN`, `DOPBASE_AI_TOKEN` | `VPS_HOST`, `VPS_USER`, `VPS_APP_DIR`, `DOPBASE_URL` |
-| `backend-production` | `main` | Through `production-approval` | Same | Same, with `VPS_APP_DIR=/opt/smartledger-production` |
+| `backend-staging` | `staging` | No | `DOPBASE_TOKEN_VPS`, `DOPBASE_TOKEN_CORE`, `DOPBASE_TOKEN_AI` | `VPS_APP_DIR`, `DOPBASE_URL` |
+| `backend-production` | `main` | Through `production-approval` | Same; also runs the HoneyHive workflows, which read `ai/production` with `DOPBASE_TOKEN_AI` | Same, with `VPS_APP_DIR=/opt/smartledger-production` |
 | `production-approval` | `main` | Yes | None | None |
 | `vercel-staging` | `staging` | No | `VERCEL_TOKEN`, `VERCEL_ORG_ID`, `VERCEL_PROJECT_ID` | `EXPO_PUBLIC_*`, `VERCEL_STAGING_ALIAS` |
 | `vercel-production` | `main` | Yes | Same | `EXPO_PUBLIC_*` |
@@ -136,7 +147,7 @@ Production still needs its approval: run the production deploy only after a revi
 | `landing-production` | `main` | Yes | Same | Same, plus `VITE_ANDROID_APK_URL` |
 | `android-dev` | Other branches (checked by `gate`) | No | `ANDROID_GOOGLE_SERVICES_JSON`, `R2_*` of the test-build bucket | `EXPO_PUBLIC_*`, `R2_BUCKET`, `R2_PUBLIC_URL` |
 | `android-staging` | `staging` | No | Same as `android-dev` | Same as `android-dev` |
-| `android-production` | `main` | Yes | `ANDROID_GOOGLE_SERVICES_JSON`, `ANDROID_KEYSTORE_*`, `R2_*` | `EXPO_PUBLIC_*`, `R2_BUCKET`, `R2_PUBLIC_URL` |
+| `android-production` | `main` | Yes | `ANDROID_GOOGLE_SERVICES_JSON`, `DOPBASE_TOKEN_RELEASE`, `R2_*` | `EXPO_PUBLIC_*`, `R2_BUCKET`, `R2_PUBLIC_URL`; the keystore comes from Dopbase `release/production` |
 
 - Keep backend secrets out of `vercel-*` and `landing-*`.
 - Both backend environments use the same VPS and deploy key, so a `backend-staging` job can reach production containers. The approval guards only the `main` deploy. The project owner accepted this.
@@ -235,7 +246,7 @@ Add `GHCR_USERNAME` and `GHCR_READ_TOKEN` to `vps/production` if the packages ar
 
 1. Create user `deploy` in group `docker`, key-only SSH, `ufw` allowing port 22.
 2. Generate a CI-only key with `ssh-keygen -t ed25519 -f deploy_key -N "" -C github-actions-deploy`. In `secrets/<environment>/env/.env.vps`, set `VPS_SSH_KEY` to `base64 < deploy_key | tr -d '\n'` and `VPS_SSH_PUBLIC_KEY` to `deploy_key.pub`, then delete both files and run `scripts/secrets/github.sh <environment> --apply`.
-3. Set `VPS_KNOWN_HOSTS` to `ssh-keyscan -t ed25519 <VPS_HOST>` (check the fingerprint in the provider console) and `VPS_HOST` in both `.env.vps` and the GitHub environment variables.
+3. Set `VPS_KNOWN_HOSTS` to `ssh-keyscan -t ed25519 <VPS_HOST>` (check the fingerprint in the provider console) and `VPS_HOST` in `.env.vps`; CI reads both from Dopbase `vps/<environment>`.
 4. Set `CADDY_DOMAIN`; production copies the `VPS_*` values from staging, because `deploy` has one key. Save the `VPS_*` and `CADDY_DOMAIN` values in Dopbase `vps/<environment>`.
 5. Create network `edge`. In the app directory, put `compose.yaml` and `bifrost.json` from `deploy/vps/`, and with mode `600` `core.env`, `ai.env`, `bifrost.env` (from [secrets](secrets-and-env.md)) and `.env` with `ENVIRONMENT=<environment>` and `CORE_ALIAS=core-<environment>`. In `/opt/smartledger-edge`, put `deploy/edge/compose.yaml`, the Caddyfile as `conf/Caddyfile` and `sites/<environment>.caddy`, then validate and reload Caddy. Caddy mounts `conf/` and `sites/` as directories because a single-file mount keeps the inode it started with: a file replaced by rename, as Ansible and most editors do, stays invisible to `caddy reload` until the container is recreated.
 6. After the first deploy, make the two GHCR packages public, or `docker login ghcr.io` once as `deploy` with a `read:packages` token.
@@ -497,7 +508,7 @@ Each `android-*` environment needs:
 
 - Secret `ANDROID_GOOGLE_SERVICES_JSON`: the content of `google-services.json`.
 - Variables `EXPO_PUBLIC_*`, as for the [mobile web](#mobile-web-on-vercel).
-- Variable `STT_MODEL_BASE_URL`: the public R2 address holding the speech model ([models README](../../frontend/mobile/assets/models/README.md#đưa-model-lên-r2)). A publish uploads missing files; a test build only warns.
+- Variable `STT_MODEL_BASE_URL`: the public R2 address holding the speech model ([models README](../../frontend/mobile/assets/models/README.md#put-the-model-on-r2)). A publish uploads missing files; a test build only warns.
 - Secrets `R2_ACCOUNT_ID`, `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY` and variables `R2_BUCKET`, `R2_PUBLIC_URL` (no trailing slash): where the build goes. Job `build` checks them before it starts, and the runner needs the `aws` CLI.
 
 The run page shows a summary (runner, toolchain, timings, size and SHA-256). A successful run that does not publish uploads the APK or AAB to R2 as `android/<environment>/ci/<run>/<file>` and puts its download link on the run page. GitHub artifacts are not used: the account's artifact storage is 500 MB, and a full quota failed every Android build from 2026-11-03.
@@ -529,7 +540,7 @@ keytool -genkeypair -v -keystore smart-ledger-release.keystore -alias smart-ledg
 base64 -i smart-ledger-release.keystore | pbcopy
 ```
 
-Store it in `android-production` as `ANDROID_KEYSTORE_BASE64` and `ANDROID_KEYSTORE_PASSWORD`.
+Store it in Dopbase `release/production` as `ANDROID_KEYSTORE_BASE64` and `ANDROID_KEYSTORE_PASSWORD`; `mobile-release.yml` loads both into `android-production` with `DOPBASE_TOKEN_RELEASE`.
 
 - Never commit the keystore, and keep a copy outside GitHub: losing it means every user must uninstall to update.
 - Add its key hash to the Meta app, or Facebook sign-in fails. `keytool -list -v -keystore smart-ledger-release.keystore` prints the fingerprints.
@@ -561,6 +572,6 @@ One-time setup:
 ### Measured and not yet verified
 
 - `ubuntu-24.04`, `android-dev`, cold cache: about 12 minutes. A self-hosted Apple M4 Pro with a warm cache is about three times faster.
-- APK size settings in [`frontend/mobile/README.md`](../../frontend/mobile/README.md#dung-lượng-apk-android) cut the `arm64-v8a` APK from 95.2 MB to 40.3 MB; a two-ABI release APK is about 58 MB.
+- APK size settings in [`frontend/mobile/README.md`](../../frontend/mobile/README.md#android-apk-size) cut the `arm64-v8a` APK from 95.2 MB to 40.3 MB; a two-ABI release APK is about 58 MB.
 - Not yet run: `android-staging`, `android-production`, the self-hosted and `auto` paths, a full signed build, the R2 upload and the APK on a physical device.
 - iOS is built separately ([mobile-ios-device-release.md](mobile-ios-device-release.md)).

@@ -121,6 +121,16 @@ jobs:
           PUBLISH: ${{ inputs.publish }}
         run: scripts/ci/resolve-build-settings.sh
 
+      # The release keystore is the release/production group of Dopbase, read only by the production build.
+      - uses: ./.github/actions/setup-dopbase
+        if: inputs.environment == 'android-production'
+      - name: Load the release keystore from Dopbase
+        if: inputs.environment == 'android-production'
+        env:
+          DOPBASE_URL: ${{ vars.DOPBASE_URL }}
+          DOPBASE_TOKEN: ${{ secrets.DOPBASE_TOKEN_RELEASE }}
+        run: scripts/ci/load-dopbase.sh release/production '(ANDROID_KEYSTORE_BASE64|ANDROID_KEYSTORE_PASSWORD)'
+
       # Fails before the build, which takes minutes, instead of at the upload.
       - name: Check the upload settings
         env:
@@ -129,8 +139,6 @@ jobs:
           R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
           R2_BUCKET: ${{ vars.R2_BUCKET }}
           R2_PUBLIC_URL: ${{ vars.R2_PUBLIC_URL }}
-          ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
-          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
           ANDROID_ENVIRONMENT: ${{ inputs.environment }}
           PUBLISH: ${{ inputs.publish }}
         run: scripts/ci/check-upload-prerequisites.sh
@@ -186,8 +194,6 @@ jobs:
       # Without the secret the build keeps the template's debug keystore, which is public: fine for a test build, never
       # for a published one. The keystore is PKCS12, so the key shares the store password.
       - name: Write the release keystore
-        env:
-          ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
         run: scripts/ci/write-release-keystore.sh
 
       # scripts/release/android-release.sh does what a local build does (npm ci, expo prebuild --clean, Gradle, APK report), so
@@ -198,13 +204,12 @@ jobs:
         env:
           FORMAT: ${{ steps.cfg.outputs.format }}
           ABIS: ${{ steps.cfg.outputs.abis }}
-          KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
           ANDROID_ENVIRONMENT: ${{ inputs.environment }}
           # Every build gets a higher versionCode than the last, so Android installs it over the old one. A published
           # APK also learns where to look for newer ones; other builds leave the URL empty and never ask.
           ANDROID_VERSION_CODE: ${{ github.run_number }}
           EXPO_PUBLIC_UPDATE_URL: ${{ inputs.publish && format('{0}/android/production/version.json', vars.R2_PUBLIC_URL) || '' }}
-        run: scripts/ci/build-android.sh
+        run: KEYSTORE_PASSWORD="$ANDROID_KEYSTORE_PASSWORD" scripts/ci/build-android.sh
       - name: Remove the release keystore
         if: always()
         run: rm -f "${RELEASE_KEYSTORE:-}"

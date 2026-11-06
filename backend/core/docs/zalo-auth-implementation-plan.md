@@ -1,3 +1,12 @@
+---
+type: Plan
+title: "CORE-015: Zalo authentication implementation plan"
+description: "Design and implementation plan for Zalo web sign-in in Core."
+owner: Core owner
+status: stable
+generated: { by: human:thaonguyen1909, at: 2026-10-16T20:00:02+07:00 }
+stale_after: 2026-12-15T20:00:02+07:00
+---
 # CORE-015: Zalo authentication implementation plan
 
 Status: design and V17/document preparation approved on 2026-10-16; Core implementation locally verified, not

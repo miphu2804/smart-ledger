@@ -1,3 +1,12 @@
+---
+type: Guide
+title: "Diagram guide"
+description: "How each architecture diagram is edited, exported and scoped, and what evidence each one carries."
+owner: Technical owner
+status: stable
+generated: { by: human:miphu2804, at: 2026-11-06T22:18:48+07:00 }
+stale_after: 2027-01-05T22:18:48+07:00
+---
 # Diagram guide
 
 Sources live in [`src/`](src/), exports in [`images/`](images/). Reference: [`src/ci-cd.drawio`](src/ci-cd.drawio) → [`images/ci-cd.svg`](images/ci-cd.svg).
@@ -6,7 +15,7 @@ Sources live in [`src/`](src/), exports in [`images/`](images/). Reference: [`sr
 
 | Artifact | What it represents | Implementation boundary |
 |---|---|---|
-| `architecture.mmd`, `architecture.drawio`, `architecture.svg/png` | MVP target, including future services/infrastructure | Use [technical design §1](../technical-design.md#1-phạm-vi) for code status; the target image does not prove those services exist |
+| `architecture.mmd`, `architecture.drawio`, `architecture.svg/png` | Target architecture, including future services/infrastructure | Use [technical design §1](../technical-design.md#1-scope) for code status; the target image does not prove those services exist |
 | `ci-cd.drawio/svg` | Pipeline and runtime topology | Core runs on container port 8080; Compose exposes host port 8000 by default. ADMIN can use the real Core behind its build flag; PR checks/deploy readiness depend on actual runs |
 | `vps-network.drawio/svg` | Docker networks, DNS aliases and ports on the VPS | Drawn from `deploy/*/compose.yaml`, the Caddy sites the playbook writes, and `docker network inspect` on the VPS on 2026-10-29 |
 | `auth-request-flow.drawio/svg` | Firebase browser sign-in, CORS and project matching | The image is not the Zalo OAuth/App Link flow; see [Zalo contract](../../contracts/api-contracts.md#zalo-core-015) and the Core service map. A permitted origin does not grant an application role |

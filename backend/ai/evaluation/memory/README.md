@@ -1,3 +1,12 @@
+---
+type: Guide
+title: "Memory evaluation"
+description: "Checks that memory recall finds the fact a chat message needs, using the shipped ranking."
+owner: AI owner
+status: stable
+generated: { by: human:miphu2804, at: 2026-11-06T22:18:48+07:00 }
+stale_after: 2027-01-05T22:18:48+07:00
+---
 # Memory evaluation
 
 Checks that memory recall (`AgentMemoryService.with_memories`) finds the fact a chat message needs. It runs the real service on the local database, so it scores the ranking the app ships (`src/memory/ranking.py`).
@@ -35,7 +44,7 @@ The run creates made-up owners and shops in the local database and deletes them 
 | `top1` | The needed memory ranks first | 0.504 |
 | `stale_only` | Only the old version of an updated fact came back (lower is better) | 0.039 |
 
-How the ranking was chosen is in [ADR-0002](../../../../docs/architecture/adr/0002-agent-long-term-memory.md#bổ-sung-xếp-hạng-lai-thay-cho-suy-giảm).
+How the ranking was chosen is in [ADR-0002](../../../../docs/architecture/adr/0002-agent-long-term-memory.md#addition-hybrid-ranking-instead-of-decay).
 
 ## Good to know
 

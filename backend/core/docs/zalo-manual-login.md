@@ -1,3 +1,12 @@
+---
+type: Guide
+title: "Manual Zalo login against local Core"
+description: "Opt-in local test kit for trying Zalo login against a local Core."
+owner: Core owner
+status: stable
+generated: { by: human:miphu2804, at: 2026-11-02T11:30:50+07:00 }
+stale_after: 2027-01-01T11:30:50+07:00
+---
 # Manual Zalo login against local Core
 
 This is opt-in test tooling for CORE-015 #238, not a deployed feature or the

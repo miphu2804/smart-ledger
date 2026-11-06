@@ -1,3 +1,12 @@
+---
+type: Runbook
+title: "CORE-016 — Android Core integration and V18 rollout"
+description: "Core guide for Zalo Android sign-in: verification and staging activation after merge."
+owner: Core owner
+status: stable
+generated: { by: human:miphu2804, at: 2026-11-02T11:30:50+07:00 }
+stale_after: 2027-01-01T11:30:50+07:00
+---
 # CORE-016 — Android Core integration and V18 rollout
 
 Scope approved in chat: external browser/Custom Tabs, verified HTTPS App Links, LOGIN and explicit secure LINK on `feat/zalo-android` (#276), followed by V18 and staging-configuration preparation. Core and the approved related documentation only. No Zalo Android SDK, embedded WebView, FE/AI changes, shared-DB execution or deployment is included here. Canonical behavior is defined by the [API contract](../../../docs/contracts/api-contracts.md#zalo-android-core-016), [PRD AC-087–092](../../../docs/product/product-requirements.md#nghiệm-thu-zalo-android-core-016) and [implementation status](../../../docs/architecture/technical-design.md#zalo-android-core-016).

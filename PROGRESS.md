@@ -3,9 +3,43 @@
 | Area | Change |
 |---|---|
 | Mobile | • `@react-native-firebase/analytics` 26.4.0 with `firebase.json` turning off automatic collection, advertising IDs and automatic screen reporting; Android blocks `AD_ID` and iOS builds without IDFA<br>• `AnalyticsConsentPrompt` asks once per device right after sign-in, and Settings has a "Gửi số liệu sử dụng" switch; nothing is sent until the user agrees, and withdrawing resets on-device Analytics data<br>• Screen views from expo-router segments with `[id]` kept as is, the Core account id as `user_id`, and the events in `analyticsEvents.ts`: `login`, `shop_created`, `sale_completed`, `voice_order_reviewed`, `ai_message_sent`, `product_created`, `expense_created`, with enum or count parameters only; the web build sends nothing |
-| Docs | • ADR-0010, `BR-026`, `FR-039`, `NFR-011`, `AC-116`–`AC-118` as proposed and awaiting approval; Data safety adds device IDs and the Google Analytics processor row with the checks the legal owner still has to make; the mobile README explains DebugView |
+| Docs | • ADR-0010, `BR-026`, `FR-039`, `NFR-011`, `AC-119`–`AC-121` as proposed and awaiting approval; Data safety adds device IDs and the Google Analytics processor row with the checks the legal owner still has to make; the mobile README explains DebugView |
 
 Check: `npm run typecheck` passes; `npm test` 194 of 196 pass, and the two failures (`parseOrder` shared names, quick navigation labels) fail the same way on a clean `staging` checkout. Not verified: a native build, the consent dialog on a device, and events in DebugView. Commit: the one that adds this entry.
+
+### 2026-11-06 — Docs describe SmartLedger as running in production, are in English outside product and carry OKF frontmatter
+
+| Area | Change |
+|---|---|
+| Docs index | • All 31 documents in `docs/` start with OKF v0.2 frontmatter (`type`, `title`, `description`, `owner`, `status`, `generated`, `stale_after`); the owner and last-update rows left the metadata tables<br>• `docs/index.md` lists every document for agents and replaces the hand-kept document map in `docs/README.md`; a one-off script built the indexes and was then removed, so agents keep them by hand under the `AGENTS.md` rules<br>• `AGENTS.md` requires docs to change in the same pull request as the code, refreshed dates, an updated index and no new document for a topic that already has one |
+| Docs language and index | • Every document outside `docs/product/` is in English: technical design, API contracts, the ADRs, design, marketing, the READMEs under `docs/`, the frontend READMEs and `BLOCKERS.md`; anchors changed with the headings and 79 links across the repository were rewritten (0 broken)<br>• The index also covers 23 repository documents outside `docs/` (service READMEs, `backend/core/docs/`, `CONTRIBUTING.md`, `SECURITY.md` and others) with frontmatter, uses strict OKF entries (title, path and description) and gives every folder with two or more entries its own `index.md`<br>• `generated.by` names the person who last changed a document (`human:<GitHub login>`, from Git history for untouched documents) and every timestamp uses `+07:00`; `AGENTS.md` and the docs conventions state the rules<br>• Fixed on the way: the frontend README no longer says web admin has no Core API, the mobile README no longer lists Google sign-in as missing, and the ADR-0003 link to a missing anchor |
+| Docs | • `AGENTS.md`, the docs index, technical design, API contract, ERD description, diagram guide and the mobile README say SmartLedger runs in production and no longer call it documentation-first; the architecture is called the target architecture<br>• Stacked on #550: the product documents keep its EXE201 course MVP priorities and wording, gain frontmatter and index entries, and its new audit and demo documents are listed in `docs/product/index.md`; the EXE201 priority paragraph in technical design §1 is translated to English<br>• Warnings about provisional requirements, unaccepted features and the auth gap stay as they were |
+
+Check: `grep -rniE "\bMVP\b|prototype|documentation-first"` over the Markdown files; the remaining hits are scope or priority labels, dated decisions (ADRs, open questions, the mobile UI migration plan), design prototype references and the diagram label "MVP target" in `architecture.drawio`, left because its SVG and PNG would need a re-export. Commit: the one that adds this entry.
+
+### 2026-11-06 — Tập trung hoàn thành MVP môn EXE201
+
+| Area | Change |
+|---|---|
+| Docs | • Chốt ưu tiên demo đầu-cuối, UX và phản hồi người dùng; phân biệt luồng cốt lõi, chức năng có sẵn giữ nguyên và mở rộng có thể hoãn<br>• Thêm kịch bản demo/fixture và mẫu ghi kết quả; đồng bộ overview, BRD, PRD, bản đồ docs và cách đọc tài liệu kỹ thuật/audit; không yêu cầu đầu tư thêm cho tải lớn hoặc kiến trúc mới |
+
+Check: 377 link/anchor nội bộ hợp lệ, giữ nguyên 55 FR/NFR và 120 định nghĩa AC so với commit trước, full trace khớp; đối chiếu fixture 70.000đ doanh thu/42.000đ giá vốn/18.000đ lãi sau chi và kiểm tra không có diff runtime. Demo/người dùng chưa chạy trong đợt sửa docs, mẫu kết quả để chưa thử. Commit: commit thêm mục này; giữ log cũ theo yêu cầu append-only.
+
+### 2026-11-06 — Kiểm định lại BRD bằng ba chuyên môn
+
+| Area | Change |
+|---|---|
+| Docs | • Viết lại BRD theo mục tiêu, vai trò, phạm vi và quy tắc; tách inventory/code và truy vết chi tiết sang phụ lục kiểm định với 13 phát hiện<br>• Sửa AC-020/021/078 và mô tả privacy, Zalo, nhóm nợ; phân biệt context/lịch sử, local/Core, lưu Product/ảnh từng phần và cam kết xóa dữ liệu; không sửa runtime |
+
+Check: ba sub-agent rà độc lập Core, AI/chat và mobile/web, sau đó đọc lại bản sửa; kiểm 153 link/anchor nội bộ, 55 dòng trace, 120 mã AC ổn định (chỉ sửa nội dung AC-020/021/078), mã BO/BR/OQ cũ được giữ và `git diff --check`. Chưa chạy runtime/provider/UAT. Commit: commit thêm mục này; giữ log cũ theo yêu cầu append-only.
+
+### 2026-11-06 — Đối chiếu business requirements với staging
+
+| Area | Change |
+|---|---|
+| Docs | • Rà tĩnh Core, AI, mobile và web tại staging `494fa6c`; bổ sung bản đồ tính năng và bằng chứng code trong BRD<br>• Nối đủ 55 FR/NFR với nguồn BRD và AC hiện có; sửa mô tả voice, Zalo, avatar, tồn và media lỗi thời; ghi câu hỏi cần sản phẩm chốt, không đổi AC hoặc nâng scope từ mock/code |
+
+Check: kiểm tra 104 liên kết/anchor nội bộ, mã BRD, 55 dòng truy vết và 120 định nghĩa AC giữ nguyên; `git diff --check`. Chưa chạy runtime/provider/UAT vì chỉ sửa tài liệu. Commit: commit thêm mục này. Giữ nguyên log cũ theo yêu cầu append-only của phiên làm việc.
 
 ### 2026-11-06 — Stop spans from asking HoneyHive to create their session
 
@@ -170,27 +204,3 @@ Check: `bifrost.json` passes `check-jsonschema` against the `transports/v2.4.0` 
 | Web | • Admin header: no subtitle under the page title and no line under the header<br>• Khách hàng and Nhật ký truy cập: the faded "dữ liệu hỗ trợ tối thiểu" and log notices are gone<br>• The avatar moves from the header to the bottom of the sidebar, under Hệ thống, as a row with name and role; clicking it opens the menu above it (email, Hồ sơ, Phiên & quyền truy cập, Đăng xuất); when the sidebar is collapsed only the avatar shows and the menu opens 240 px wide<br>• Admin labels say "chủ tiệm" instead of OWNER or "chủ cơ sở" (the role value stays `OWNER`)<br>• On desktop (1280 px and up) the sidebar column stays 72 px and the open sidebar slides over the content, which is centered up to 1200 px wide, so opening or closing it never moves the content; it starts collapsed |
 
 Check: `npm run typecheck`, `oxlint` and `npm run build` pass; on the mock admin at 1440 × 900, 1024 × 768 and 375 × 812 the menu opens above the avatar and is not cut off. Not verified: real Core mode in a browser. Commit: the one that adds this entry.
-
-### 2026-11-04 — LLM router call shows up in HoneyHive
-
-| Area | Change |
-|---|---|
-| AI | • The tier classification call to Bifrost runs inside an `llm router` span of the turn's HoneyHive session, with the user messages as input, the tier and alias as output and the mechanism as metadata; the classifier calls Bifrost over plain HTTP, which the agent instrumentation never saw |
-
-Check: `uv run ruff check` and `uv run pytest tests/unit_tests` (472 passed). Not verified: the span on a real HoneyHive session, since traces run only in production. Commit: the one that adds this entry.
-
-### 2026-11-04 — User flow map follows the new sign-in and the Bobi sheet
-
-| Area | Change |
-|---|---|
-| Docs | • Sign-in flow: the card from #499 (Google, Zalo, email with Tiếp tục, no Facebook), a "Quên mật khẩu?" edge straight from the sign-in screen, and the password screen with the email filled in<br>• Orders flow: the Bobi suggestion strip on Đơn hàng and a new "Hỏi Trợ lý Bobi" node for the sheet from #491, with a step that links to Trợ lý history<br>• Bobi flow: notes for the composer shared with the sheet (#505), the thought line while waiting (#513) and the five quick chips<br>• Seven screenshots retaken or added on staging: `welcome`, `email-login`, `invoices`, `ai-ask-sheet`, `chat-tro-ly-ai`, `chat-dat-cau-hoi`, `chat-tra-loi`; the README says how and which test data they show |
-
-Check: `npm run userflow` builds the page; the onboarding and orders flows render with the new edges and node on a local server. Not verified: other browsers. Commit: the one that adds this entry.
-
-### 2026-11-04 — Cleaner routes in the CI/CD and runtime diagram
-
-| Area | Change |
-|---|---|
-| Docs | • `ci-cd.drawio` and `ci-cd.svg`: Staging and Production use the same data lanes (SQL above traces), Core and AI share one SQL lane, and HoneyHive sits under Production DB<br>• Fixed the Loki icon offset, the `7. chat` arrows into LLM providers and the DB names in the diagram guide |
-
-Check: `validate.py` 0 errors; SVG exported with `drawio` and checked on rendered PNGs. Not verified: a dark viewer. Commit: the one that adds this entry.

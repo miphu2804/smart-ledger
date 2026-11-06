@@ -1,92 +1,76 @@
-# Model nhận dạng giọng nói (sherpa-onnx)
+---
+type: Guide
+title: "Speech recognition model (sherpa-onnx)"
+description: "Which on-device speech model files the app needs, how to fetch them and how releases serve them."
+owner: FE owner
+status: stable
+generated: { by: human:miphu2804, at: 2026-11-06T22:18:48+07:00 }
+stale_after: 2027-01-05T22:18:48+07:00
+---
+# Speech recognition model (sherpa-onnx)
 
-Thư mục này chứa model nhận dạng giọng nói tiếng Việt chạy ngay trên máy (streaming Zipformer / transducer, dùng qua
-`react-native-sherpa-onnx`). Các file model (khoảng 49 MB) **không nằm trong git** (xem `.gitignore`) để không làm nặng
-lịch sử của repo công khai. Chỉ file README này được theo dõi.
+This folder holds the Vietnamese speech recognition model that runs on the device (streaming Zipformer / transducer, used through `react-native-sherpa-onnx`). The model files (about 49 MB) are **not in git** (see `.gitignore`) so they do not bloat the history of the public repo. Only this README is tracked.
 
-## Cần những file nào
+## Required files
 
-| File | Dùng để | Bắt buộc |
+| File | Purpose | Required |
 |---|---|---|
-| `encoder-epoch-31-avg-11-chunk-32-left-128.fp16.onnx` | encoder (46,2 MB) | có |
-| `decoder-epoch-31-avg-11-chunk-32-left-128.fp16.onnx` | decoder (2,6 MB) | có |
-| `joiner-epoch-31-avg-11-chunk-32-left-128.fp16.onnx` | joiner (2,1 MB) | có |
-| `tokens.txt` | bảng 2.000 token BPE | có |
-| `bpe.model`, `bpe.vocab` | chỉ cần khi dùng hotword | không (app chưa dùng) |
+| `encoder-epoch-31-avg-11-chunk-32-left-128.fp16.onnx` | encoder (46.2 MB) | yes |
+| `decoder-epoch-31-avg-11-chunk-32-left-128.fp16.onnx` | decoder (2.6 MB) | yes |
+| `joiner-epoch-31-avg-11-chunk-32-left-128.fp16.onnx` | joiner (2.1 MB) | yes |
+| `tokens.txt` | table of 2,000 BPE tokens | yes |
+| `bpe.model`, `bpe.vocab` | needed only for hotwords | no (the app does not use them yet) |
 
-Thư viện tìm file theo tiền tố tên (`encoder`, `decoder`, `joiner`) và tên `tokens.txt`, nên giữ nguyên tên như trên.
-Danh sách file và kích thước mong đợi nằm ở `src/lib/speech/core.ts` (`STT_MODEL_FILES`).
+The library finds files by name prefix (`encoder`, `decoder`, `joiner`) and the name `tokens.txt`, so keep the names above. The file list and expected sizes are in `src/lib/speech/core.ts` (`STT_MODEL_FILES`).
 
-## Lấy model
+## Get the model
 
-Từ thư mục gốc của repo, tải model về đúng thư mục này:
+From the repo root, download the model into this folder:
 
 ```bash
 node .github/scripts/stt-model.mjs fetch frontend/mobile/assets/models
 ```
 
-Script tải từ [`hynt/Zipformer-30M-RNNT-Streaming-6000h`](https://huggingface.co/hynt/Zipformer-30M-RNNT-Streaming-6000h)
-(bản `chunk-32`, ghim theo commit trong `SOURCE_REVISION`) và so kích thước với `STT_MODEL_FILES`. Repo đó không có
-`tokens.txt`, nên script tạo lại file này từ `bpe.model`: mỗi dòng `<piece> <id>`, xuống dòng CRLF như file gốc của nhóm.
-License của model là `cc-by-nc-nd-4.0`: chỉ dùng phi thương mại và không phát hành bản đã sửa.
+The script downloads from [`hynt/Zipformer-30M-RNNT-Streaming-6000h`](https://huggingface.co/hynt/Zipformer-30M-RNNT-Streaming-6000h) (the `chunk-32` variant, pinned to the commit in `SOURCE_REVISION`) and compares sizes with `STT_MODEL_FILES`. That repo has no `tokens.txt`, so the script rebuilds it from `bpe.model`: one `<piece> <id>` per line, with CRLF line endings like the team's original file. The model license is `cc-by-nc-nd-4.0`: non-commercial use only, and modified versions must not be distributed.
 
-## App lấy model bằng cách nào
+## How the app gets the model
 
-Mặc định app **không đóng gói** model vào APK. Lần đầu mở màn Đọc đơn, app tải 4 file bắt buộc về bộ nhớ của app rồi
-dùng lại (kiểm tra bằng kích thước file). Muốn APK chạy offline (ví dụ bản prototype) thì nhúng model vào APK, xem mục
-"Nhúng model vào APK" ở cuối. Địa chỉ tải đặt trong `.env`:
+By default the app does **not bundle** the model in the APK. The first time the Đọc đơn screen opens, the app downloads the 4 required files into app storage and reuses them (checked by file size). To make an APK work offline (for example a prototype build), embed the model in the APK; see "Embed the model in the APK" at the end. The download address is set in `.env`:
 
 ```
-EXPO_PUBLIC_STT_MODEL_URL=http://<IP máy tính>:8090/
+EXPO_PUBLIC_STT_MODEL_URL=http://<computer IP>:8090/
 ```
 
-Khi phát triển, chạy máy chủ tĩnh nhỏ phục vụ thư mục này:
+During development, run a small static server for this folder:
 
 ```
 node scripts/serve-stt-model.js
 ```
 
-Script in ra các địa chỉ để điền vào `EXPO_PUBLIC_STT_MODEL_URL` (emulator Android dùng `http://10.0.2.2:8090/`, điện thoại
-thật dùng IP trong Wi-Fi). Script chỉ phục vụ các file trong thư mục này, chỉ đọc, và chỉ nên bật trong mạng tin cậy. Với
-điện thoại thật, tường lửa Windows phải cho phép cổng 8090.
+The script prints the addresses to put in `EXPO_PUBLIC_STT_MODEL_URL` (the Android emulator uses `http://10.0.2.2:8090/`, a real phone uses the Wi-Fi IP). The script serves only the files in this folder, read-only, and should only run on a trusted network. For a real phone, the Windows firewall must allow port 8090.
 
-Không muốn chạy máy chủ thì trỏ thẳng tới R2: `EXPO_PUBLIC_STT_MODEL_URL=https://pub-<hash>.r2.dev/stt-model/v1/`. Bản
-phát hành lấy địa chỉ này từ CI, xem mục dưới.
+To skip the server, point straight at R2: `EXPO_PUBLIC_STT_MODEL_URL=https://pub-<hash>.r2.dev/stt-model/v1/`. Release builds get this address from CI; see below.
 
-## Đưa model lên R2
+## Put the model on R2
 
-Bản phát hành tải model từ bucket R2 công khai mà APK đang dùng (xem mục "Publish the APK for the landing page" trong
-[`docs/development/ci-cd.md`](../../../../docs/development/ci-cd.md#publish-the-apk-for-the-landing-page)), dưới tiền tố
-`stt-model/<STT_MODEL_VERSION>/`. Dùng chung bucket vì app tải model không cần đăng nhập, nên bucket phải công khai giống
-APK. Model cũng không có gì cần giấu: model nhúng vào APK thì ai cũng giải nén ra được. Không cần DVC: repo không train
-model, và DVC lưu file theo hash nên app không tải được theo tên.
+Release builds download the model from the public R2 bucket the APK already uses (see "Publish the APK for the landing page" in [`docs/development/ci-cd.md`](../../../../docs/development/ci-cd.md#publish-the-apk-for-the-landing-page)), under the prefix `stt-model/<STT_MODEL_VERSION>/`. The bucket is shared because the app downloads the model without signing in, so the bucket must be public like the APK. The model has nothing to hide either: anyone can unpack a model embedded in an APK. DVC is not needed: the repo does not train models, and DVC stores files by hash so the app could not download them by name.
 
-Không cần upload tay. Bước "Resolve the speech model URL" của `mobile-release.yml` chạy `.github/scripts/stt-model.mjs`:
+No manual upload is needed. The "Resolve the speech model URL" step of `mobile-release.yml` runs `.github/scripts/stt-model.mjs`:
 
-1. `check`: đọc `STT_MODEL_VERSION` và `STT_MODEL_FILES` từ `core.ts`, gửi `HEAD` tới từng file dưới
-   `<STT_MODEL_BASE_URL>/stt-model/<version>/` và so kích thước.
-2. Thiếu hay lệch, và đây là bản phát hành (`publish=true`): `fetch` tải model như mục trên, `aws s3 sync --size-only` đưa
-   lên R2 bằng token của bucket APK (chỉ file thiếu hoặc lệch), rồi `check` lại.
-3. Đủ file thì build nhận `EXPO_PUBLIC_STT_MODEL_URL=<STT_MODEL_BASE_URL>/stt-model/<version>/`.
+1. `check`: reads `STT_MODEL_VERSION` and `STT_MODEL_FILES` from `core.ts`, sends `HEAD` to each file under `<STT_MODEL_BASE_URL>/stt-model/<version>/` and compares sizes.
+2. If a file is missing or differs and this is a release build (`publish=true`): `fetch` downloads the model as above, `aws s3 sync --size-only` uploads it to R2 with the APK bucket's token (only missing or differing files), then `check` runs again.
+3. When every file is present, the build gets `EXPO_PUBLIC_STT_MODEL_URL=<STT_MODEL_BASE_URL>/stt-model/<version>/`.
 
-Bản thử (dev, staging) không có token R2. Model chưa có trên R2 thì bản đó chỉ cảnh báo, vẫn build nhưng nói không được.
-Biến GitHub `STT_MODEL_BASE_URL` là địa chỉ công khai của bucket, ví dụ `https://pub-<hash>.r2.dev`. Thiếu biến này thì bản
-phát hành bị từ chối. Kiểm tra R2 từ máy mình:
+Test builds (dev, staging) have no R2 token. If the model is not on R2 yet, such a build only warns; it still builds but speech input does not work. The GitHub variable `STT_MODEL_BASE_URL` is the bucket's public address, for example `https://pub-<hash>.r2.dev`. Without it a release build is refused. Check R2 from your machine:
 
 ```bash
 STT_MODEL_BASE_URL=https://pub-<hash>.r2.dev node .github/scripts/stt-model.mjs check
 ```
 
-Đổi model: tăng `STT_MODEL_VERSION`, cập nhật `STT_MODEL_FILES`, rồi đổi `SOURCE_REPO` và `SOURCE_REVISION` trong script. Lần
-phát hành sau sẽ đưa model lên tiền tố mới. Không xoá phiên bản cũ, vì APK cũ vẫn tải từ đường dẫn của nó. Lifecycle rule
-tuỳ chọn của bucket chỉ được xoá trong `android/production/builds/`, không được chạm vào `stt-model/`.
+To change the model: bump `STT_MODEL_VERSION`, update `STT_MODEL_FILES`, then change `SOURCE_REPO` and `SOURCE_REVISION` in the script. The next release uploads the model under the new prefix. Do not delete old versions, because old APKs still download from their own path. The bucket's optional lifecycle rule may only delete under `android/production/builds/` and must not touch `stt-model/`.
 
-- Địa chỉ `r2.dev` bị giới hạn tốc độ và không có cache; mỗi người dùng mới tải khoảng 51 MB. Khi dự án có tên miền trên
-  Cloudflare thì chỉ cần đổi `STT_MODEL_BASE_URL`.
+- `r2.dev` addresses are rate-limited and uncached; each new user downloads about 51 MB. When the project has a domain on Cloudflare, only `STT_MODEL_BASE_URL` needs to change.
 
-## Nhúng model vào APK
+## Embed the model in the APK
 
-Plugin `plugins/withBundledSttModel.js` (đăng ký trong `app.json`) chép 4 file bắt buộc ở thư mục này vào
-`android/app/src/main/assets/models/stt-model-<STT_MODEL_VERSION>/` mỗi lần `expo prebuild`. Thư mục `android/` đã sinh sẵn
-thì chạy `node plugins/withBundledSttModel.js` rồi build. App tự nhận model nhúng và bỏ qua bước tải; model nhúng làm APK
-nặng thêm khoảng 49 MB. Máy build thiếu file model thì plugin chỉ cảnh báo, APK vẫn build được và quay về cách tải ở trên.
+The plugin `plugins/withBundledSttModel.js` (registered in `app.json`) copies the 4 required files in this folder into `android/app/src/main/assets/models/stt-model-<STT_MODEL_VERSION>/` on every `expo prebuild`. If the `android/` folder is already generated, run `node plugins/withBundledSttModel.js`, then build. The app detects the embedded model and skips the download; the embedded model adds about 49 MB to the APK. If the build machine lacks the model files, the plugin only warns, the APK still builds and falls back to the download above.

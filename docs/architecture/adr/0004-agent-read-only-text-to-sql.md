@@ -1,3 +1,11 @@
+---
+type: Architecture Decision
+title: "ADR-0004: The agent reads shop data through model-written, read-only SQL"
+description: "Accepted: the agent reads shop data through model-written, read-only SQL."
+owner: not assigned
+status: stable
+generated: { by: human:miphu2804, at: 2026-11-06T22:18:48+07:00 }
+---
 # ADR-0004: The agent reads shop data through model-written, read-only SQL
 
 - **Status:** Accepted, recorded after the fact; merged in #77 on 2026-10-02
@@ -44,4 +52,4 @@ The model passes only `sql`; the shop comes from the request context, never from
 
 - Issue #76, PRs #77 and #106.
 - [AI README, Read-only shop data](../../../backend/ai/README.md#read-only-shop-data) for the current layers and the login setup.
-- [API contracts §6](../../contracts/api-contracts.md#công-cụ-đọc-dữ-liệu-tiệm-của-agent).
+- [API contracts §6](../../contracts/api-contracts.md#agent-tool-for-reading-shop-data).

@@ -1,3 +1,12 @@
+---
+type: Guide
+title: "Agent chat evaluation"
+description: "Asks the real chat agent fixed questions about a made-up shop and checks figures, tools, memory and leaks."
+owner: AI owner
+status: stable
+generated: { by: human:miphu2804, at: 2026-11-05T13:45:47+07:00 }
+stale_after: 2027-01-04T13:45:47+07:00
+---
 # Agent chat evaluation
 
 Asks the real chat agent 23 questions about a made-up shop and checks the answers: right figures, right tools, memory recall, no internal names leaked, answered in Vietnamese.
