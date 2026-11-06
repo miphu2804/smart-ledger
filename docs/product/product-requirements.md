@@ -1,20 +1,27 @@
+---
+type: Product Requirements
+title: "Yêu cầu sản phẩm"
+description: "Hành vi quan sát được `FR-*`, `NFR-*` và tiêu chí nghiệm thu `AC-*`."
+owner: Chủ sản phẩm
+status: stable
+generated: { by: human:TranTho918, at: 2026-11-06T04:32:37+07:00 }
+stale_after: 2027-01-05T04:32:37+07:00
+---
 # Yêu cầu sản phẩm
 
 | Siêu dữ liệu | Giá trị |
 |---|---|
 | Trạng thái | MVP EXE201 — ưu tiên luồng cốt lõi; danh mục yêu cầu và trạng thái tích hợp được giữ để tra cứu |
-| Chủ sở hữu | Chủ sản phẩm |
 | Người phê duyệt | Chủ sản phẩm; người rà soát kỹ thuật |
-| Cập nhật lần cuối | 2026-11-06 (chốt ưu tiên EXE201, phạm vi demo và phần hoãn; giữ định nghĩa FR/NFR/AC và code hiện có) |
 
 ## Tài liệu liên quan
 
 - [Yêu cầu kinh doanh](business-requirements.md): kết quả, phạm vi và quy tắc kinh doanh.
 - [Demo và kiểm chứng EXE201](mvp-demo-validation.md): fixture, bước kiểm tra và mẫu ghi phản hồi.
 - [Mô tả sản phẩm](project-overview.md): định vị sản phẩm.
-- [Thiết kế kỹ thuật](../architecture/technical-design.md): hiện thực MVP.
+- [Thiết kế kỹ thuật](../architecture/technical-design.md): hiện thực và hiện trạng triển khai.
 - [Hợp đồng API](../contracts/api-contracts.md): FE ↔ Core và Core ↔ AI.
-- [Sơ đồ kiến trúc MVP](../architecture/diagrams/src/architecture.mmd): Mobile, Core, Data, AI và AI infrastructure.
+- [Sơ đồ kiến trúc đích](../architecture/diagrams/src/architecture.mmd): Mobile, Core, Data, AI và AI infrastructure.
 - Nguồn luồng Core/FE ban đầu: [orei1i/EXE201/frontend](https://github.com/orei1i/EXE201/tree/main/frontend), kiểm tra 2026-09-15. Hiện trạng triển khai được ghi trong [thiết kế kỹ thuật](../architecture/technical-design.md).
 
 ## 0. Tra nhanh shorthand
@@ -29,7 +36,7 @@
 | `BRD` | Business Requirements Document — tài liệu yêu cầu kinh doanh. |
 | `FR-*` | Functional Requirement — yêu cầu chức năng; mô tả sản phẩm phải làm gì. |
 | `FR-INV-*` | Functional Requirement về Invoice — yêu cầu chức năng liên quan đến hóa đơn điện tử. |
-| `MVP` | Minimum Viable Product — phiên bản tối thiểu để kiểm chứng giá trị sản phẩm. |
+| `MVP` | Phạm vi phát hành đầu tiên của SmartLedger, nay đang chạy production. Tên này được giữ làm nhãn phạm vi và ưu tiên (ví dụ `P0 — MVP`) để không đổi truy vết; nó không có nghĩa sản phẩm còn là bản thử nghiệm. |
 | `NFR-*` | Non-Functional Requirement — yêu cầu chất lượng/phi chức năng, ví dụ an toàn hoặc khả năng truy vết. |
 | `OQ-*` | Open Question — câu hỏi còn mở cần chốt trước khi cam kết. |
 | `P0/P1` | Mức ưu tiên triển khai; `P0` cao hơn `P1`. |
@@ -105,15 +112,15 @@ Luồng hỗ trợ: ADMIN đăng nhập dashboard web, tìm OWNER hoặc cơ s�
 | `FR-026` | `BO-003`, `BR-002`, `BR-004` | Trên các tab chính, OWNER có thể chạm mascot nổi để chọn Chatbot, Giọng nói hoặc Gợi ý mở phân tích Hôm nay; giữ để vào Giọng nói trực tiếp và kéo mascot trong vùng an toàn; thả tay thì mascot dính về cạnh trái hoặc phải và giữ nguyên vị trí khi đổi tab. | P1 — MVP |
 | `FR-027` | `BO-003`, `BR-012` | OWNER tạo chat riêng với assistant, xem, đổi tên, xóa và tiếp tục chat qua các phiên. Lịch sử lưu giữ đến khi OWNER xóa, không tự xóa theo TTL; mỗi lượt chỉ gửi cửa sổ trao đổi gần nhất trong đúng hội thoại/user/shop theo contract (mặc định 30 lượt), không tóm tắt hoặc cam kết nhớ toàn bộ tin đã lưu. Ghi nhớ fact xuyên hội thoại là ngoại lệ Proposed theo ADR-0002/OQ-006, chưa thuộc hành vi đã nghiệm thu. | P1 — MVP |
 | `FR-028` | `BO-002`, `BO-005`, `BR-016`, `BR-017` | Core ghi audit thành công cùng transaction cho các thao tác sale, thu/hoàn tiền, nợ, tồn, chi phí, category/product và hồ sơ/trạng thái shop đã triển khai. Mỗi event lưu actor/role, shop, action, đối tượng, thời điểm, requestId và context được phép; các event của cùng request dùng chung requestId. Không có audit thành công khi rollback hoặc ghi thêm event khi replay các luồng theo BR-016; không mở rộng idempotency sang mọi API tạo mới. | P0 — Core MVP; tích hợp FE/staging cần nghiệm thu |
-| `FR-029` | `BR-009`, `BR-017` | OWNER tra cứu lịch sử audit chỉ đọc của shop ACTIVE mình sở hữu, mới nhất trước, lọc theo action/đối tượng/khoảng thời gian và phân trang. Không có API tạo/sửa/xóa audit hoặc quyền đọc shop khác. Quy ước request/response và nhóm hành động nằm trong [API contract](../contracts/api-contracts.md#lịch-sử-audit-của-tiệm). | P0 — Core MVP; tích hợp FE/staging cần nghiệm thu |
+| `FR-029` | `BR-009`, `BR-017` | OWNER tra cứu lịch sử audit chỉ đọc của shop ACTIVE mình sở hữu, mới nhất trước, lọc theo action/đối tượng/khoảng thời gian và phân trang. Không có API tạo/sửa/xóa audit hoặc quyền đọc shop khác. Quy ước request/response và nhóm hành động nằm trong [API contract](../contracts/api-contracts.md#shop-audit-history). | P0 — Core MVP; tích hợp FE/staging cần nghiệm thu |
 | `FR-030` | `BO-002`, `BR-007`, `BR-009`, `BR-016`, `BR-017`, `BR-018` | OWNER nhập kho cho product ACTIVE tracked=true trong shop ACTIVE mình sở hữu bằng số lượng dương, tối đa 12 chữ số nguyên và 3 chữ số thập phân; lý do tùy chọn tối đa 500 ký tự. Core cộng vào tồn hiện tại dưới khóa, yêu cầu Idempotency-Key và ghi STOCK_ADJUSTED/source STOCK_IN cùng transaction; không tự ghi chi phí/thu tiền/nợ hoặc đổi giá vốn. | P0 — Core; cần phối hợp FE/nghiệm thu staging |
 | `FR-031` | `BR-007`, `BR-009`, `BR-017`, `BR-019` | OWNER upload/xóa một ảnh chính Product, logo Shop và avatar của chính mình qua Core. Cả ba upload dùng Idempotency-Key; URL read-only, không trả public ID. Product/logo công khai; avatar authenticated và giữ fallback Firebase, DELETE trở về fallback. Đổi/xóa enqueue dọn asset cũ sau commit, không xóa Product/Shop. | P1 — Core trên nhánh; cần tích hợp FE/nghiệm thu staging |
 | `FR-032` | `BO-003`, `BR-009`, `BR-020` | OWNER đọc inbox phân trang/lọc shop/type/chưa đọc, đếm chưa đọc và đánh dấu 1–100 ID đã đọc nguyên tử. Product nhận lowStockThreshold nullable ≥0, tối đa 12 chữ số nguyên/3 thập phân; PATCH bỏ qua giữ nguyên, null tắt LOW_STOCK. tracked=true và tồn 0 luôn OUT_OF_STOCK; tồn dương ≤ ngưỡng thì LOW_STOCK. Không lặp cảnh báo cùng mức; đổi mức kết thúc cảnh báo cũ, hồi tồn/tắt tracking/archive giải quyết cảnh báo. Lịch sử và readAt được giữ; chu kỳ sau có event mới. | P1 — Core trên feat/app-notifications; cần tích hợp FE/nghiệm thu staging |
-| `FR-033` | `BR-004`, `BR-005`, `BR-006`, `BR-007`, `BR-008`, `BR-009` | OWNER đọc products/sales/sale-drafts/customers/debts/expenses bằng phân trang DB trên sáu endpoint hiện có, luôn trả object có items và tổng bản ghi theo filter, kể cả không gửi page/size. Tìm kiếm/lọc/sắp xếp diễn ra trước phân trang; sales/expenses nhận khoảng timestamp có offset, from inclusive/to exclusive. Giữ quyền tiệm, snapshot lịch sử và trạng thái draft hết hạn; detail/thao tác ghi không đổi. Sales có [summary riêng](../contracts/api-contracts.md#tổng-danh-sách-sale-theo-bộ-lọc-core-014) trả count và giá trị sau discount theo cùng filter trên toàn bộ dữ liệu, tách CONFIRMED/VOIDED hiện tại; không gọi giá trị đơn là tiền thực thu, lợi nhuận hoặc netRevenueVnd của FR-006. Mobile: Đơn hàng cuộn vô hạn và Bán hàng phân trang theo số trang, cùng 20 dòng mỗi lần/trang (`AC-068`); rollout list ở [quy ước OWNER](../contracts/api-contracts.md#phân-trang-danh-sách-owner). | CORE-011 #153; CORE-014 #213 trên feat/sales-filter-summary; tích hợp summary FE/staging cần nghiệm thu riêng |
+| `FR-033` | `BR-004`, `BR-005`, `BR-006`, `BR-007`, `BR-008`, `BR-009` | OWNER đọc products/sales/sale-drafts/customers/debts/expenses bằng phân trang DB trên sáu endpoint hiện có, luôn trả object có items và tổng bản ghi theo filter, kể cả không gửi page/size. Tìm kiếm/lọc/sắp xếp diễn ra trước phân trang; sales/expenses nhận khoảng timestamp có offset, from inclusive/to exclusive. Giữ quyền tiệm, snapshot lịch sử và trạng thái draft hết hạn; detail/thao tác ghi không đổi. Sales có [summary riêng](../contracts/api-contracts.md#sales-list-totals-under-filters-core-014) trả count và giá trị sau discount theo cùng filter trên toàn bộ dữ liệu, tách CONFIRMED/VOIDED hiện tại; không gọi giá trị đơn là tiền thực thu, lợi nhuận hoặc netRevenueVnd của FR-006. Mobile: Đơn hàng cuộn vô hạn và Bán hàng phân trang theo số trang, cùng 20 dòng mỗi lần/trang (`AC-068`); rollout list ở [quy ước OWNER](../contracts/api-contracts.md#pagination-of-owner-lists). | CORE-011 #153; CORE-014 #213 trên feat/sales-filter-summary; tích hợp summary FE/staging cần nghiệm thu riêng |
 | `FR-034` | `BO-002`, `BR-007`, `BR-009`, `BR-021` | Create/PATCH/lookup dùng cùng chuẩn hóa barcode; OWNER tra đúng mã của Product ACTIVE trong tiệm ACTIVE mình sở hữu mà không tải danh sách. Barcode chỉ unique trên ACTIVE cùng tiệm; archive giải phóng mã nhưng giữ lịch sử. Trùng khi create/PATCH trả 409 với chi tiết Product đang giữ mã nếu service nhận diện; race DB có thể không có details. Quy ước trong [contract barcode](../contracts/api-contracts.md#barcode-core-012). | CORE-012 #163/#164 trên feat/core-barcode; cần V16 và phối hợp FE/nghiệm thu staging |
 | `FR-035` | `BR-001` | Trên bốn tab chính (Tổng quan, Đơn hàng, Bán hàng, Quản lý), OWNER mở menu chuyển nhanh trượt từ bên trái bằng nút ☰ (Tổng quan: cạnh logo; Quản lý: cạnh tiêu đề; Đơn hàng và Bán hàng: bên trái ô tìm; Tổng quan và Bán hàng còn có nút gọn ở phần đầu đã thu khi cuộn) hoặc vuốt từ mép trái. Menu liệt kê Tổng quan, Bán hàng, Đơn hàng, Công nợ, Hàng hoá, Báo cáo, Chi phí, Trợ lý AI và Cài đặt, đánh dấu màn đang mở; chạm một mục là chuyển ngay. Thanh tab dưới giữ nguyên. | P1 — MVP |
 | `FR-036` | `BO-003`, `BR-023` | Khi được bật sau migration, Core ghi tối đa một ngày hoạt động cho mỗi user ACTIVE có request API nghiệp vụ đã xác thực và phản hồi 2xx/3xx, gồm API đọc; ngày theo Asia/Ho_Chi_Minh tại lúc nhận request. Không tính public OAuth, health, OPTIONS hoặc 4xx/5xx. Lưu mã user/ngày trong 90 ngày gồm hôm nay; cache có giới hạn, lỗi ghi không đổi response nghiệp vụ và được thử lại. Grafana đọc DAU/MAU tách OWNER/ADMIN, bỏ email bắt đầu loadtest+; MAU là 30 ngày lịch gồm hôm nay. Không thêm API FE, không đo CCU hay hiệu quả câu trả lời AI. | CORE-018 #409; chủ sản phẩm duyệt ngày 2026-10-29; nhánh feat/core-daily-activity, chưa nghiệm thu staging |
-| `FR-037` | `BR-024` | Core giới hạn thao tác thành công theo tài khoản; dùng chung giữa các instance, giữ qua restart và miễn replay hợp lệ. Nhóm, cửa sổ, lease, lỗi và retry theo [contract](../contracts/api-contracts.md#giới-hạn-thao-tác-core-019). | CORE-019 #430; đã duyệt ngày 2026-10-31, mặc định tắt, chưa nghiệm thu staging |
+| `FR-037` | `BR-024` | Core giới hạn thao tác thành công theo tài khoản; dùng chung giữa các instance, giữ qua restart và miễn replay hợp lệ. Nhóm, cửa sổ, lease, lỗi và retry theo [contract](../contracts/api-contracts.md#core-019-operation-limits). | CORE-019 #430; đã duyệt ngày 2026-10-31, mặc định tắt, chưa nghiệm thu staging |
 | `FR-038` | `BO-002`, `BR-009`, `BR-016`, `BR-017`, `BR-025` | OWNER giảm tồn bằng lượng dương tối đa 12 chữ số nguyên và 3 thập phân, có lý do không rỗng tối đa 500 ký tự. Core khóa sản phẩm, không cho tồn âm, yêu cầu Idempotency-Key và ghi STOCK_ADJUSTED/source STOCK_ADJUSTMENT cùng cảnh báo tồn trong transaction; giữ nguyên các khoản tiền và giá vốn. | CORE-021 #457; triển khai trong nhánh, chưa nghiệm thu FE/staging |
 
 `FR-001`–`FR-009` giữ nguyên mã. `FR-007` không bị tái sử dụng cho yêu cầu khác.
@@ -335,11 +342,11 @@ Các tiêu chí dưới đây kiểm chứng `FR-038`; triển khai Core trong n
 - `FR-033`/`AC-059`–`AC-063`: CORE-011 #153 đổi trực tiếp response sáu list OWNER trên `feat/owner-list-pagination`; đây là breaking change, chưa phải nghiệm thu FE/staging. CORE-014 #213 bổ sung riêng tổng danh sách sale tại `AC-069`–`AC-072` trên `feat/sales-filter-summary`, không mở rộng aggregate cho debt/customer/expense/product. Không thêm schema/index/Redis; debt contact projection và các tổng còn thiếu vẫn cần task riêng. Phối hợp #144 và nghiệm thu FE trước rollout.
 
 - `FR-020`/`AC-076`–`AC-077`: AI thêm view chỉ đọc `v_debts`, `v_payments`, `v_expenses` trên nhánh `feat/agent-ledger-read-views`; đã có test PostgreSQL cách ly shop và ẩn PII, chưa nghiệm thu đầu-cuối với model thật trên staging. Cần chạy Core Flyway đến V9 trước migration AI. Cho Agent đọc tên khách (để trả lời "khách nào nợ nhiều nhất") là quyết định riêng của PO, chưa làm. Hoàn tiền chưa có view riêng; Agent suy ra từ khoản thu của đơn đã hủy.
-- `OQ-001` đã chốt: STT thật thuộc đích MVP. Mobile có nhận giọng nói trên Android và Web Speech API khi hỗ trợ; parser câu vẫn ở FE, API draft/audio qua AI còn là đích theo [contract](../contracts/api-contracts.md#5-ai-qua-core). Đối chiếu code không thay nghiệm thu `AC-008` trên từng nền tảng.
+- `OQ-001` đã chốt: STT thật thuộc đích MVP. Mobile có nhận giọng nói trên Android và Web Speech API khi hỗ trợ; parser câu vẫn ở FE, API draft/audio qua AI còn là đích theo [contract](../contracts/api-contracts.md#5-ai-through-core). Đối chiếu code không thay nghiệm thu `AC-008` trên từng nền tảng.
 - `FR-017`: phải chốt loại ảnh đầu tiên trong issue trước khi viết parser.
 - `FR-010`/`NFR-003`: CORE-015 #238 bổ sung backend Zalo và `AC-081`–`AC-086`; LOGIN local là mốc kiểm chứng lịch sử, không thay nghiệm thu LINK/provider thật. FE hiện có LOGIN theo cấu hình web/Android trong `FR-010`; iOS/thiếu cấu hình vẫn “Sắp có”. Email verification hiện chỉ ở app, Core chưa kiểm tra `email_verified`; không đổi hành vi này trong CORE-015. Firebase ID token vẫn là Bearer duy nhất cho API nghiệp vụ.
 - CORE-016 #276 có Android Core/V18 và cấu hình bật staging sau merge theo `AC-087`–`AC-092`; native vẫn mặc định tắt, chưa chạy migration shared DB/bật trên VPS hoặc sửa AI/nghiệm thu APK. FE Android đã có LOGIN (chưa LINK) nhưng chưa nghiệm thu `AC-092` trên APK ký thật. Điều kiện bật và ranh giới WEB/ANDROID theo [contract](../contracts/api-contracts.md#zalo-android-core-016).
-- MVP chỉ có hai vai trò `OWNER` và `ADMIN`; quản lý nhân viên/thành viên (`FR-012`) đã bị loại khỏi phạm vi.
+- Sản phẩm chỉ có hai vai trò `OWNER` và `ADMIN`; quản lý nhân viên/thành viên (`FR-012`) đã bị loại khỏi phạm vi.
 - Toàn bộ `FR-INV-*` bị hoãn cho đến khi `OQ-INV-001`–`OQ-INV-005` trong BRD được giải quyết.
 - Máy in và gói dịch vụ ngoài PRD MVP.
 - `OQ-002` đã chốt hủy toàn bộ có dấu vết theo BRD. Hoàn tiền/trả hàng từng phần ngoài phạm vi; nhập tăng tồn theo `FR-030` và giảm tồn độc lập theo `FR-038` là thao tác riêng, không suy ra từ hủy sale.

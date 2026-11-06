@@ -1,11 +1,20 @@
+---
+type: Service Guide
+title: "SmartLedger AI"
+description: "Internal FastAPI service for the owner Agent chat: routes, configuration, guardrails, memory and observability."
+owner: AI owner
+status: stable
+generated: { by: human:miphu2804, at: 2026-11-06T22:18:48+07:00 }
+stale_after: 2027-01-05T22:18:48+07:00
+---
 # SmartLedger AI
 
 Internal FastAPI service that runs the owner's Agent chat. Only Core calls it: Core proxies its public `/api/v1/agent/*` routes here. Frontends must not call this service.
 
 | Need | Read |
 |---|---|
-| Request and response shapes | [API contracts §6](../../docs/contracts/api-contracts.md#6-core--ai-nội-bộ) |
-| Implementation status | [Technical design §1](../../docs/architecture/technical-design.md#1-phạm-vi) |
+| Request and response shapes | [API contracts §6](../../docs/contracts/api-contracts.md#6-core--ai-internal) |
+| Implementation status | [Technical design §1](../../docs/architecture/technical-design.md#1-scope) |
 | Code walkthrough with diagrams | [Service walkthrough §8](../../docs/architecture/service-walkthrough/README.md#8-ai-service) |
 | Vector store and long-term memory decisions | [ADR-0001](../../docs/architecture/adr/0001-vector-store-pgvector.md), [ADR-0002](../../docs/architecture/adr/0002-agent-long-term-memory.md) |
 
@@ -149,7 +158,7 @@ Limits are provisional until the PO approves them; each answered turn logs its t
 
 ## Streaming
 
-The [stream contract](../../docs/contracts/api-contracts.md#stream-trả-lời-chat) defines the events. How the service produces them:
+The [stream contract](../../docs/contracts/api-contracts.md#chat-answer-stream) defines the events. How the service produces them:
 
 - History and input checks run before the first byte, so a pre-stream failure is a normal JSON error; a later failure ends the stream with an `error` event carrying the same code.
 - The run uses `agent.iter()` with `stream_text(delta=True)`; `run_stream` would stop at the first final-looking output and skip later tool calls.

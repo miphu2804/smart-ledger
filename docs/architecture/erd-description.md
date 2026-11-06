@@ -1,3 +1,12 @@
+---
+type: Data Model
+title: "SmartLedger — ERD Description"
+description: "Database entities, relationships, data flows and migration alignment, paired with `diagrams/src/erd.dbml`."
+owner: Technical owner
+status: stable
+generated: { by: human:miphu2804, at: 2026-11-06T22:18:48+07:00 }
+stale_after: 2027-01-05T22:18:48+07:00
+---
 # SmartLedger — ERD Description
 
 ## 1. Overview
@@ -21,7 +30,7 @@ The logical ERD includes authentication, shops, products, customers, drafts, sal
 
 Business decisions are owned by the [BRD](../product/business-requirements.md) and [PRD](../product/product-requirements.md); endpoint/JSON details are owned by the [API contract](../contracts/api-contracts.md). Core audit/schema alignment reviewed against `staging` commit `b1de421c461d59473b3bb73aae103027afd67a89` on 2026-10-06; AI sections were re-checked against `supabase/migrations/` and `backend/ai/src` at `staging` commit `f1a4818` on 2026-10-16.
 
-A sale record in this MVP is an internal business record. It is **not an electronic invoice**.
+A sale record in SmartLedger is an internal business record. It is **not an electronic invoice**.
 
 ## CORE-018 V19
 
@@ -75,7 +84,7 @@ Drafts do not affect revenue, stock, payments, or debts until confirmed.
 - **agent_memories**: the Agent's long-term memory ([ADR-0002](adr/0002-agent-long-term-memory.md)), created by `20261014000000_agent_memories.sql` and extended by `20261015000000_agent_memory_visibility.sql`. Each row is one fact for a `shop_id` and `user_id` (both ON DELETE RESTRICT), with `memory_type` (`preference`, `semantic`, `procedural`, `episodic`), `content`, a `vector(384)` `embedding` under a cosine HNSW index, `importance` (0–1), `metadata`, optional `expires_at`, the recall fields `last_used_at` and `use_count`, and `superseded_by`, the correction link: when a fact is corrected, the older row stores the newer row's id there and search skips the older row (self-reference, ON DELETE SET NULL). `source_conversation_id` cascades, so deleting a conversation deletes the memories it produced. After a turn, at most three groups of live, not yet summarized memories (no `metadata.summarized_from`) of one conversation and one shop day whose `created_at` is older than 7 days (groups of two or more) are each replaced, one transaction per group, by one to five summary rows that keep the group's latest `created_at`, its `source_conversation_id`, last use and summed `use_count`, and carry `metadata.summarized_from` (the replaced ids); memories the group had superseded now point at the first summary row, and the replaced rows are deleted. Row-level security is on with no policy. The service writes it only when `AGENT_MEMORY_ENABLED` is on, which awaits PO approval.
 - **agent_memory_settings**: the owner's memory switch per `(shop_id, user_id)` primary key, `memory_enabled` default true; no row means on. Created by `20261015000000_agent_memory_visibility.sql`, with row-level security and no policy.
 - **vector extension**: the AI baseline runs `CREATE EXTENSION IF NOT EXISTS vector` ([ADR-0001](adr/0001-vector-store-pgvector.md)); `agent_memories.embedding` is the only column that uses it.
-- **ai_requests**: Planned table for AI request status, model/version, result, errors, and media object references; not yet created by any migration. Runtime traces go to HoneyHive, not to this table ([technical design §2](technical-design.md#2-thành-phần-và-quyền-sở-hữu)).
+- **ai_requests**: Planned table for AI request status, model/version, result, errors, and media object references; not yet created by any migration. Runtime traces go to HoneyHive, not to this table ([technical design §2](technical-design.md#2-components-and-ownership)).
 - **api_idempotency_keys**: Protects expense creation, debt repayment, sale void and product stock-in. Stock-in uses operation PRODUCT_STOCK_IN, resource PRODUCT and response_status 200; its hash includes product ID, canonical quantity and normalized reason. Confirmation replays by draft ID instead. Media uploads use the separate V14 table below; monetary idempotency retains its shop-scoped V7 schema. Default completed-key TTL is 30 days and no key cleanup job exists.
 - **media_upload_keys**: V14 durable upload reservations with unique `(scope_key, operation, idempotency_key)`, user FK, request hash, internal public ID, UUID lease token, expiry and nullable JSONB replay snapshot. Product/logo use SHOP scope; avatar uses USER scope. Null response is PENDING; expired matching requests atomically acquire a new token. Final writes lock/recheck the token and lease; stale requests cannot complete or release another attempt. Avatar replay snapshots contain internal public ID, not signed URLs. There is no scheduled retention cleanup.
 - **media_cleanup_jobs**: V13 persistent outbox for deleting a replaced/deleted Cloudinary asset only after the Product/Shop/User database transaction commits. Stores internal provider public ID, asset type, PENDING/COMPLETED state, retry count/schedule/error, and completion time. No business FK is required after the owner reference is cleared. Workers use per-job SKIP LOCKED and per-asset advisory locks shared with media writers, check current entity references and active upload leases, and update retries only while PENDING. The cleanup transaction stays open during remote deletion; a COMPLETED job cannot be resurrected by a late retry.
@@ -166,7 +175,7 @@ Reports retain collection at payment.received_at, refunds at sale_refunds.refund
 
 Firebase token verification → active DB ADMIN profile → support projection query → audit insert → transaction commit → response. Each successful dashboard GET is audited, including empty searches; these transactions cannot be read-only. Audit persistence failure refuses protected output with 503 admin_audit_unavailable. Validation/permission/not-found failures do not create SUCCESS events; failure/security audit is a separate scope.
 
-OWNER audit queries exclude all ADMIN_* read actions. ADMIN access history selects only the authenticated actor and administrative action/target whitelist, with no raw business metadata. Shop status history selects only ADMIN SHOP_INACTIVATED/SHOP_REACTIVATED events; the existing status event serves both authorized views without duplication. Access-history reads select their page before recording the read itself. Query strings and contact data are not captured in read audit: metadata contains only queryPresent/resultCount. API details are in the [ADMIN contract](../contracts/api-contracts.md#7-dashboard-quản-trị--đã-có-trong-core).
+OWNER audit queries exclude all ADMIN_* read actions. ADMIN access history selects only the authenticated actor and administrative action/target whitelist, with no raw business metadata. Shop status history selects only ADMIN SHOP_INACTIVATED/SHOP_REACTIVATED events; the existing status event serves both authorized views without duplication. Access-history reads select their page before recording the read itself. Query strings and contact data are not captured in read audit: metadata contains only queryPresent/resultCount. API details are in the [ADMIN contract](../contracts/api-contracts.md#7-admin-dashboard--implemented-in-core).
 
 ### Planned AI Draft Flow (not yet implemented in Core)
 ```text

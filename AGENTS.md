@@ -2,7 +2,7 @@
 
 ## Scope
 
-SmartLedger is currently a documentation-first MVP. Core is Java under `backend/core` — do not modify it. AI is a Python FastAPI service under `backend/ai` that serves internal Agent chat to Core; do not assume APIs, commands, or product behavior beyond what [`docs/contracts/api-contracts.md`](docs/contracts/api-contracts.md) marks as implemented.
+SmartLedger runs in production; the documents in `docs/` remain the source of truth for its scope and contracts, and [technical design §1](docs/architecture/technical-design.md#1-scope) records what is implemented. Core is Java under `backend/core` — do not modify it. AI is a Python FastAPI service under `backend/ai` that serves internal Agent chat to Core; do not assume APIs, commands, or product behavior beyond what [`docs/contracts/api-contracts.md`](docs/contracts/api-contracts.md) marks as implemented.
 
 ### Approved Core exception — PR #368
 
@@ -16,13 +16,18 @@ Core restriction continues to apply outside this scope.
 ## Before changing anything
 
 1. Check the working tree with `git status --short`.
-2. Read [`docs/README.md`](docs/README.md) for the document map and source-of-truth rules.
+2. Read [`docs/index.md`](docs/index.md) to pick the documents for the task, and [`docs/README.md`](docs/README.md) for reading paths and source-of-truth rules.
 3. Read the relevant documents in [`docs/product/`](docs/product/) before changing scope or requirements.
 4. State the success check, then make the smallest diff that satisfies the request.
 
 ## Documentation rules
 
 - Documents in `docs/` are the source of truth; link to existing content instead of duplicating it.
+- Keep docs in sync with code in the same change: when a change alters behavior, a contract, the schema, setup or a decision, update the document that owns it (see [Which document to update](docs/README.md#which-document-to-update)) in the same pull request, never in a later one.
+- Write documentation in English, except the business and product documents in `docs/product/`, which stay in Vietnamese; quoted Vietnamese UI copy stays as written.
+- Every document in `docs/`, and every repository document listed under "Repository docs outside docs/" in [`docs/index.md`](docs/index.md), starts with OKF frontmatter as described in [docs conventions](docs/README.md#conventions). When you edit a document meaningfully, set `generated.by` to `human:<GitHub login>` of the person making the change, set `generated.at` to now with the `+07:00` offset and move `stale_after` 60 days later; a new document needs every field.
+- Keep the OKF indexes in the same change by hand: [`docs/index.md`](docs/index.md) and each folder's `index.md` list their documents as `* [Title](relative/path) - description`, copying the document's frontmatter `title` and `description`. Add, move, rename or remove the entry whenever a document is added, moved, renamed or removed, or its title or description changes; a folder with two or more entries gets its own `index.md` without frontmatter, linked from its parent, and only `docs/index.md` carries frontmatter (`okf_version: "0.2"`).
+- Before relying on a document whose `stale_after` has passed, check it against the code on `staging`: fix it and refresh its dates, or set `status: deprecated` and link its replacement. Do not start a new document for a topic that already has one; extend the existing document instead.
 - Preserve product-layer traceability: `BO/BR → FR/NFR → AC`.
 - Update the BRD when business scope changes; update the PRD and acceptance criteria when product behavior changes.
 - Do not present provisional requirements, a single-shop demo, or the current auth gap as production-ready behavior.

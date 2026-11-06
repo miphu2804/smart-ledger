@@ -1,18 +1,25 @@
+---
+type: Business Requirements
+title: "Yêu cầu kinh doanh"
+description: "Mục tiêu kinh doanh `BO-*`, quy tắc `BR-*`, phạm vi và các quyết định cần phê duyệt."
+owner: Chủ kinh doanh/sản phẩm
+status: stable
+generated: { by: human:TranTho918, at: 2026-11-06T04:32:37+07:00 }
+stale_after: 2027-01-05T04:32:37+07:00
+---
 # Yêu cầu kinh doanh
 
 | Siêu dữ liệu | Giá trị |
 |---|---|
 | Trạng thái | MVP môn EXE201 — ưu tiên demo đầu-cuối và kiểm chứng người dùng; chưa chứng nhận nghiệm thu tích hợp |
-| Chủ sở hữu | Chủ kinh doanh/sản phẩm |
 | Người phê duyệt | Chủ sản phẩm; chủ thuế/pháp lý cho `BR-INV-*` và nghĩa vụ tuân thủ |
-| Cập nhật lần cuối | 2026-11-06 — thu gọn ưu tiên EXE201 theo chỉ đạo chủ dự án; giữ kết quả rà code staging `494fa6c` |
 
 ## Tài liệu liên quan
 
 - [Mô tả sản phẩm](project-overview.md): người dùng mục tiêu và định vị.
 - [Demo và kiểm chứng EXE201](mvp-demo-validation.md): kịch bản đầu-cuối, dữ liệu thử và mẫu ghi phản hồi.
 - [PRD](product-requirements.md): hành vi `FR-*`, chất lượng `NFR-*` và tiêu chí `AC-*`.
-- [Thiết kế kỹ thuật §1](../architecture/technical-design.md#1-phạm-vi) và [API contracts](../contracts/api-contracts.md): nguồn duy nhất về trạng thái triển khai và ranh giới endpoint.
+- [Thiết kế kỹ thuật §1](../architecture/technical-design.md#1-scope) và [API contracts](../contracts/api-contracts.md): nguồn duy nhất về trạng thái triển khai và ranh giới endpoint.
 - [Phụ lục kiểm định](business-requirements-audit.md): thiếu sót phát hiện, bằng chứng code và truy vết chi tiết; không thay phê duyệt phạm vi.
 - [Luồng mobile](userflow/README.md): màn hình và đường đi; ảnh chụp không tự chứng nhận AC.
 

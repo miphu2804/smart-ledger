@@ -1,3 +1,12 @@
+---
+type: Guide
+title: "secrets"
+description: "Local copies of the team env files pulled from Dopbase, and what is tracked in git."
+owner: Technical owner
+status: stable
+generated: { by: human:miphu2804, at: 2026-11-02T19:08:01+07:00 }
+stale_after: 2027-01-01T19:08:01+07:00
+---
 # secrets
 
 Local copies of the team's env files, one folder per environment, pulled from Dopbase. Only `staging/targets`, `templates/` and `local.env.*` are in git; every `env/` folder is ignored. The full guide, file format and what each file holds: [Secrets and env files](../docs/development/secrets-and-env.md).

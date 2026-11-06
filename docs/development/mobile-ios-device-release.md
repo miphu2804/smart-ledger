@@ -1,3 +1,12 @@
+---
+type: Runbook
+title: "Install a Release Build on a Physical iPhone"
+description: "Build and install a Release configuration of the mobile app on a connected iPhone."
+owner: Technical owner
+status: stable
+generated: { by: human:miphu2804, at: 2026-10-27T01:31:05+07:00 }
+stale_after: 2026-12-26T01:31:05+07:00
+---
 # Install a Release Build on a Physical iPhone
 
 This guide builds the current `frontend/mobile` workspace in the Xcode `Release` configuration, installs it on a connected iPhone, and opens the app. It covers direct installation for device validation; it does not upload a build to TestFlight or the App Store.

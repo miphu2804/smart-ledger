@@ -1,3 +1,12 @@
+---
+type: Guide
+title: "HoneyHive config as code"
+description: "Evaluators, charts and alerts that watch the shop agent, kept as files and how to apply them."
+owner: AI owner
+status: stable
+generated: { by: human:miphu2804, at: 2026-11-04T22:01:25+07:00 }
+stale_after: 2027-01-03T22:01:25+07:00
+---
 # HoneyHive config as code
 
 Evaluators, charts and alerts that watch Bobi, the shop agent of the AI service, kept as files in the layout of HoneyHive's [Config as Code](https://docs.honeyhive.ai/v2/cli-reference/config-as-code) guide, so a change goes through review like code and follows their docs.

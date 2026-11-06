@@ -1,6 +1,15 @@
+---
+type: Service Guide
+title: "SmartLedger Core — setup"
+description: "How to run, configure and test the Java Core service, with per-feature regression guides."
+owner: Core owner
+status: stable
+generated: { by: human:miphu2804, at: 2026-11-06T22:18:48+07:00 }
+stale_after: 2027-01-05T22:18:48+07:00
+---
 # SmartLedger Core — setup
 
-CORE-019 adds default-off durable success quotas for image uploads and shop creation. See [V20 activation and recovery](docs/user-rate-limits.md) and the [API contract](../../docs/contracts/api-contracts.md#giới-hạn-thao-tác-core-019). Apply the merged migration and upgrade all writers before setting `USER_RATE_LIMIT_ENABLED=true`; implementation does not activate shared environments.
+CORE-019 adds default-off durable success quotas for image uploads and shop creation. See [V20 activation and recovery](docs/user-rate-limits.md) and the [API contract](../../docs/contracts/api-contracts.md#core-019-operation-limits). Apply the merged migration and upgrade all writers before setting `USER_RATE_LIMIT_ENABLED=true`; implementation does not activate shared environments.
 
 Core is a Java 21 / Spring Boot backend. This README covers how to run it locally on Windows, macOS/Linux, in IntelliJ IDEA, or with Docker Compose. For product behavior and API details, see the [documentation index](../../docs/README.md) and [API contracts](../../docs/contracts/api-contracts.md).
 
@@ -53,7 +62,7 @@ Replacing or deleting a Product image/logo/avatar commits a `media_cleanup_jobs`
 
 All three uploads require `Idempotency-Key`. V14 adds `media_upload_keys` with SHOP scope for Product/logo and USER scope for avatar. An active duplicate receives `409 media_upload_in_progress`; a completed request replays its snapshot. Avatar replay regenerates the delivery URL. Expired upload leases are reclaimed atomically with a new token; old uploaders cannot complete or release a newer reservation. Final writes lock/recheck the entity and lease before changing references/audit. Deterministic public IDs use `overwrite=true` to retry identical bytes. Monetary idempotency remains in `api_idempotency_keys`.
 
-Firebase `avatar_url` remains a fallback and keeps syncing. DELETE removes only the custom Cloudinary avatar; later sessions return the fallback. When Cloudinary is disabled, DELETE with a reference returns `503`; an absent custom reference remains a `204` no-op. Apply V13/V14 using the reviewed migration workflow before deploying to a shared database. Apply V13 audit CHECK validation during reduced or stopped writes. See the [API contract](../../docs/contracts/api-contracts.md#1-auth-và-tiệm).
+Firebase `avatar_url` remains a fallback and keeps syncing. DELETE removes only the custom Cloudinary avatar; later sessions return the fallback. When Cloudinary is disabled, DELETE with a reference returns `503`; an absent custom reference remains a `204` no-op. Apply V13/V14 using the reviewed migration workflow before deploying to a shared database. Apply V13 audit CHECK validation during reduced or stopped writes. See the [API contract](../../docs/contracts/api-contracts.md#1-auth-and-shop).
 
 ## Windows PowerShell
 
@@ -213,7 +222,7 @@ HAVING COUNT(*) > 1;
 
 ### OWNER list pagination (CORE-011)
 
-[CORE-011 #153](https://github.com/miphu2804/smart-ledger/issues/153) changes the existing six OWNER GET lists (`products`, `sales`, `sale-drafts`, `customers`, `debts`, `expenses`) from arrays to `PageResponse<T>`, even without query parameters. There is no `/page` route or full-array fallback. See the canonical [pagination contract](../../docs/contracts/api-contracts.md#phân-trang-danh-sách-owner) for the exact filters, sorting and errors. Detail/write/report contracts are unchanged; no schema/index migration or Redis cache is added.
+[CORE-011 #153](https://github.com/miphu2804/smart-ledger/issues/153) changes the existing six OWNER GET lists (`products`, `sales`, `sale-drafts`, `customers`, `debts`, `expenses`) from arrays to `PageResponse<T>`, even without query parameters. There is no `/page` route or full-array fallback. See the canonical [pagination contract](../../docs/contracts/api-contracts.md#pagination-of-owner-lists) for the exact filters, sorting and errors. Detail/write/report contracts are unchanged; no schema/index migration or Redis cache is added.
 
 All lists default to `page=0&size=20`; size is 1–100 and the offset must fit Integer.MAX_VALUE. Filtering precedes SQL pagination. Sale/draft item queries are bounded by the parent IDs in the page and the selected shop. Simple lists use at most two data queries; sale/draft lists use at most three including count and item batch, excluding auth/shop checks. Spring Data may skip count when the correct total can be inferred. Empty parent pages never load items. Content/count share one REPEATABLE_READ snapshot per request, not across requests; deep OFFSET/count can still be expensive and concurrent changes can shift pages.
 
@@ -270,7 +279,7 @@ With `CORE_TEST_POSTGRES_*` pointing at the disposable database described above,
 .\mvnw.cmd '-Dtest=SalesListQueryPostgresTest,OwnerListQueryTest,SalePaymentServiceTest,OwnerPaginationWebTest,ApiDocumentationWebTest' test
 ```
 
-The real PostgreSQL summary cases cover zero results/draft exclusion, status and combined search/time filters, equivalent offsets, half-open boundaries, one-sided ranges, discounted paid/partial/debt sales, cross-period voids, literal wildcard and archived-product snapshot search, OWNER/ADMIN/account/shop guards, exact `Long.MAX_VALUE` and overflow for both statuses. Overflow fixtures use valid PAID sales and keep the real business constraints enabled. The 10,000-sale/50,000-item fixture checks one aggregate data SELECT with no item hydration; auth/shop checks are excluded. Logged local timings are observations, not staging latency guarantees. CI requires these summary methods through `scripts/verify_postgres_tests.py`. See the [API contract](../../docs/contracts/api-contracts.md#tổng-danh-sách-sale-theo-bộ-lọc-core-014) and PRD `AC-069`–`AC-072`; FE/staging UAT remains pending.
+The real PostgreSQL summary cases cover zero results/draft exclusion, status and combined search/time filters, equivalent offsets, half-open boundaries, one-sided ranges, discounted paid/partial/debt sales, cross-period voids, literal wildcard and archived-product snapshot search, OWNER/ADMIN/account/shop guards, exact `Long.MAX_VALUE` and overflow for both statuses. Overflow fixtures use valid PAID sales and keep the real business constraints enabled. The 10,000-sale/50,000-item fixture checks one aggregate data SELECT with no item hydration; auth/shop checks are excluded. Logged local timings are observations, not staging latency guarantees. CI requires these summary methods through `scripts/verify_postgres_tests.py`. See the [API contract](../../docs/contracts/api-contracts.md#sales-list-totals-under-filters-core-014) and PRD `AC-069`–`AC-072`; FE/staging UAT remains pending.
 
 ### Checkout and void batch product-lock tests
 
@@ -328,13 +337,13 @@ ADMIN and OWNER events share the existing `audit_logs`; ADMIN reads are separate
 
 For a fresh disposable local database, use `FLYWAY_ENABLED=true` and `SPRING_JPA_HIBERNATE_DDL_AUTO=validate` to apply V1–V18 and validate the entity mappings. A Flyway-managed database already at V10 applies subsequent versions in order; review the V17 Zalo rollout below and [V18 Android rollout](docs/zalo-android-preparation.md#staging-activation-after-merge) before a shared-environment deployment. Follow the repository's merged-code migration policy for shared environments. Do not enable Flyway blindly on a Hibernate-created database without migration history: V10 rejects pre-existing ADMIN read events. Use a fresh local database or a separately reviewed adoption plan, preserving the original database. The migrations do not baseline or repair migration history.
 
-If V11 validation fails, PostgreSQL rolls back its schema changes; review the offending records before retrying. Recovery uses a forward fix retaining audit history. Restoring V10 constraints or older readers that cannot handle `ADMIN_*` events is unsafe after these records exist. Documentation for the daily ADMIN endpoint is aligned with the [canonical contract](../../docs/contracts/api-contracts.md#chuỗi-tạo-mới-theo-ngày--admin-growth); integrated Firebase/FE UAT remains pending.
+If V11 validation fails, PostgreSQL rolls back its schema changes; review the offending records before retrying. Recovery uses a forward fix retaining audit history. Restoring V10 constraints or older readers that cannot handle `ADMIN_*` events is unsafe after these records exist. Documentation for the daily ADMIN endpoint is aligned with the [canonical contract](../../docs/contracts/api-contracts.md#daily-creation-series--admin-growth); integrated Firebase/FE UAT remains pending.
 
 To run **all** Core tests, including migration, audit/checkout rollback and real PostgreSQL readiness coverage, keep the three test-only variables above and run `.\mvnw.cmd verify` (or `./mvnw verify`). The migration/audit suites manage their own randomly named schemas; use a disposable database with schema-creation permission. The readiness test checks connectivity with valid and deliberately invalid test credentials, so an expected database-health warning can appear in the logs.
 
 ### Independent stock decreases — CORE-021
 
-`POST /api/v1/products/{productId}/stock-adjustments` removes a positive quantity with a mandatory reason, under OWNER/shop/product guards and the shared Product lock. The stock, audit, notification and original idempotent response commit together. No migration or new environment variable is added; see the [contract](../../docs/contracts/api-contracts.md#điều-chỉnh-giảm-tồn-core-021) and [verification/FE handoff](docs/stock-adjustments.md). Implementation in the feature branch is not staging or UI acceptance.
+`POST /api/v1/products/{productId}/stock-adjustments` removes a positive quantity with a mandatory reason, under OWNER/shop/product guards and the shared Product lock. The stock, audit, notification and original idempotent response commit together. No migration or new environment variable is added; see the [contract](../../docs/contracts/api-contracts.md#core-021-stock-decrease-adjustment) and [verification/FE handoff](docs/stock-adjustments.md). Implementation in the feature branch is not staging or UI acceptance.
 
 ### Stock-in development tests
 
@@ -468,6 +477,6 @@ Bearer OWNER token is required, but no `X-Shop-Id` or idempotency header for:
 - `PATCH /api/v1/me/notifications/{eventId}/read` → 204.
 - `PATCH /api/v1/me/notifications/read` with `{ "ids": [1, 2] }` → atomic 204.
 
-Pages start at 0; size 1–100 and offset <=2147483647. OWNER must be ACTIVE, have a recipient and still own the shop. INACTIVE shops expose only status notifications; ARCHIVED shops are excluded. Retry/parallel reads preserve the first readAt. Any inaccessible ID rejects the whole batch with 404. See [notification contract](../../docs/contracts/api-contracts.md#8-notification-owner--đã-có-trên-featapp-notifications) and PRD AC-055–058.
+Pages start at 0; size 1–100 and offset <=2147483647. OWNER must be ACTIVE, have a recipient and still own the shop. INACTIVE shops expose only status notifications; ARCHIVED shops are excluded. Retry/parallel reads preserve the first readAt. Any inaccessible ID rejects the whole batch with 404. See [notification contract](../../docs/contracts/api-contracts.md#8-owner-notifications--implemented-on-featapp-notifications) and PRD AC-055–058.
 
 `NotificationPostgresTest` runs in a generated `core_notification_test_*` schema with the current migration set (V1–V18) and Hibernate validation, without a supplemental schema fixture. It covers event lifecycle, notification-write rollback, replay/concurrent checkout/void, read concurrency and cross-shop/status isolation. `SaleRefundMigrationPostgresTest` additionally tests V15 upgrade, local-table adoption and atomic migration failure/retry. Supply all `CORE_TEST_POSTGRES_*` variables pointing only to a disposable PostgreSQL DB. No push delivery/device registration/FCM/email/SMS/debt reminders or notification FE integration is implemented by this change.

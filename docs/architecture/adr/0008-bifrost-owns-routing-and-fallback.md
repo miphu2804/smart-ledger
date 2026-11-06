@@ -1,48 +1,56 @@
-# ADR-0008: Bifrost giữ routing và fallback upstream, AI chỉ chọn alias
+---
+type: Architecture Decision
+title: "ADR-0008: Bifrost owns upstream routing and fallback, the AI service only picks an alias"
+description: "Accepted: the AI service picks a model alias; Bifrost owns upstream routing, fallback and content-free request logs."
+owner: not assigned
+status: stable
+generated: { by: human:miphu2804, at: 2026-11-06T22:18:48+07:00 }
+---
+# ADR-0008: Bifrost owns upstream routing and fallback, the AI service only picks an alias
 
-- **Trạng thái:** Accepted — chủ dự án chốt hướng này ngày 2026-10-30
-- **Ngày:** 2026-10-30
-- **Owner:** chưa chỉ định
+- **Status:** Accepted — the project owner settled this direction on 2026-10-30
+- **Date:** 2026-10-30
+- **Owner:** not assigned
 
-## Bối cảnh
+## Context
 
-- AI cần gọi cùng một model qua nhiều upstream (trước đây OpenCode Go và OpenAI) và chuyển upstream khi gặp lỗi tạm thời như 429, mà không đổi code ở `agent`, `memory` và `drafts`.
-- Trước đây `build_chat_model` chọn API theo `MODEL_PROVIDER`, còn fallback nằm trong `MODEL_FALLBACKS` ở Python, nên mọi đổi upstream đều cần đổi cấu hình AI và deploy lại.
-- Bifrost tự host đã chạy ở staging. Nó ghi log từng request gồm provider, model, độ trễ, token, chi phí, chuỗi fallback và rule đã khớp, nên là nơi tự nhiên để xem request lên upstream.
-- Nội dung tin nhắn chỉ đi tới HoneyHive ở tầng Agent (`NFR-008`), nên log của Bifrost không cần giữ nội dung.
-- Production chưa có Bifrost, chạy image cũ trước khi có alias (#436) và gọi thẳng OpenCode Go; thay đổi ở mục Cập nhật không áp dụng cho production.
+- The AI service needs to call the same model through several upstreams (previously OpenCode Go and OpenAI) and switch upstream on transient errors such as 429, without changing code in `agent`, `memory` and `drafts`.
+- Previously `build_chat_model` chose the API by `MODEL_PROVIDER`, and the fallback lived in `MODEL_FALLBACKS` in Python, so every upstream change required changing the AI configuration and redeploying.
+- A self-hosted Bifrost already runs on staging. It logs every request, including provider, model, latency, tokens, cost, fallback chain and matched rule, so it is the natural place to see requests going upstream.
+- Message content only reaches HoneyHive at the Agent layer (`NFR-008`), so Bifrost's logs do not need to keep content.
+- Production has no Bifrost yet; it runs an old image from before aliases (#436) and calls OpenCode Go directly; the changes in the Update sections do not apply to production.
 
-## Quyết định
+## Decision
 
-- Ứng dụng xin model bằng `LLMFactory.create_model(alias)`. `MODEL_ALIASES` ánh xạ alias sang `protocol` và `model`, nên ứng dụng không biết upstream là ai.
-- Mỗi protocol có một lớp provider riêng (`OpenAIChatProvider`, `OpenAIResponsesProvider`), cùng phương thức `create_model(model_name)`, không có base class vì dự án chỉ có một caller.
-- Routing và fallback upstream nằm trong routing rules của [`deploy/vps/bifrost.json`](../../../deploy/vps/bifrost.json). Hiện chưa có rule nào, vì mỗi model chỉ có một upstream; thêm fallback sang model khác chỉ khi chủ dự án chấp nhận đổi hành vi.
-- Bifrost lưu log 14 ngày với `disable_content_logging: true`. Ứng dụng gửi `x-bf-session-id` để gom log theo hội thoại và `x-bf-lh-shop-id` để gắn shop vào metadata.
-- `MODEL_FALLBACKS` ở Python được giữ, theo dạng `protocol:model`, cho tới khi production chạy Bifrost; khi đó xóa nó trong một thay đổi riêng.
+- The application requests a model with `LLMFactory.create_model(alias)`. `MODEL_ALIASES` maps an alias to a `protocol` and a `model`, so the application does not know who the upstream is.
+- Each protocol has its own provider class (`OpenAIChatProvider`, `OpenAIResponsesProvider`) with the same `create_model(model_name)` method, and no base class because the project has only one caller.
+- Upstream routing and fallback live in the routing rules of [`deploy/vps/bifrost.json`](../../../deploy/vps/bifrost.json). There are no rules yet, because each model has only one upstream; add a fallback to another model only when the project owner accepts the change in behavior.
+- Bifrost keeps logs for 14 days with `disable_content_logging: true`. The application sends `x-bf-session-id` to group logs by conversation and `x-bf-lh-shop-id` to attach the shop to the metadata.
+- `MODEL_FALLBACKS` in Python is kept, in the `protocol:model` form, until production runs Bifrost; then remove it in a separate change.
 
-## Hệ quả
+## Consequences
 
-- Đổi upstream hoặc fallback chỉ cần sửa `bifrost.json` và deploy Bifrost, không deploy lại AI.
-- Bifrost UI chỉ hiện metadata, không hiện prompt và câu trả lời; muốn đọc nội dung thì xem trên HoneyHive.
-- Tạm thời có hai nơi định nghĩa fallback, tùy môi trường có Bifrost hay không.
-- Bifrost là một điểm lỗi mới trên đường gọi model ở staging; giám sát uptime theo dõi ở [issue #435](https://github.com/miphu2804/smart-ledger/issues/435).
+- Changing upstream or fallback only requires editing `bifrost.json` and deploying Bifrost, not redeploying the AI service.
+- The Bifrost UI shows only metadata, not prompts and answers; to read content, look at HoneyHive.
+- For now there are two places that define fallback, depending on whether the environment has Bifrost.
+- Bifrost is a new point of failure on the model-call path on staging; uptime monitoring is tracked in [issue #435](https://github.com/miphu2804/smart-ledger/issues/435).
 
-## Cập nhật 2026-11-01: OpenAI native, Inception, bỏ Anthropic và OpenCode Go
+## Update 2026-11-01: native OpenAI, Inception, drop Anthropic and OpenCode Go
 
-- **Vì sao:** trên staging mọi lượt chat bị Bifrost trả `401 virtual key is required`. Alias `chat` dùng `anthropic_messages`, SDK Anthropic gửi khóa trong `x-api-key`, mà Bifrost chỉ nhận `x-api-key` và `Authorization: Bearer` cho khóa có tiền tố `sk-bf-`; virtual key cũ chỉ qua `x-bf-vk`. Chủ dự án cũng đã bỏ OpenCode Go.
-- **Model:** alias `chat` chạy `gpt-6-luna` trên provider `openai` gốc của Bifrost qua `openai_responses`, effort `high`. `effort` nằm trong từng alias của `MODEL_ALIASES`; `MODEL_REASONING_EFFORT` chỉ là mặc định khi alias không khai báo.
-- **Header:** `OpenAIChatProvider` và `OpenAIResponsesProvider` dựng `AsyncOpenAI` với `default_headers={"x-bf-vk": api_key}`. Header nằm trên client vì `extra_headers` của mỗi lượt chạy thay cả bộ header của model.
-- **Xóa:** đường `anthropic_messages` (`AnthropicMessagesProvider`, `ANTHROPIC_BASE_URL`, extra `anthropic` của pydantic-ai), hai provider và hai routing rule OpenCode Go, các header `x-opencode-session` và `x-bf-eh-*`. `openai_chat` được giữ vì Mercury chỉ có `/chat/completions`.
-- **Inception:** `bifrost.json` có provider tùy chỉnh `inception` (`base_provider_type: openai`, `https://api.inceptionlabs.ai`) cho `mercury-3`, khóa lấy từ biến môi trường `INCEPTIONLABS_API_KEY`. `vk-ai` cho phép đúng `gpt-6-luna` và `mercury-3`. Mercury 3 chưa được test thực tế nên chưa có alias hay fallback nào trỏ tới; muốn dùng thì thêm alias `openai_chat` sau khi chạy [bộ đánh giá chat](../../../backend/ai/evaluation/agent_chat/README.md) với effort `medium` và `high` so với `gpt-6-luna`.
-- **Thử lại:** cả hai provider đặt `max_retries: 1` và `retry_backoff_initial: 500` ms.
-- **Việc của chủ dự án:** đặt `MODEL_ALIASES` trong Dopbase `ai/staging`, thêm `INCEPTIONLABS_API_KEY` vào secrets của Bifrost, xóa `OPENCODE_GO_API_KEY`, chạy lại playbook để Bifrost nạp `bifrost.json` mới.
+- **Why:** on staging every chat turn got `401 virtual key is required` from Bifrost. The `chat` alias used `anthropic_messages`, the Anthropic SDK sends the key in `x-api-key`, and Bifrost accepts `x-api-key` and `Authorization: Bearer` only for keys with the `sk-bf-` prefix; the old virtual key only passes through `x-bf-vk`. The project owner also dropped OpenCode Go.
+- **Model:** the `chat` alias runs `gpt-6-luna` on Bifrost's native `openai` provider through `openai_responses`, with effort `high`. `effort` lives in each alias of `MODEL_ALIASES`; `MODEL_REASONING_EFFORT` is only the default when an alias does not declare it.
+- **Header:** `OpenAIChatProvider` and `OpenAIResponsesProvider` build `AsyncOpenAI` with `default_headers={"x-bf-vk": api_key}`. The header lives on the client because the per-run `extra_headers` replace the model's whole header set.
+- **Removed:** the `anthropic_messages` path (`AnthropicMessagesProvider`, `ANTHROPIC_BASE_URL`, the pydantic-ai `anthropic` extra), the two OpenCode Go providers and two routing rules, and the `x-opencode-session` and `x-bf-eh-*` headers. `openai_chat` is kept because Mercury only has `/chat/completions`.
+- **Inception:** `bifrost.json` has a custom `inception` provider (`base_provider_type: openai`, `https://api.inceptionlabs.ai`) for `mercury-3`, with the key taken from the `INCEPTIONLABS_API_KEY` environment variable. `vk-ai` allows exactly `gpt-6-luna` and `mercury-3`. Mercury 3 has not been tested in practice, so no alias or fallback points to it yet; to use it, add an `openai_chat` alias after running the [chat evaluation suite](../../../backend/ai/evaluation/agent_chat/README.md) with effort `medium` and `high` against `gpt-6-luna`.
+- **Retries:** both providers set `max_retries: 1` and `retry_backoff_initial: 500` ms.
+- **Project owner tasks:** set `MODEL_ALIASES` in Dopbase `ai/staging`, add `INCEPTIONLABS_API_KEY` to Bifrost's secrets, delete `OPENCODE_GO_API_KEY`, and rerun the playbook so Bifrost loads the new `bifrost.json`.
 
-## Cập nhật 2026-11-04: AI chọn alias theo độ phức tạp của từng lượt chat
+## Update 2026-11-04: the AI service picks the alias by the complexity of each chat turn
 
-- **Vì sao:** câu hỏi dễ cần trả lời nhanh trên `mercury-3`, câu khó cần `gpt-6-luna`. Complexity Router của Bifrost phân tier được, nhưng target của routing rule chỉ ghi đè provider, model, `key_id` và fallbacks, không đổi được reasoning effort. Inception chỉ có `/chat/completions` trong khi `gpt-6-luna` chạy qua `openai_responses`, và tài liệu Bifrost không hứa chuyển Responses sang Chat cho custom provider. Vì vậy AI chọn alias cho từng lượt, còn Bifrost vẫn giữ upstream và fallback như quyết định gốc.
-- **Quyết định:** khi `MODEL_TIERING_ENABLED=true`, `LLMRouterService` (`backend/ai/src/llm_router/`) gửi tin nhắn mới nhất của chủ shop, kèm một tin nhắn trước đó của họ, tới `typesafe/jev-latest` qua `/v1/decisions` của Bifrost. Câu trả lời của trợ lý không bao giờ được gửi. SIMPLE chạy `chat-simple`, MEDIUM chạy `chat-medium`, COMPLEX chạy `chat-complex`; model và effort của từng alias nằm trong `MODEL_ALIASES` (xem [README của AI](../../../backend/ai/README.md#model-tiers)).
-- **Theo hội thoại:** giống session-aware routing của Bifrost, hội thoại giữ tier cao nhất đã đạt và chỉ đi lên; đã COMPLEX thì không gọi Jev nữa. Tier nằm trong bộ nhớ tiến trình 24 giờ, khởi động lại chỉ làm lượt sau phải phân loại lại, nên không cần migration.
-- **Khi lỗi:** Jev lỗi, quá `TIER_CLASSIFIER_TIMEOUT_SECONDS` (mặc định 1,5 giây) hoặc từ chối trả lời thì lượt đó chạy `chat-complex`, và tier này không được giữ cho hội thoại. Mỗi lượt chọn model một lần, mọi bước gọi tool trong lượt dùng cùng model. Việc phân loại chạy song song với memory recall.
-- **Bifrost:** `bifrost.json` thêm provider `typesafe` (khóa `TYPESAFE_API_KEY`, `max_retries: 0` để thử lại không vượt quá thời gian chờ), cho `vk-ai` dùng `jev-latest`, và giới hạn `inception` ở `chat_completion` và `chat_completion_stream`.
-- **Công tắc:** mặc định tắt, mọi lượt chạy `chat` như trước. Chỉ bật ở staging sau khi chạy [bộ đánh giá chat](../../../backend/ai/evaluation/agent_chat/README.md) hai lần trên cùng `suite_version`, chỉ `chat` và có tier, và thử trực tiếp `gpt-6-luna` với effort `xhigh`; bật ở production cần chủ dự án duyệt.
-- **Việc của chủ dự án:** thêm `TYPESAFE_API_KEY` vào secrets của Bifrost và chạy lại playbook; đặt `MODEL_ALIASES` có ba alias tier, `TIER_CLASSIFIER_URL` và `MODEL_TIERING_ENABLED` trong Dopbase `ai/staging`.
+- **Why:** easy questions need a fast answer on `mercury-3`, hard questions need `gpt-6-luna`. Bifrost's Complexity Router can classify tiers, but a routing rule's target only overrides provider, model, `key_id` and fallbacks, and cannot change the reasoning effort. Inception only has `/chat/completions` while `gpt-6-luna` runs through `openai_responses`, and the Bifrost documentation does not promise converting Responses to Chat for a custom provider. So the AI service picks the alias for each turn, while Bifrost still owns upstream and fallback as in the original decision.
+- **Decision:** when `MODEL_TIERING_ENABLED=true`, `LLMRouterService` (`backend/ai/src/llm_router/`) sends the shop owner's latest message, plus one earlier message of theirs, to `typesafe/jev-latest` through Bifrost's `/v1/decisions`. The assistant's answers are never sent. SIMPLE runs `chat-simple`, MEDIUM runs `chat-medium`, COMPLEX runs `chat-complex`; each alias's model and effort live in `MODEL_ALIASES` (see the [AI README](../../../backend/ai/README.md#model-tiers)).
+- **Per conversation:** like Bifrost's session-aware routing, a conversation keeps the highest tier it has reached and only moves up; once COMPLEX, Jev is no longer called. The tier lives in process memory for 24 hours; a restart only makes the next turn classify again, so no migration is needed.
+- **On failure:** if Jev errors, exceeds `TIER_CLASSIFIER_TIMEOUT_SECONDS` (default 1.5 seconds) or refuses to answer, that turn runs `chat-complex`, and this tier is not kept for the conversation. Each turn picks the model once, and every tool-call step within the turn uses the same model. Classification runs in parallel with memory recall.
+- **Bifrost:** `bifrost.json` adds the `typesafe` provider (key `TYPESAFE_API_KEY`, `max_retries: 0` so retries do not exceed the timeout), lets `vk-ai` use `jev-latest`, and limits `inception` to `chat_completion` and `chat_completion_stream`.
+- **Switch:** off by default, every turn runs `chat` as before. Turn it on in staging only after running the [chat evaluation suite](../../../backend/ai/evaluation/agent_chat/README.md) twice on the same `suite_version`, `chat` only and with tiers, and trying `gpt-6-luna` directly with effort `xhigh`; turning it on in production needs the project owner's approval.
+- **Project owner tasks:** add `TYPESAFE_API_KEY` to Bifrost's secrets and rerun the playbook; set `MODEL_ALIASES` with the three tier aliases, `TIER_CLASSIFIER_URL` and `MODEL_TIERING_ENABLED` in Dopbase `ai/staging`.

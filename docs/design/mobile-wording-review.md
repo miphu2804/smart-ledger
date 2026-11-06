@@ -1,82 +1,91 @@
+---
+type: Design Proposal
+title: "Mobile wording review"
+description: "Proposed UI wording, icon and feedback mapping pending product approval."
+owner: Product owner
+status: draft
+generated: { by: human:miphu2804, at: 2026-11-06T22:18:48+07:00 }
+stale_after: 2027-01-05T22:18:48+07:00
+---
 # Mobile wording review
 
-**Trạng thái:** bản đề xuất; chưa ghi nhận phê duyệt của Product Owner. Đối chiếu `frontend/mobile` trên `staging` ngày 2026-10-04: 40/46 câu đề xuất đã có trong code; tab thứ tư dùng `Quản lý` thay vì `Tiện ích`. Code là nguồn cho câu chữ hiện tại; bảng dưới giữ lại làm ghi chép đề xuất. Các thay đổi dưới đây chỉ rút gọn ngôn ngữ giao diện, không thay đổi `BO/BR → FR/NFR → AC`, dữ liệu hay logic nghiệp vụ.
+**Status:** proposal; no Product Owner approval has been recorded. Checked against `frontend/mobile` on `staging` on 2026-10-04: 40 of the 46 proposed strings are already in the code; the fourth tab uses `Quản lý` instead of `Tiện ích`. The code is the source for the current wording; the table below is kept as a record of the proposal. The changes below only shorten the interface language; they do not change `BO/BR → FR/NFR → AC`, data, or business logic.
 
-**Nguồn đã kiểm chứng:** giao diện trong `frontend/mobile` tại thời điểm cập nhật. Brand name, route và API identifier được giữ nguyên.
+**Verified source:** the interface in `frontend/mobile` at the time of the update. Brand names, routes, and API identifiers are kept unchanged. The UI strings in the table are Vietnamese product copy and stay in Vietnamese; the headers and rationale are in English, and the Location column names screens by their UI labels.
 
-## Mapping câu chữ
+## Wording mapping
 
-| Hiện tại | Đề xuất mới | Vị trí / chức năng | Lý do ngắn |
+| Current | New proposal | Location / function | Short rationale |
 |---|---|---|---|
-| `Xin chào!` | `Đăng nhập` | Màn đăng nhập số điện thoại | Nói đúng mục đích màn hình. |
-| `Nhập số điện thoại để bắt đầu bán hàng cùng Sổ Nghe Lời` | `Dùng số điện thoại để vào sổ bán hàng.` | Mô tả đăng nhập | Ngắn và trực tiếp hơn. |
-| `Đăng nhập bằng email và mật khẩu` | `Dùng email` | Liên kết đăng nhập email | Tránh lặp thông tin đã rõ ở màn tiếp theo. |
-| `Cách đăng nhập khác` | `Hoặc tiếp tục với` | Phân cách đăng nhập mạng xã hội | Tự nhiên hơn trong ngữ cảnh lựa chọn. |
-| Không có | `Vào app` | Nút bỏ qua đăng nhập trong development | Cho developer vào nhanh; không render production. |
-| `Sổ bán hàng thông minh — chỉ cần nói` | `Bán hàng gọn hơn mỗi ngày` | Splash | Bớt claim và giọng quảng cáo. |
-| `Bán hàng chỉ cần nói` | `Sổ bán hàng của bạn` | Tagline logo | Bao quát cả nhập tay, POS và giọng nói. |
-| `Chọn cách lên đơn` | `Đơn hàng mới` | Tổng quan, nhóm CTA bán hàng | Ngắn và định hướng kết quả. |
-| `Nói để lên đơn` / `Nói đơn` | `Đọc đơn` | Tổng quan và header thu gọn | Ngắn, tự nhiên, đi cùng icon mic. |
-| `Bán hàng Giọng nói` | `Đọc đơn` | Tiêu đề màn giọng nói | Đồng bộ tên entry point. |
-| `Nhấn & Giữ để nói` | `Giữ để đọc đơn` | CTA mic | Bỏ từ thừa, mô tả đúng thao tác. |
-| `Đang nghe… Thả tay để chốt đơn` | `Đang nghe… Thả để xử lý` | Trạng thái mic | AI/parser tạo bản nháp, chưa chốt giao dịch. |
-| `Nhập tên hàng + giá (hoặc nhấn giữ mic)` | `Nhập món, số lượng hoặc giá` | Composer Đọc đơn | Dễ quét và mô tả đủ loại dữ liệu. |
-| `Chưa có đơn để thanh toán` | `Chưa có đơn` | Empty state thanh toán | Tiêu đề ngắn; hướng dẫn nằm ở dòng phụ. |
-| `Hãy nói hoặc chọn hàng trước` | `Đọc đơn hoặc chọn hàng trước` | Empty state thanh toán | Đồng bộ tên chức năng mới. |
-| `Quét mã vạch` | `Quét mã` | Thêm món khi thanh toán | Icon camera/barcode bổ nghĩa cho nhãn. |
-| `Tạo đơn mới` | `Đơn mới` | Màn hoàn tất | CTA ngắn, vẫn rõ trong ngữ cảnh. |
-| `Về trang chủ` | `Về Tổng quan` | Màn hoàn tất | Khớp tên tab đích. |
-| `Khác` | `Tiện ích` | Tab thứ tư và tiêu đề tab | Có nghĩa hơn, tránh nhãn chung chung. |
-| `Phân tích bán hàng` | `Báo cáo` | Menu Tiện ích và tiêu đề báo cáo | Ngắn, quen thuộc với người bán. |
-| `Doanh thu, chi phí và bán chạy` | `Doanh thu, chi phí, bán chạy` | Mô tả Báo cáo | Bỏ liên từ không cần thiết. |
-| `Hàng hoá & Kho hàng` | `Hàng hoá` | Menu Tiện ích | Tồn kho đã được mô tả ở dòng phụ. |
-| `Quản lý nợ` | `Công nợ` | Menu và màn công nợ | Tên nghiệp vụ ngắn, nhất quán. |
-| `Theo dõi khách chưa thanh toán` | `Các khoản khách chưa trả` | Mô tả Công nợ | Ngôn ngữ đời thường hơn. |
-| `Diễn biến doanh thu` | `Doanh thu theo ngày` | Báo cáo | Nói rõ nội dung biểu đồ. |
-| `Trợ lý AI` | `Trợ lý` | FAB và màn hỏi đáp | Chức năng quan trọng hơn công nghệ. |
-| `Hỏi về doanh thu, hàng hoá và công nợ` | `Hỏi về bán hàng, kho và công nợ` | Mô tả Trợ lý | Ngắn và gần cách nói hàng ngày. |
-| `Chatbot` | `Hỏi đáp` | Menu mascot | Mô tả hành động thay vì loại công nghệ. |
-| `Giọng nói` | `Đọc đơn` | Menu mascot | Đồng bộ entry point bán hàng. |
-| `Gợi ý` | `Báo cáo` | Menu mascot | Route hiện mở số liệu hôm nay, không tạo gợi ý mới. |
-| `Gợi ý AI` | `Gợi ý` | Nhóm thông báo | Loại bỏ nhãn công nghệ không cần thiết. |
-| `Giữ để nói` | `Giữ để đọc đơn` | Gợi ý cạnh mascot | Nói rõ kết quả của thao tác giữ. |
-| `Mascot trợ lý AI` | `Trợ lý bán hàng` | Nhãn hỗ trợ tiếp cận của mascot | Mô tả vai trò thay vì công nghệ. |
-| `Bắt đầu dùng` | `Bắt đầu` | CTA cuối hướng dẫn nhanh | Ngắn hơn, ngữ cảnh đã đủ rõ. |
-| `Tab Khác gom các công cụ…` | `Tiện ích gom hàng hoá, chi phí, công nợ và báo cáo vào một chỗ.` | Hướng dẫn nhanh | Khớp tên tab mới và bỏ câu giải thích dài. |
-| `Chọn một hoặc nhiều ngành — AI sẽ gợi ý danh mục phù hợp` | `Chọn một hoặc nhiều ngành để gợi ý danh mục phù hợp` | Thiết lập tiệm | Tập trung vào lợi ích, không nhấn công nghệ. |
-| `AI gợi ý · hàng bán chậm` | `Hàng bán chậm` | Danh sách bán chạy | Dữ liệu đã tự giải thích nguồn; nhãn mới dễ quét hơn. |
-| `sản phẩm` | `mặt hàng` | Số lượng và đối tượng trong Hàng hoá | Phân biệt khu vực `Hàng hoá` với từng đối tượng người bán quản lý. |
-| `Không có sản phẩm` | `Chưa có mặt hàng` | Trạng thái trống Hàng hoá | Tự nhiên hơn và không mang nghĩa lỗi. |
-| `Bấm + để thêm sản phẩm mới` | `Nhấn Thêm để tạo mặt hàng đầu tiên` | Trạng thái trống Hàng hoá | Khớp đúng nhãn nút đang hiển thị. |
-| `Cấu hình sản phẩm` | `Thêm mặt hàng` | Quét mã chưa có trong danh mục | Dùng động từ quen thuộc, bỏ thuật ngữ kỹ thuật. |
-| `Chụp ảnh (AI)` | `Chụp ảnh` | Cách nhập thông tin mặt hàng | Icon camera và ngữ cảnh đã đủ nghĩa. |
-| `Chụp bao bì hoặc bảng giá — AI sẽ điền tên, giá giúp bạn` | `Chụp bao bì hoặc bảng giá để điền nhanh thông tin. Hãy kiểm tra trước khi lưu.` | Gợi ý nhập bằng ảnh | Ngắn, trung tính và nhắc người dùng xác nhận dữ liệu. |
-| `Tạo đơn · [tổng tiền]` | `Thanh toán · [tổng tiền]` | CTA sau khi đọc đơn | Nút chỉ mở bước thanh toán; chưa tạo bản ghi chính thức. |
-| `Đơn tạo bằng giọng nói` / `Đơn chọn từ POS` / `Đơn nhập tay` | `Nguồn: Đọc đơn` / `Nguồn: Bán hàng` / `Nguồn: Nhập tay` | Phụ đề Thanh toán | Cùng một cấu trúc, ngắn và nhất quán. |
-| `Sản phẩm này chưa có trong danh mục…` | `Mặt hàng này chưa có trong danh mục. Hãy thêm trước khi bán.` | Cảnh báo Đọc đơn | Bỏ chi tiết triển khai `Core`, giữ hướng xử lý. |
-| `Mình chưa hiểu câu hỏi này 😅…` | `Chưa hiểu câu hỏi. Hãy thử hỏi về…` | Trợ lý, trạng thái không hiểu | Bỏ emoji và giọng nhân cách hoá không cần thiết. |
-| Sổ Nghe Lời đã ghi được | Đơn đang đọc | Tiêu đề danh sách món nhận diện từ giọng nói | Bỏ tên riêng và giọng nhân cách hoá. |
-| Bạn đã đọc hết thông báo | Không có thông báo mới | Phụ đề danh sách thông báo | Ngắn, trung tính, dễ quét. |
-| Xoá giỏ trực tiếp | Hộp thoại xác nhận Xoá giỏ hàng? | Giỏ hàng Bán hàng (POS) | Bảo vệ thao tác huỷ toàn bộ giỏ tạm, tránh bấm nhầm. |
-| Thêm nhân viên mới | Thêm nhân viên | Màn hình nhân viên | Ngắn gọn, đúng chuẩn hành động. |
-| Bạn sẽ cần nhập số điện thoại và mã OTP để đăng nhập lại. | Bạn sẽ cần đăng nhập lại để tiếp tục quản lý sổ. | Hộp thoại Đăng xuất | Phù hợp cả khi đăng nhập bằng email hoặc số điện thoại. |
-| [số lượng] sp | [số lượng] phần | Danh sách bán chạy Tổng quan | Nhất quán với cách gọi món/mặt hàng trong bán lẻ. |
+| `Xin chào!` | `Đăng nhập` | Phone number sign-in screen | States the purpose of the screen accurately. |
+| `Nhập số điện thoại để bắt đầu bán hàng cùng Sổ Nghe Lời` | `Dùng số điện thoại để vào sổ bán hàng.` | Sign-in description | Shorter and more direct. |
+| `Đăng nhập bằng email và mật khẩu` | `Dùng email` | Email sign-in link | Avoids repeating information that is already clear on the next screen. |
+| `Cách đăng nhập khác` | `Hoặc tiếp tục với` | Separator for social sign-in | More natural in the context of a choice. |
+| None | `Vào app` | Button that skips sign-in in development | Lets developers get in quickly; not rendered in production. |
+| `Sổ bán hàng thông minh — chỉ cần nói` | `Bán hàng gọn hơn mỗi ngày` | Splash | Fewer claims and a less promotional tone. |
+| `Bán hàng chỉ cần nói` | `Sổ bán hàng của bạn` | Logo tagline | Covers manual entry, POS, and voice. |
+| `Chọn cách lên đơn` | `Đơn hàng mới` | Tổng quan, sales CTA group | Short and result-oriented. |
+| `Nói để lên đơn` / `Nói đơn` | `Đọc đơn` | Tổng quan and the collapsed header | Short, natural, paired with the mic icon. |
+| `Bán hàng Giọng nói` | `Đọc đơn` | Title of the voice screen | Consistent with the entry point name. |
+| `Nhấn & Giữ để nói` | `Giữ để đọc đơn` | Mic CTA | Drops a redundant word and describes the gesture accurately. |
+| `Đang nghe… Thả tay để chốt đơn` | `Đang nghe… Thả để xử lý` | Mic state | The AI/parser creates a draft; the transaction is not finalized. |
+| `Nhập tên hàng + giá (hoặc nhấn giữ mic)` | `Nhập món, số lượng hoặc giá` | Đọc đơn composer | Easier to scan and covers every kind of data. |
+| `Chưa có đơn để thanh toán` | `Chưa có đơn` | Payment empty state | Short title; the instruction goes in the secondary line. |
+| `Hãy nói hoặc chọn hàng trước` | `Đọc đơn hoặc chọn hàng trước` | Payment empty state | Consistent with the new feature name. |
+| `Quét mã vạch` | `Quét mã` | Add an item during payment | The camera/barcode icon complements the label. |
+| `Tạo đơn mới` | `Đơn mới` | Completion screen | Short CTA that is still clear in context. |
+| `Về trang chủ` | `Về Tổng quan` | Completion screen | Matches the name of the target tab. |
+| `Khác` | `Tiện ích` | Fourth tab and tab title | More meaningful, avoids a generic label. |
+| `Phân tích bán hàng` | `Báo cáo` | Tiện ích menu and report title | Short and familiar to sellers. |
+| `Doanh thu, chi phí và bán chạy` | `Doanh thu, chi phí, bán chạy` | Báo cáo description | Drops an unnecessary conjunction. |
+| `Hàng hoá & Kho hàng` | `Hàng hoá` | Tiện ích menu | Inventory is already described in the secondary line. |
+| `Quản lý nợ` | `Công nợ` | Menu and the debt screen | A short, consistent business term. |
+| `Theo dõi khách chưa thanh toán` | `Các khoản khách chưa trả` | Công nợ description | More everyday language. |
+| `Diễn biến doanh thu` | `Doanh thu theo ngày` | Report | States the chart content clearly. |
+| `Trợ lý AI` | `Trợ lý` | FAB and the Q&A screen | The function matters more than the technology. |
+| `Hỏi về doanh thu, hàng hoá và công nợ` | `Hỏi về bán hàng, kho và công nợ` | Trợ lý description | Short and close to everyday speech. |
+| `Chatbot` | `Hỏi đáp` | Mascot menu | Describes the action instead of the technology type. |
+| `Giọng nói` | `Đọc đơn` | Mascot menu | Consistent with the sales entry point. |
+| `Gợi ý` | `Báo cáo` | Mascot menu | The route currently opens today's figures and does not create new suggestions. |
+| `Gợi ý AI` | `Gợi ý` | Notification group | Removes an unnecessary technology label. |
+| `Giữ để nói` | `Giữ để đọc đơn` | Hint next to the mascot | States the result of the hold gesture. |
+| `Mascot trợ lý AI` | `Trợ lý bán hàng` | Accessibility label of the mascot | Describes the role instead of the technology. |
+| `Bắt đầu dùng` | `Bắt đầu` | Final CTA of the quick guide | Shorter, and the context is clear enough. |
+| `Tab Khác gom các công cụ…` | `Tiện ích gom hàng hoá, chi phí, công nợ và báo cáo vào một chỗ.` | Quick guide | Matches the new tab name and drops the long explanatory sentence. |
+| `Chọn một hoặc nhiều ngành — AI sẽ gợi ý danh mục phù hợp` | `Chọn một hoặc nhiều ngành để gợi ý danh mục phù hợp` | Shop setup | Focuses on the benefit and does not emphasize the technology. |
+| `AI gợi ý · hàng bán chậm` | `Hàng bán chậm` | Best-seller list | The data already explains its own source; the new label is easier to scan. |
+| `sản phẩm` | `mặt hàng` | Count and object in Hàng hoá | Distinguishes the `Hàng hoá` area from each object the seller manages. |
+| `Không có sản phẩm` | `Chưa có mặt hàng` | Hàng hoá empty state | More natural and does not read as an error. |
+| `Bấm + để thêm sản phẩm mới` | `Nhấn Thêm để tạo mặt hàng đầu tiên` | Hàng hoá empty state | Matches the button label actually displayed. |
+| `Cấu hình sản phẩm` | `Thêm mặt hàng` | Scanned code not yet in the catalog | Uses a familiar verb and drops the technical term. |
+| `Chụp ảnh (AI)` | `Chụp ảnh` | Way to enter item information | The camera icon and context are meaningful enough. |
+| `Chụp bao bì hoặc bảng giá — AI sẽ điền tên, giá giúp bạn` | `Chụp bao bì hoặc bảng giá để điền nhanh thông tin. Hãy kiểm tra trước khi lưu.` | Hint for entering by photo | Short, neutral, and reminds the user to confirm the data. |
+| `Tạo đơn · [tổng tiền]` | `Thanh toán · [tổng tiền]` | CTA after Đọc đơn | The button only opens the payment step; no official record is created yet. |
+| `Đơn tạo bằng giọng nói` / `Đơn chọn từ POS` / `Đơn nhập tay` | `Nguồn: Đọc đơn` / `Nguồn: Bán hàng` / `Nguồn: Nhập tay` | Thanh toán subtitle | One structure, short and consistent. |
+| `Sản phẩm này chưa có trong danh mục…` | `Mặt hàng này chưa có trong danh mục. Hãy thêm trước khi bán.` | Đọc đơn warning | Drops the `Core` implementation detail and keeps the remedy. |
+| `Mình chưa hiểu câu hỏi này 😅…` | `Chưa hiểu câu hỏi. Hãy thử hỏi về…` | Trợ lý, not-understood state | Drops the emoji and the unnecessary personified tone. |
+| Sổ Nghe Lời đã ghi được | Đơn đang đọc | Title of the list of items recognized from voice | Drops the proper name and the personified tone. |
+| Bạn đã đọc hết thông báo | Không có thông báo mới | Subtitle of the notification list | Short, neutral, easy to scan. |
+| Xoá giỏ trực tiếp | Confirmation dialog Xoá giỏ hàng? | Cart in Bán hàng (POS) | Protects the action of discarding the whole temporary cart against accidental taps. |
+| Thêm nhân viên mới | Thêm nhân viên | Staff screen | Concise and in the standard action form. |
+| Bạn sẽ cần nhập số điện thoại và mã OTP để đăng nhập lại. | Bạn sẽ cần đăng nhập lại để tiếp tục quản lý sổ. | Đăng xuất dialog | Fits both email and phone number sign-in. |
+| [số lượng] sp | [số lượng] phần | Best-seller list in Tổng quan | Consistent with how items are named in retail. |
 
-## Quy ước icon
+## Icon conventions
 
-- Dùng `Feather` cho toàn bộ icon chức năng trong app vì code hiện tại đã dùng bộ này ở hầu hết màn hình.
-- Chỉ giữ `FontAwesome` cho logo nhà cung cấp đăng nhập (`Google`, `Facebook`, `Apple`), vì đây là brand mark chứ không phải icon chức năng.
-- Icon đứng cạnh text phải bổ sung ngữ nghĩa: mic + `Đọc đơn`, barcode/camera + `Quét mã`, biểu đồ + `Báo cáo`.
-- Không thêm icon trang trí vào tiêu đề hoặc số liệu khi icon không giúp phân biệt hành động/trạng thái.
+- Use `Feather` for all functional icons in the app because the current code already uses this set on most screens.
+- Keep `FontAwesome` only for the sign-in provider logos (`Google`, `Facebook`, `Apple`), because these are brand marks rather than functional icons.
+- An icon next to text must add meaning: mic + `Đọc đơn`, barcode/camera + `Quét mã`, chart + `Báo cáo`.
+- Do not add decorative icons to titles or figures when the icon does not help distinguish an action or state.
 
-## Quy ước motion và feedback
+## Motion and feedback conventions
 
-| Nhóm | Motion | Feedback |
+| Group | Motion | Feedback |
 |---|---|---|
-| Điều hướng tab thường xuyên | Indicator spring di chuyển, nội dung fade nhanh | Không rung hoặc phát âm thanh. |
-| CTA chính | Co nhẹ rõ hơn khi nhấn | Chỉ rung khi hoàn tất nghiệp vụ. |
-| Nút phụ / ghost | Đổi opacity, scale rất nhẹ hoặc không scale | Không rung. |
-| Quét barcode thành công | Bounding box/flash hiện có + phản hồi tức thì | Beep trên web và một nhịp rung ngắn. |
-| Thêm/cập nhật sản phẩm | Toast + phản hồi thành công | Một nhịp rung thành công. |
-| Hoàn tất thanh toán | Check spring + số tiền | Nhịp rung thành công hai pha. |
-| Lỗi/cảnh báo | Toast hoặc trạng thái inline | Chỉ rung với lỗi chặn flow; không rung validation thường. |
+| Frequent tab navigation | The indicator moves with a spring, content fades quickly | No vibration or sound. |
+| Primary CTA | A clearer slight shrink on press | Vibrate only when the business action completes. |
+| Secondary / ghost button | Opacity change, a very slight scale or no scale | No vibration. |
+| Successful barcode scan | The existing bounding box/flash plus immediate feedback | A beep on web and one short vibration. |
+| Add/update a product | Toast plus success feedback | One success vibration. |
+| Payment completed | Spring checkmark plus the amount | A two-phase success vibration. |
+| Error/warning | Toast or inline state | Vibrate only for errors that block the flow; no vibration for ordinary validation. |

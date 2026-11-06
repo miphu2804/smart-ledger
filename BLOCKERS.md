@@ -1,29 +1,29 @@
-### [2026-10-26] — [CI] PR #368 chờ runner hoặc xử lý billing của chủ repository
+### [2026-10-26] — [CI] PR #368 waits for a runner or the repository owner's billing fix
 
 **Status:** Open
 
-**Blocked by:** [CI #785](https://github.com/miphu2804/smart-ledger/actions/runs/40218136882) mất kết nối self-hosted runner trước bước build/test. [CI #786](https://github.com/miphu2804/smart-ledger/actions/runs/40277351366) trên nhánh feature vẫn chờ runner. Lượt thủ công [CI #787](https://github.com/miphu2804/smart-ledger/actions/runs/40278406256) chạy nhánh main bị GitHub chặn trước khi cấp runner vì tài khoản chủ repository bị khóa do billing; summary sau đó lỗi fromJSON vì không có runner output. Người dùng không quản lý máy M4 Pro.
+**Blocked by:** [CI #785](https://github.com/miphu2804/smart-ledger/actions/runs/40218136882) lost its self-hosted runner connection before the build/test step. [CI #786](https://github.com/miphu2804/smart-ledger/actions/runs/40277351366) on the feature branch still waits for a runner. The manual run [CI #787](https://github.com/miphu2804/smart-ledger/actions/runs/40278406256) on the main branch was blocked by GitHub before a runner was assigned because the repository owner's account is locked for billing; the summary then failed in fromJSON because there was no runner output. The user does not manage the M4 Pro machine.
 
-**Impact:** Chưa có CI pass cho HEAD của PR #368. Kiểm thử local đã đạt không thay required checks. Quota artifact đã chặn upload summary ở #785, nhưng upload đó là optional/continue-on-error và không phải nguyên nhân hai job Core/container thất bại.
+**Impact:** There is no passing CI for the HEAD of PR #368. Passing local tests do not replace required checks. The artifact quota blocked the summary upload in #785, but that upload is optional/continue-on-error and did not cause the two Core/container jobs to fail.
 
-**Next action:** Chủ repository xử lý billing hoặc người quản lý M4 Pro khôi phục runner/mạng, sau đó chạy CI trên đúng `feat/admin-dashboard-growth` và kiểm tra các job thực sự thực thi. Không bỏ required checks, tự đổi biến runner, xóa artifact hay merge để né blocker.
+**Next action:** The repository owner fixes billing or the M4 Pro manager restores the runner/network, then run CI on `feat/admin-dashboard-growth` itself and check that the jobs actually executed. Do not drop required checks, change runner variables, delete artifacts or merge to get around the blocker.
 
-### [2026-10-26] — [Validation] Đã hoàn tất hồi quy PostgreSQL cho admin growth
+### [2026-10-26] — [Validation] PostgreSQL regression for admin growth completed
 
 **Status:** Resolved
 
-**Blocked by:** Trước đó Docker Desktop báo lỗi process và CLI không kết nối được Linux engine. Người dùng đã khôi phục Docker; lượt kiểm tra lại đã hoàn tất.
+**Blocked by:** Docker Desktop previously reported a process error and the CLI could not connect to the Linux engine. The user restored Docker; the rerun completed.
 
-**Resolution:** `mvnw.cmd -B verify` trên đúng commit `976be02` trong checkout tạm sạch, dùng PostgreSQL 16.15 riêng, đạt BUILD SUCCESS: 1.422 test, không failure/error/skip. Đối chiếu tổng Maven với các testcase XML; gồm 22 test controller và 18 test PostgreSQL của dashboard, có assertion phiên DB UTC. Log local: `backend/core/target/admin-growth-full-verify-20261026.log` (ignored). Không dùng DB nghiệp vụ local/staging/production, không tạo migration mới.
+**Resolution:** `mvnw.cmd -B verify` on commit `976be02` in a clean temporary checkout, with its own PostgreSQL 16.15, reached BUILD SUCCESS: 1,422 tests, no failures/errors/skips. The Maven totals were checked against the XML testcases; they include 22 controller tests and 18 PostgreSQL tests for the dashboard, with a UTC DB session assertion. Local log: `backend/core/target/admin-growth-full-verify-20261026.log` (ignored). No local/staging/production business DB was used and no migration was created.
 
-**Next action:** Nhánh đã được duyệt push và công bố tại `6381054`; PR #368 đang mở vào staging. Xử lý các check CI/review, sau đó nghiệm thu FE integration, staging smoke/UAT và đánh giá tải thực tế; kết quả local không thay thế các bước này.
+**Next action:** The branch was approved for push and published at `6381054`; PR #368 is open into staging. Handle the CI checks/review, then accept FE integration, the staging smoke/UAT and a real load evaluation; local results do not replace these steps.
 
-### [2026-09-15 21:46 UTC+07:00] — [Planning] Chưa gán được issue dashboard cho Hiep
+### [2026-09-15 21:46 UTC+07:00] — [Planning] The dashboard issues cannot be assigned to Hiep yet
 
 **Status:** Open
 
-**Blocked by:** Chưa có GitHub username của Hiep và Hiep chưa xuất hiện trong danh sách collaborator của repository.
+**Blocked by:** Hiep's GitHub username is unknown and Hiep is not in the repository's collaborator list.
 
-**Impact:** #17–#19 đã ghi Hiep là người phụ trách dự kiến nhưng GitHub assignee đang để trống.
+**Impact:** #17–#19 name Hiep as the intended owner, but the GitHub assignee is empty.
 
-**Next action:** Cung cấp đúng GitHub username hoặc thêm Hiep làm collaborator, sau đó gán #17–#19.
+**Next action:** Provide the correct GitHub username or add Hiep as a collaborator, then assign #17–#19.

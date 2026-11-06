@@ -1,3 +1,12 @@
+---
+type: Verification Record
+title: "CORE-015 local verification evidence"
+description: "Test-driven records and local verification evidence for Zalo web sign-in."
+owner: Core owner
+status: stable
+generated: { by: human:miphu2804, at: 2026-11-02T11:30:50+07:00 }
+stale_after: 2027-01-01T11:30:50+07:00
+---
 # CORE-015 local verification evidence
 
 The initial records below describe the pre-V17 Core-only iteration. On

@@ -1,10 +1,17 @@
+---
+type: Plan
+title: "Demo và kiểm chứng MVP EXE201"
+description: "Fixture demo, các bước đầu-cuối, cách thu phản hồi người dùng và mẫu ghi kết quả cho MVP môn EXE201."
+owner: Nhóm Sổ Nghe Lời
+status: draft
+generated: { by: human:TranTho918, at: 2026-11-06T04:32:37+07:00 }
+stale_after: 2027-01-05T04:32:37+07:00
+---
 # Demo và kiểm chứng MVP EXE201
 
 | Siêu dữ liệu | Giá trị |
 |---|---|
 | Trạng thái | Kế hoạch ưu tiên và mẫu ghi kết quả; chưa thực hiện demo/kiểm chứng trong đợt sửa docs này |
-| Chủ sở hữu | Nhóm Sổ Nghe Lời; nhóm trưởng điều phối và phân công người demo, người quan sát |
-| Cập nhật lần cuối | 2026-11-06 |
 
 ## 1. Mục tiêu hoàn thành
 
@@ -17,7 +24,7 @@ Chứng minh một người bán có thể dùng sản phẩm để ghi một đ
 - Ghi commit/bản build, nền tảng và cấu hình mock hay thật. Luồng nào chỉ chạy mock phải ghi rõ, không dùng video/mock để báo đã tích hợp thật.
 - Chọn nền tảng nhóm có thể chạy ổn định; kiểm đăng nhập bằng provider đã cấu hình. Không yêu cầu thêm mọi provider hoặc đồng thời hoàn thiện Android, iOS và web trước buổi demo.
 - Dùng tiệm/tài khoản thử, không có dữ liệu nhạy cảm. Chuẩn bị hai mặt hàng A/B: giá bán 20.000đ/10.000đ, giá vốn 12.000đ/6.000đ, tồn ban đầu 10 mỗi mặt hàng; ngưỡng cảnh báo không cần cho kịch bản chính.
-- Kiểm mạng, Core và model cho Bobi bằng một câu hỏi thử; đọc [API contracts](../contracts/api-contracts.md) và [hiện trạng kỹ thuật](../architecture/technical-design.md#1-phạm-vi) khi gặp đường tích hợp chưa có. Không mở migration/feature flag mới chỉ để thêm phần trình diễn.
+- Kiểm mạng, Core và model cho Bobi bằng một câu hỏi thử; đọc [API contracts](../contracts/api-contracts.md) và [hiện trạng kỹ thuật](../architecture/technical-design.md#1-scope) khi gặp đường tích hợp chưa có. Không mở migration/feature flag mới chỉ để thêm phần trình diễn.
 - Chụp số liệu đầu kỳ hoặc dùng tiệm thử trống để đối chiếu chênh lệch. Chỉ so các giao dịch trong cùng kỳ; không lấy dữ liệu từ một trang list làm tổng sổ.
 
 ## 3. Kịch bản đầu-cuối ưu tiên

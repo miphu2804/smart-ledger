@@ -1,86 +1,94 @@
-# ADR-0009: Trace mỗi lượt Agent chat lên HoneyHive, che dữ liệu nhạy cảm trước
+---
+type: Architecture Decision
+title: "ADR-0009: Trace every Agent chat turn to HoneyHive, redacting sensitive data first"
+description: "Accepted for AI: HoneyHive traces each Agent chat turn with redacted content; Core correlation still needs owner approval."
+owner: project owner
+status: stable
+generated: { by: human:miphu2804, at: 2026-11-06T22:18:48+07:00 }
+---
+# ADR-0009: Trace every Agent chat turn to HoneyHive, redacting sensitive data first
 
-- **Trạng thái:** Accepted cho phần AI, code đã merge vào `staging` qua PR #467. Phần tương quan với Core ở mục 4 vẫn Proposed và cần owner duyệt riêng theo [AGENTS.md](../../../AGENTS.md#scope).
-- **Ngày:** 2026-11-01
-- **Owner:** project owner quyết định gửi nội dung chat lên HoneyHive; owner AI service giữ code và test.
-- **Liên quan:** [`NFR-007`, `NFR-008`](../../product/product-requirements.md), [ADR-0006](0006-deterministic-agent-guardrails.md), [ADR-0008](0008-bifrost-owns-routing-and-fallback.md), [AI README](../../../backend/ai/README.md#observability), [`src/observability.py`](../../../backend/ai/src/observability.py), [bộ eval](../../../backend/ai/evaluation/agent_chat/README.md).
+- **Status:** Accepted for the AI part; the code was merged into `staging` through PR #467. The Core correlation part in section 4 is still Proposed and needs a separate owner approval under [AGENTS.md](../../../AGENTS.md#scope).
+- **Date:** 2026-11-01
+- **Owner:** the project owner decides to send chat content to HoneyHive; the AI service owner keeps the code and tests.
+- **Related:** [`NFR-007`, `NFR-008`](../../product/product-requirements.md), [ADR-0006](0006-deterministic-agent-guardrails.md), [ADR-0008](0008-bifrost-owns-routing-and-fallback.md), [AI README](../../../backend/ai/README.md#observability), [`src/observability.py`](../../../backend/ai/src/observability.py), [eval suite](../../../backend/ai/evaluation/agent_chat/README.md).
 
-## 1. Bối cảnh
+## 1. Context
 
-Khi owner báo "chat chậm" hoặc "trả lời sai", đội cần xem lại đúng câu hỏi, SQL model viết, kết quả tool và câu trả lời của lượt đó, và cần so sánh hai phiên bản prompt trên cùng bộ câu hỏi. Trace chỉ có thời gian và token không trả lời được câu "vì sao sai".
+When the shop owner reports "chat is slow" or "the answer is wrong", the team needs to replay that turn's exact question, the SQL the model wrote, the tool results and the answer, and needs to compare two prompt versions on the same set of questions. A trace with only timing and tokens cannot answer "why is it wrong".
 
-Logfire trước đây chạy với `include_content=False`. HoneyHive thay Logfire vì nó gộp trace, session, experiment và evaluator trong một chỗ, và nhận span OpenTelemetry của Pydantic AI mà không cần code riêng cho từng span.
+Logfire previously ran with `include_content=False`. HoneyHive replaces Logfire because it combines traces, sessions, experiments and evaluators in one place, and it accepts Pydantic AI's OpenTelemetry spans without custom code for each span.
 
-## 2. Quyết định
+## 2. Decision
 
-### 2.1. Nội dung lên trace
+### 2.1. Content in the trace
 
-- Pydantic AI chạy với `include_content=True` và `include_binary_content=False`: span chứa system prompt, câu hỏi, lịch sử, SQL, kết quả tool và câu trả lời, nhưng không chứa ảnh hay audio.
-- `NFR-008` cho phép tên và số điện thoại khách đi tới HoneyHive, và chỉ HoneyHive. Bifrost giữ `disable_content_logging: true`.
-- Không có biến môi trường để tắt nội dung. Muốn tắt thì đổi tham số trong `Observability.start` và deploy, hoặc xóa `HH_API_KEY` để tắt hẳn trace.
+- Pydantic AI runs with `include_content=True` and `include_binary_content=False`: spans contain the system prompt, the question, the history, the SQL, the tool results and the answer, but no images or audio.
+- `NFR-008` allows customer names and phone numbers to reach HoneyHive, and only HoneyHive. Bifrost keeps `disable_content_logging: true`.
+- There is no environment variable to turn content off. To turn it off, change the parameters in `Observability.start` and deploy, or delete `HH_API_KEY` to turn tracing off entirely.
 
-### 2.2. Guardrail chạy trước trace
+### 2.2. Guardrails run before the trace
 
-`InputRedaction` ([ADR-0006](0006-deterministic-agent-guardrails.md)) thay key, token, số thẻ, IBAN và email trong câu hỏi bằng `[redacted:<tên>]` trước khi session mở và trước khi model chạy. Bản đã che là bản model thấy, bản được lưu vào lịch sử và bản HoneyHive nhận, nên lịch sử và memory gửi lên ở lượt sau cũng đã che.
+`InputRedaction` ([ADR-0006](0006-deterministic-agent-guardrails.md)) replaces keys, tokens, card numbers, IBANs and emails in the question with `[redacted:<name>]` before the session opens and before the model runs. The redacted version is what the model sees, what is stored in the history and what HoneyHive receives, so the history and memory sent in later turns are also redacted.
 
-| Nguồn nội dung | Qua guardrail | Ghi chú |
+| Content source | Passes the guardrail | Note |
 |---|---|---|
-| Câu hỏi của owner | Có, `InputRedaction` | Số điện thoại không bị che, vì model cần số thật để tra |
-| Lịch sử và memory | Có, vì được lưu từ bản đã che | |
-| SQL và tham số tool | Không cần | Model viết từ câu hỏi đã che |
-| Kết quả tool | Không | Các view `ai_read` không có tên và số điện thoại khách; `v_shop_profile` có số của chính shop |
-| Câu trả lời | Không | Câu trả lời bị `AnswerScreen` từ chối vẫn nằm trong span |
+| The shop owner's question | Yes, `InputRedaction` | Phone numbers are not redacted, because the model needs the real number to look up |
+| History and memory | Yes, because they are stored from the redacted version | |
+| SQL and tool parameters | Not needed | The model writes them from the redacted question |
+| Tool results | No | The `ai_read` views have no customer names or phone numbers; `v_shop_profile` has the shop's own number |
+| The answer | No | An answer rejected by `AnswerScreen` still stays in the span |
 
-FastAPI không được instrument, vì span HTTP sẽ ghi body chưa che.
+FastAPI is not instrumented, because the HTTP span would record the unredacted body.
 
-### 2.3. Một session cho mỗi lượt chat
+### 2.3. One session per chat turn
 
-`AgentService` mở session sau `InputRedaction` và đóng session khi có câu trả lời. Session id đặt cục bộ trong OTel baggage, nên lượt chat không chờ HoneyHive và các request đồng thời không lẫn session.
+`AgentService` opens a session after `InputRedaction` and closes the session when there is an answer. The session id is set locally in OTel baggage, so the chat turn does not wait for HoneyHive and concurrent requests do not mix sessions.
 
-| Lúc | Gửi lên session |
+| When | Sent to the session |
 |---|---|
-| Mở | `inputs.question` đã che, `user_properties.user_id`, `metadata.shop_id`, `metadata.conversation_id`, `metadata.model`, `metadata.prompt_version`, `metadata.git_sha` |
-| Đóng | `outputs.answer`, `metrics` gồm token vào, token đọc từ cache, token ra, số lần gọi model, số tool call, và `first_text_ms` với lượt stream: thời gian từ lúc lượt tới đến chữ đầu tiên owner thấy, gồm cả recall memory và câu dạo đầu bị `Reset` |
-| Lỗi | `metadata.error`: mã guardrail như `answer_timeout`, tên loại exception, hoặc `cancelled` khi owner đóng stream |
-| Sau khi lưu lượt đầu | `metadata.conversation_id` của cuộc trò chuyện mới |
+| Open | the redacted `inputs.question`, `user_properties.user_id`, `metadata.shop_id`, `metadata.conversation_id`, `metadata.model`, `metadata.prompt_version`, `metadata.git_sha` |
+| Close | `outputs.answer`, `metrics` including input tokens, tokens read from cache, output tokens, the number of model calls, the number of tool calls, and `first_text_ms` for a streamed turn: the time from when the turn arrives to the first text the shop owner sees, including memory recall and a lead-in sentence discarded by `Reset` |
+| Error | `metadata.error`: a guardrail code such as `answer_timeout`, the exception type name, or `cancelled` when the shop owner closes the stream |
+| After saving the first turn | the new conversation's `metadata.conversation_id` |
 
-`prompt_version` là 12 ký tự đầu SHA-256 của instructions và định nghĩa tool, nên lọc session hoặc so hai lần eval theo prompt mà không cần đặt tên phiên bản bằng tay. `git_sha` là commit mà `deploy-backend.yml` truyền vào image, nên một lỗi mới tách được theo bản phát hành. Memory chạy trong context của lượt chat nên span của nó vào cùng session và mang `shop_id` như span chat; span embedding cũng được trace. Kết quả recall có span riêng `memory recall` (event_type `tool`, `AgentMemoryService._recall`): `inputs.question`, `outputs.memories` (id, content, memory_type, score), `metrics.recalled_count` và `metadata.shop_id`, nên đọc được memory nào đã vào prompt mà không phải suy ra từ span embedding. Lượt không được lấy mẫu hoặc không có session không tạo span này. Draft không mở session, và SDK bỏ span không có session. `HH_SAMPLE_RATE` (mặc định 1) chọn tỉ lệ lượt được trace; lượt ngoài mẫu không mở session nên SDK bỏ mọi span của nó. Mỗi lần cập nhật session chờ session được tạo xong, tối đa 5 giây, vì HoneyHive bỏ bản cập nhật cho session chưa có; SDK trả `None` thay vì báo lỗi khi tạo session thất bại, nên app ghi `WARNING`. Cập nhật session là lời gọi HTTP chặn, nên chạy trên hai thread riêng thay vì thread pool mặc định mà các lời gọi DB dùng. SDK ghi một `WARNING` cho mỗi span bị bỏ vì không có session; lượt ngoài mẫu và draft cố ý như vậy, nên app lọc dòng đó. Khi app tắt, `lifespan` chờ memory ghi xong tối đa 10 giây rồi hủy phần còn chạy trước khi đóng pool DB, chờ các lần cập nhật session tối đa 10 giây, flush span còn trong hàng đợi tối đa 5 giây, rồi tắt tracer. `deploy/vps/compose.yaml` cho container AI 60 giây để dừng, vì stream đang mở có thể chạy tới giới hạn 35 giây trước các bước trên; mặc định 10 giây của Docker sẽ giết process trước khi flush. Tracing bắt đầu trong `lifespan` chứ không lúc import, và test xóa `HH_API_KEY`, nên chạy test không gửi gì lên HoneyHive.
+`prompt_version` is the first 12 characters of the SHA-256 of the instructions and tool definitions, so sessions can be filtered, or two evals compared, by prompt without naming versions by hand. `git_sha` is the commit that `deploy-backend.yml` passes into the image, so a new bug can be separated by release. Memory runs in the chat turn's context, so its spans join the same session and carry `shop_id` like the chat spans; the embedding span is also traced. The recall result has its own `memory recall` span (event_type `tool`, `AgentMemoryService._recall`): `inputs.question`, `outputs.memories` (id, content, memory_type, score), `metrics.recalled_count` and `metadata.shop_id`, so you can read which memories entered the prompt without inferring it from the embedding span. A turn that is not sampled or has no session does not create this span. Drafts do not open a session, and the SDK drops spans that have no session. `HH_SAMPLE_RATE` (default 1) sets the share of turns that are traced; a turn outside the sample does not open a session, so the SDK drops all of its spans. Each session update waits for the session to be created, up to 5 seconds, because HoneyHive drops an update for a session that does not exist yet; the SDK returns `None` instead of raising an error when session creation fails, so the app logs a `WARNING`. A session update is a blocking HTTP call, so it runs on two dedicated threads instead of the default thread pool that the DB calls use. The SDK logs one `WARNING` for each span dropped because it has no session; turns outside the sample and drafts do this on purpose, so the app filters that line. When the app shuts down, `lifespan` waits for memory writes to finish for up to 10 seconds and then cancels what is still running before closing the DB pool, waits for session updates for up to 10 seconds, flushes the spans still in the queue for up to 5 seconds, and then shuts down the tracer. `deploy/vps/compose.yaml` gives the AI container 60 seconds to stop, because an open stream can run up to the 35-second limit before the steps above; Docker's default of 10 seconds would kill the process before the flush. Tracing starts in `lifespan` and not at import, and tests clear `HH_API_KEY`, so running tests sends nothing to HoneyHive.
 
-### 2.4. Eval và evaluator
+### 2.4. Eval and evaluators
 
-- [`evaluation/agent_chat`](../../../backend/ai/evaluation/agent_chat/README.md) chạy agent thật trên shop giả bằng `honeyhive.experiments.evaluate`, mỗi câu hỏi 3 lần, ghi model, `prompt_version` và `suite_version` (băm các case và seed) vào từng dòng để so hai lần chạy. Seed có đơn lúc 00:30 và 23:30 giờ shop, giảm giá, đơn hủy, nợ đã trả một phần hoặc trả hết và một sản phẩm ngừng bán, nên lỗi múi giờ hay thiếu bộ lọc làm sai đáp án. Case có số chấm bằng SQL trên bảng gốc; case chấm theo ý (tồn kho tối thiểu, ngoài phạm vi, mặt hàng bán chạy) do một model chấm theo tiêu chí viết sẵn.
-- Evaluator online nằm trong code ở [`.honeyhive`](../../../.honeyhive/README.md), theo cấu trúc config as code của HoneyHive: một evaluator Python chấm mọi lời gọi `query_shop_data` bị từ chối, và các evaluator khác chấm `outputs.answer` của session khi câu trả lời lộ tên view, SQL hay tên tool, đưa ra con số mà không gọi tool nào, dùng Markdown mà prompt cấm, có khối chart mà app không vẽ được, hoặc không viết bằng tiếng Việt. Session chứ không phải span agent, vì lượt kết thúc sớm sau nút màn hình không có output trên span agent; HoneyHive chấm lại session khi câu trả lời tới sau (kiểm ngày 2026-11-01). Evaluator `sql-parse-check` (template SQL Parse Check của HoneyHive) chấm `inputs.tool_arguments.sql` của mỗi `execute_tool query_shop_data` có parse được thành PostgreSQL không. Không dùng LLM judge online, vì nó gửi câu hỏi và câu trả lời của owner qua HoneyHive tới một nhà cung cấp model khác, ngoài luồng dữ liệu `NFR-008` cho phép. Bộ eval offline `backend/ai/evaluation/agent_chat` chạy local với tracer tắt, chấm client-side (gồm các template Tool Usage, Failure Recovery, Answer Faithfulness, Context Relevance, Tool Trajectory qua alias Bifrost của `--judge`) trên shop giả, rồi chỉ sync điểm lên HoneyHive theo "Sync Offline Evaluations": mỗi case là một session của experiment run, không có span. Ba alert theo ngày (p95 lượt chat trên 20 giây, tỉ lệ query lỗi trên 20%, hơn 5 lượt lỗi không tính lượt bị hủy), chỉ trên traffic có `source` là `production`, cũng nằm ở đó, gửi email cho thành viên project, và được tạo bằng control plane key mà AI service không đọc.
-- Feedback từ người dùng chưa làm, vì cần API Core và UI mobile.
+- [`evaluation/agent_chat`](../../../backend/ai/evaluation/agent_chat/README.md) runs the real agent on a fake shop with `honeyhive.experiments.evaluate`, 3 times per question, and records the model, `prompt_version` and `suite_version` (a hash of the cases and the seed) on every row so two runs can be compared. The seed has orders at 00:30 and 23:30 shop time, discounts, cancelled orders, debts paid in part or in full, and one discontinued product, so a timezone bug or a missing filter makes the answer wrong. Cases with a number are graded with SQL on the source tables; cases graded by meaning (minimum stock, out of scope, best-selling items) are graded by a model against written criteria.
+- The online evaluators live in code in [`.honeyhive`](../../../.honeyhive/README.md), following HoneyHive's config-as-code structure: one Python evaluator grades every rejected `query_shop_data` call, and the other evaluators grade the session's `outputs.answer` when the answer exposes a view name, SQL or a tool name, gives a number without calling any tool, uses Markdown that the prompt forbids, has a chart block that the app cannot draw, or is not written in Vietnamese. They grade the session and not the agent span, because a turn that ends early after the screen button has no output on the agent span; HoneyHive regrades the session when the answer arrives later (checked on 2026-11-01). The `sql-parse-check` evaluator (HoneyHive's SQL Parse Check template) grades whether the `inputs.tool_arguments.sql` of each `execute_tool query_shop_data` parses as PostgreSQL. There is no online LLM judge, because it would send the shop owner's question and answer through HoneyHive to another model provider, outside the data flow that `NFR-008` allows. The offline eval suite `backend/ai/evaluation/agent_chat` runs locally with the tracer off, grades client-side (including the Tool Usage, Failure Recovery, Answer Faithfulness, Context Relevance and Tool Trajectory templates through the Bifrost alias of `--judge`) on the fake shop, and then only syncs the scores to HoneyHive following "Sync Offline Evaluations": each case is one session of the experiment run, with no spans. Three daily alerts (p95 chat turn above 20 seconds, query error rate above 20%, more than 5 failed turns not counting cancelled turns), only on traffic whose `source` is `production`, also live there, email the project members, and are created with a control plane key that the AI service does not read.
+- User feedback is not done, because it needs a Core API and mobile UI.
 
-## 3. Phương án đã loại
+## 3. Rejected options
 
-- **Giữ Logfire với `include_content=False`:** không trả lời được vì sao một câu trả lời sai, và không có experiment để so prompt.
-- **Che ở biên trace bằng cách bọc exporter của HoneyHive:** model vẫn thấy dữ liệu gốc, nhưng phụ thuộc code nội bộ của SDK. Pydantic AI không có hook biến đổi nội dung, và OTel `_on_ending` chạy khi thuộc tính span đã khóa.
-- **Chạy `InputRedaction` trên kết quả tool:** chặn được email hay số thẻ lẫn trong dữ liệu shop, nhưng đổi điều model thấy; các view hiện không có cột nào như vậy.
-- **Guardrail của Bifrost:** là tính năng enterprise và chạy sau khi span đã tạo.
-- **Langfuse:** đã gỡ khỏi cấu hình; HoneyHive phủ cùng nhu cầu.
+- **Keep Logfire with `include_content=False`:** it cannot answer why an answer is wrong, and it has no experiments to compare prompts.
+- **Redact at the trace boundary by wrapping HoneyHive's exporter:** the model would still see the original data, and it depends on the SDK's internal code. Pydantic AI has no hook that transforms content, and OTel's `_on_ending` runs when the span attributes are already locked.
+- **Run `InputRedaction` on tool results:** it would catch an email or card number mixed into shop data, but it changes what the model sees; the current views have no such column.
+- **Bifrost's guardrails:** an enterprise feature that runs after the span is created.
+- **Langfuse:** removed from the configuration; HoneyHive covers the same need.
 
-## 4. Tương quan với Core (Proposed)
+## 4. Correlation with Core (Proposed)
 
-Core chưa gửi `traceparent` sang AI và chưa ghi trace id vào log. Đề xuất: Core sinh `traceparent` cho mỗi lượt gọi AI và ghi trace id vào log, AI nhận context đó. Việc này chạm Core nên cần project owner duyệt; trước khi duyệt, AI giữ mặc định.
+Core does not yet send `traceparent` to AI and does not write the trace id into its logs. Proposal: Core generates a `traceparent` for each call to AI and writes the trace id into its logs, and AI accepts that context. This touches Core, so it needs the project owner's approval; until it is approved, AI keeps the default.
 
-## 5. Hệ quả và rủi ro
+## 5. Consequences and risks
 
-- Tên và số điện thoại khách mà owner gõ nằm trên HoneyHive trong thời gian lưu của gói đang dùng. Chưa rà nghĩa vụ pháp lý về dữ liệu cá nhân; `AGENTS.md` yêu cầu nguồn chính thức, người chịu trách nhiệm và phê duyệt rõ ràng.
-- Gói free giới hạn số event mỗi tháng; một lượt có memory và một tool call tạo khoảng 8 event (span `memory recall` thêm đúng 1 event mỗi lượt có recall), chưa tính các lần cập nhật session, và một lần chạy eval đủ bộ tạo vài trăm. Khi lưu lượng gần chạm giới hạn, hạ `HH_SAMPLE_RATE` trên production.
-- Cost trên HoneyHive là 0 và chưa có đường đưa chi phí của Bifrost sang đó: HoneyHive không tự tính giá, session `Cost` là tổng `metadata.cost` mà ứng dụng đặt trên các event con ([Session Aggregations](https://docs.honeyhive.ai/v2/tracing/aggregation-logic)), còn Bifrost tính chi phí từng request nhưng chỉ ghi vào log, không trả về trong response hay header. Giá chỉ nằm ở một nơi là Bifrost (bảng giá đồng bộ của nó, cộng `governance.pricing_overrides` trong `deploy/vps/bifrost.json` cho model mà bảng không có, hiện là `mercury-3`), nên xem chi phí ở Bifrost hoặc hóa đơn provider; đưa sang HoneyHive cần đọc `GET /api/logs/stats` của Bifrost bằng tài khoản admin, một quyết định về credential chưa được duyệt.
-- Nếu HoneyHive chậm hoặc ngừng, lượt chat vẫn trả lời; chỉ mất trường session và span của lượt đó.
-- Stdout log ở mức INFO và WARNING chỉ ghi tên tool, id lời gọi, độ dài, mã lỗi hoặc loại lỗi; SQL, kết quả tool, lý do lỗi và traceback của memory chỉ có ở DEBUG, nên đừng bật DEBUG trên staging hoặc production.
-- Fixture `spans` trong `test_observability.py` tự dựng `InstrumentationSettings`; một test riêng khóa các tham số mà `Observability.start` truyền vào.
+- Customer names and phone numbers that the shop owner types sit on HoneyHive for the retention period of the plan in use. The legal obligations for personal data have not been reviewed; `AGENTS.md` requires an official source, a responsible person and explicit approval.
+- The free plan limits the number of events per month; a turn with memory and one tool call creates about 8 events (the `memory recall` span adds exactly 1 event per turn that has a recall), not counting session updates, and one full eval run creates a few hundred. When traffic nears the limit, lower `HH_SAMPLE_RATE` on production.
+- Cost on HoneyHive is 0 and there is no path yet to bring Bifrost's cost there: HoneyHive does not compute prices itself, the session `Cost` is the sum of the `metadata.cost` that the application sets on child events ([Session Aggregations](https://docs.honeyhive.ai/v2/tracing/aggregation-logic)), and Bifrost computes the cost of each request but only writes it to its logs, without returning it in the response or a header. Prices live in only one place, Bifrost (its synced price table, plus `governance.pricing_overrides` in `deploy/vps/bifrost.json` for models the table lacks, currently `mercury-3`), so look at cost in Bifrost or the provider invoice; bringing it to HoneyHive would need reading Bifrost's `GET /api/logs/stats` with an admin account, a credential decision that has not been approved.
+- If HoneyHive is slow or down, the chat turn still answers; only that turn's session fields and spans are lost.
+- Stdout logs at INFO and WARNING level record only the tool name, the call id, lengths, error codes or error types; SQL, tool results, error reasons and memory tracebacks exist only at DEBUG, so do not turn on DEBUG on staging or production.
+- The `spans` fixture in `test_observability.py` builds its own `InstrumentationSettings`; a separate test locks the parameters that `Observability.start` passes in.
 
-## 6. Kiểm chứng
+## 6. Verification
 
-- `tests/unit_tests/test_agent_chat_evaluation.py`: mỗi evaluator template map đúng field và chỉ chạy cho case phù hợp (judge giả), ghi memory bị chặn, payload sync không chứa span và giữ `datapoint_id` ổn định, thứ tự tạo run, log session, hoàn tất run.
-- `tests/unit_tests/test_observability.py`: nội dung có trong span, media không có, email bị che trước khi vào span, session mở với câu hỏi đã che và đóng với câu trả lời và token, lượt stream ghi `first_text_ms`, lượt quá thời gian và stream bị đóng ghi `metadata.error`, lượt ngoài mẫu không gửi gì, session bị từ chối ghi `WARNING`, tin nhắn bị guardrail từ chối không mở session, HoneyHive treo không giữ lượt chat, flush gửi cập nhật session trước span rồi tắt tracer, mọi lời gọi khớp chữ ký SDK thật, hai lượt chạy đồng thời giữ đúng session của mình, log INFO không chứa nội dung lượt chat. Span `memory recall` mang câu hỏi, memory đã recall và `recalled_count`, vẫn tạo khi recall lỗi, và không tạo khi lượt không có session.
-- Lượt thật trên `smartledger-local-db` (2026-11-01): session có `git_sha`, `first_text_ms` và điểm `internal-leak`; lượt quá thời gian có `metadata.error = answer_timeout`; span memory mang `shop_id`; span embedding có mặt. Một session nhận câu trả lời lộ SQL sau 3 giây được chấm `internal-leak = True`.
-- Bắt byte OTLP local (2026-11-01): có câu hỏi, SQL, kết quả tool, câu trả lời; email và số thẻ đã che.
-- Chưa kiểm: trace thật trên staging và production.
+- `tests/unit_tests/test_agent_chat_evaluation.py`: each template evaluator maps the right fields and runs only for the matching cases (fake judge), memory writes are blocked, the sync payload contains no spans and keeps `datapoint_id` stable, and the order is create run, log session, complete run.
+- `tests/unit_tests/test_observability.py`: content is in the span, media is not, an email is redacted before it enters the span, the session opens with the redacted question and closes with the answer and tokens, a streamed turn records `first_text_ms`, a timed-out turn and a closed stream record `metadata.error`, a turn outside the sample sends nothing, a rejected session logs a `WARNING`, a message rejected by a guardrail does not open a session, a hung HoneyHive does not hold the chat turn, the flush sends session updates before spans and then shuts down the tracer, every call matches the real SDK signature, two concurrent turns keep their own sessions, and INFO logs contain no chat turn content. The `memory recall` span carries the question, the recalled memories and `recalled_count`, is still created when recall fails, and is not created when the turn has no session.
+- Real turns on `smartledger-local-db` (2026-11-01): the session has `git_sha`, `first_text_ms` and the `internal-leak` score; a timed-out turn has `metadata.error = answer_timeout`; the memory span carries `shop_id`; the embedding span is present. A session that received an answer exposing SQL after 3 seconds was graded `internal-leak = True`.
+- Local OTLP byte capture (2026-11-01): the question, SQL, tool results and answer are present; emails and card numbers are redacted.
+- Not checked: real traces on staging and production.
 
-## Nguồn
+## Sources
 
-Đọc ngày 2026-11-01: [HoneyHive docs](https://docs.honeyhive.ai/v2), mã nguồn SDK `honeyhive` 1.8.1 (`tracer/core/context.py`, `tracer/processing/span_processor.py`), [Pydantic AI instrumentation](https://ai.pydantic.dev/logfire/).
+Read on 2026-11-01: [HoneyHive docs](https://docs.honeyhive.ai/v2), the `honeyhive` 1.8.1 SDK source (`tracer/core/context.py`, `tracer/processing/span_processor.py`), [Pydantic AI instrumentation](https://ai.pydantic.dev/logfire/).

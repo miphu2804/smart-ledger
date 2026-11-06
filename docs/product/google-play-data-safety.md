@@ -1,3 +1,12 @@
+---
+type: Reference
+title: "Khai báo Data safety trên Google Play"
+description: "Câu trả lời cho form Data safety trên Play Console, khớp với trang chính sách công khai."
+owner: Chủ sản phẩm
+status: stable
+generated: { by: human:miphu2804, at: 2026-11-01T21:35:38+07:00 }
+stale_after: 2026-12-31T21:35:38+07:00
+---
 # Khai báo Data safety trên Google Play
 
 Bảng trả lời cho form **Play Console → Nội dung ứng dụng → An toàn dữ liệu** của bản Android Sổ Nghe Lời. Nội dung phải khớp với [trang chính sách](../../frontend/web/src/pages/legal/PolicyPage.tsx) (`https://songheloi.id.vn/chinh-sach`).
