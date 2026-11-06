@@ -1,3 +1,11 @@
+### 2026-11-07 — Production-first documentation and local ownership (#555)
+
+| Area | Change |
+|---|---|
+| Docs | • Audited the actual tracked tree at staging `a2766ee`; separated production operation from EXE201 delivery scope and implementation/enablement/deployment/acceptance<br>• Made landing pages domain-oriented, kept local indexes, moved service detail into owned Core/AI/Mobile guides, and preserved technical safeguards, dated decisions and rollout evidence<br>• Aligned root/Mobile instructions, English technical prose and lean OKF/plain authors; reconciled source facts and resolved obsolete merge/assignment blockers without claiming live acceptance |
+
+Check: internal paths/anchors, immediate-child index/frontmatter consistency and root navigation reachability passed; BRD/PRD stayed byte-identical, API contract body changed only link targets, all nine ADR decision statuses stayed intact, `config.ts` matched the baseline after removing comments, and `git diff --check` passed. Mobile typecheck passed; `npm test` had 192 pass/2 fail, reproduced with the same failures on baseline `a2766ee`. Source inventory and verification evidence are in the PR. Live deployment, provider/device UAT and acceptance were not verified. Commit: the commit that adds this entry.
+
 ### 2026-11-06 — Docs describe SmartLedger as running in production, are in English outside product and carry OKF frontmatter
 
 | Area | Change |
@@ -187,11 +195,3 @@ Check: the live chart list shows HoneyHive's own session charts filter on `event
 | Docs | • ADR-0009 §5 and the AI README say why HoneyHive shows no cost: its session Cost sums the `metadata.cost` the app sets on events, and Bifrost writes the cost it computes only to its own log, not to the response; embeddings on Cloudflare have no cost record |
 
 Check: `bifrost.json` passes `check-jsonschema` against the `transports/v2.4.0` config schema; the override-only path for a model missing from the catalog read in `cost.go` of that tag. Not verified: a non-zero cost in a live Bifrost log, since the override applies only after deploy. Commit: the one that adds this entry.
-
-### 2026-11-04 — Admin account menu moves to the sidebar
-
-| Area | Change |
-|---|---|
-| Web | • Admin header: no subtitle under the page title and no line under the header<br>• Khách hàng and Nhật ký truy cập: the faded "dữ liệu hỗ trợ tối thiểu" and log notices are gone<br>• The avatar moves from the header to the bottom of the sidebar, under Hệ thống, as a row with name and role; clicking it opens the menu above it (email, Hồ sơ, Phiên & quyền truy cập, Đăng xuất); when the sidebar is collapsed only the avatar shows and the menu opens 240 px wide<br>• Admin labels say "chủ tiệm" instead of OWNER or "chủ cơ sở" (the role value stays `OWNER`)<br>• On desktop (1280 px and up) the sidebar column stays 72 px and the open sidebar slides over the content, which is centered up to 1200 px wide, so opening or closing it never moves the content; it starts collapsed |
-
-Check: `npm run typecheck`, `oxlint` and `npm run build` pass; on the mock admin at 1440 × 900, 1024 × 768 and 375 × 812 the menu opens above the avatar and is not cut off. Not verified: real Core mode in a browser. Commit: the one that adds this entry.

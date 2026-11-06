@@ -4,7 +4,7 @@ title: "CI/CD"
 description: "Flow from feature branch to the VPS and Vercel, GitHub environments, VPS provisioning and Core CORS origins."
 owner: Technical owner
 status: stable
-generated: { by: human:miphu2804, at: 2026-11-06T22:18:48+07:00 }
+author: miphu2804
 stale_after: 2027-01-05T22:18:48+07:00
 ---
 # CI/CD
@@ -281,9 +281,9 @@ Compose sets `AI_BASE_URL`, `SERVER_PORT` and `FLYWAY_ENABLED=false` itself. Bef
 | `INTERNAL_API_TOKEN` | Same as in `core.env` |
 | `POSTGRES_URL` | Supabase `postgresql://` URL of the environment |
 | `AI_SQL_READER_URL` | Read-only `ai_sql_reader` login as a `postgresql://` URL; empty means the agent cannot read shop data |
-| `POSTGRES_POOL_MAX_SIZE`, `SQL_POOL_MAX_SIZE` | Optional, default `2`; they share the Supabase pooler limit with Core ([AI README](../../backend/ai/README.md#database-access)) |
+| `POSTGRES_POOL_MAX_SIZE`, `SQL_POOL_MAX_SIZE` | Optional, default `2`; they share the Supabase pooler limit with Core ([AI README](../../backend/ai/docs/architecture.md#database-and-migrations)) |
 | Model and tracing variables | From GitHub, see below |
-| `AGENT_MEMORY_*`, `CLOUDFLARE_ACCOUNT_ID`, `CLOUDFLARE_API_TOKEN` | Optional, `ai.env` only; memory is off until the PO approves it ([ADR-0002](../architecture/adr/0002-agent-long-term-memory.md), [AI README](../../backend/ai/README.md#long-term-memory-off-by-default)) |
+| `AGENT_MEMORY_*`, `CLOUDFLARE_ACCOUNT_ID`, `CLOUDFLARE_API_TOKEN` | Optional, `ai.env` only; memory is off until the PO approves it ([ADR-0002](../architecture/adr/0002-agent-long-term-memory.md), [AI README](../../backend/ai/docs/architecture.md#long-term-memory-and-onnx-embeddings)) |
 | `REDIS_URL` | `redis://redis:6379/0`, the stack's own Redis; unset makes every chat turn read its history from PostgreSQL |
 
 **`redis`**
@@ -356,9 +356,9 @@ These live in Dopbase `ai/<environment>` with the other AI variables; step `Uplo
 |---|---|
 | `OPENAI_API_KEY` | Gateway key shared by every model; the Bifrost virtual key when AI calls Bifrost |
 | `OPENAI_BASE_URL` | Base of the OpenAI dialect: `https://api.openai.com/v1` or `http://bifrost:8080/openai` |
-| `MODEL_ALIASES` | JSON object, e.g. `{"chat":{"protocol":"openai_responses","model":"gpt-6-luna","effort":"high"}}`; see [AI README](../../backend/ai/README.md) |
+| `MODEL_ALIASES` | JSON alias map; use the canonical [AI model/protocol/tier examples](../../backend/ai/docs/architecture.md#model-provider-and-routing), not a copied deployment default |
 | `MODEL_REASONING_EFFORT` | Effort of an alias that sets none; the values depend on the model |
-| `MODEL_FALLBACKS` | Optional JSON list, e.g. `["openai_chat:deepseek-v4.1-flash"]`, for an environment that calls a provider directly |
+| `MODEL_FALLBACKS` | Optional direct-provider fallback list; syntax and effort behavior belong to the [AI model guide](../../backend/ai/docs/architecture.md#model-provider-and-routing) |
 
 To remove a setting, delete it in Dopbase; the next deploy drops it from `ai.env`.
 
@@ -372,7 +372,7 @@ To remove a setting, delete it in Dopbase; the next deploy drops it from `ai.env
 | `HH_SAMPLE_RATE` | Dopbase `ai/<environment>` | Share of chat turns traced, 0 to 1; unset traces every turn |
 | `GIT_SHA` | Image build argument | Set by `deploy-backend.yml` to the deployed commit; tags each HoneyHive session |
 
-Traces carry the redacted question, tool calls and the answer, so they hold customer names and phone numbers ([AI README](../../backend/ai/README.md#observability), [ADR-0009](../architecture/adr/0009-end-to-end-tracing.md)); HoneyHive infers the project from the key. To turn tracing off, delete `HH_API_KEY` in Dopbase and redeploy `ai`.
+Traces carry the redacted question, tool calls and the answer, so they hold customer names and phone numbers ([AI README](../../backend/ai/docs/architecture.md#observability), [ADR-0009](../architecture/adr/0009-end-to-end-tracing.md)); HoneyHive infers the project from the key. To turn tracing off, delete `HH_API_KEY` in Dopbase and redeploy `ai`.
 
 ### Core CORS origins
 
@@ -572,6 +572,6 @@ One-time setup:
 ### Measured and not yet verified
 
 - `ubuntu-24.04`, `android-dev`, cold cache: about 12 minutes. A self-hosted Apple M4 Pro with a warm cache is about three times faster.
-- APK size settings in [`frontend/mobile/README.md`](../../frontend/mobile/README.md#android-apk-size) cut the `arm64-v8a` APK from 95.2 MB to 40.3 MB; a two-ABI release APK is about 58 MB.
+- APK size settings in [`frontend/mobile/README.md`](../../frontend/mobile/docs/operations.md#android-apk-size) cut the `arm64-v8a` APK from 95.2 MB to 40.3 MB; a two-ABI release APK is about 58 MB.
 - Not yet run: `android-staging`, `android-production`, the self-hosted and `auto` paths, a full signed build, the R2 upload and the APK on a physical device.
 - iOS is built separately ([mobile-ios-device-release.md](mobile-ios-device-release.md)).

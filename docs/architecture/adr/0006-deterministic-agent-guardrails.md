@@ -4,7 +4,7 @@ title: "ADR-0006: Agent guardrails are deterministic code, not model checks"
 description: "Accepted: agent guardrails are deterministic code, not model checks."
 owner: not assigned
 status: stable
-generated: { by: human:miphu2804, at: 2026-10-30T00:50:24+07:00 }
+author: miphu2804
 ---
 # ADR-0006: Agent guardrails are deterministic code, not model checks
 
@@ -51,5 +51,5 @@ A stopped turn answers `422` with a code and stores nothing. The service holds n
 ## References
 
 - PRs #77, #145 and #195.
-- [AI README, Guardrails](../../../backend/ai/README.md#guardrails) for the current limits and codes.
+- [AI README, Guardrails](../../../backend/ai/docs/architecture.md#guardrails-and-answer-safety) for the current limits and codes.
 - [ADR-0004](0004-agent-read-only-text-to-sql.md) for the database-side bounds on the agent's queries.

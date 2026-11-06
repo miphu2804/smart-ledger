@@ -15,7 +15,7 @@ The repository-level [`AGENTS.md`](../../AGENTS.md) is the canonical policy. Rea
 
 - `app/` is the Expo Router source of truth. Preserve route groups, protected-screen guards, navigation labels, accessibility labels, tab order and existing behavior unless the task explicitly changes them.
 - The root stack uses `SCREEN_ANIMATION` from `src/motion.ts`; do not add per-route transition literals or platform-specific route animation defaults.
-- Environment configuration is deliberately strict. `EXPO_PUBLIC_API_ENDPOINT`, `EXPO_PUBLIC_USE_MOCK`, `EXPO_PUBLIC_MOCK_CORE` and `EXPO_PUBLIC_MOCK_SHOPS` must be explicit `true`/`false` values (and the endpoint must be non-empty). `src/config.ts` fails fast when a required value is absent or invalid. Never silently add production-like defaults or commit secrets.
+- Environment configuration is deliberately strict. `EXPO_PUBLIC_API_ENDPOINT` must be non-empty; `EXPO_PUBLIC_USE_MOCK`, `EXPO_PUBLIC_MOCK_CORE` and `EXPO_PUBLIC_MOCK_SHOPS` must each be explicitly `true` or `false`. `src/config.ts` fails fast when a required value is absent or invalid. Never silently add production-like defaults or commit secrets.
 - `EXPO_PUBLIC_USE_MOCK=true` implies the mock Core and shop paths. Keep mock flags explicit in local, test and build configuration so a developer cannot mistake simulated data for Core data. Do not describe mock behavior as deployment or acceptance evidence.
 - Core calls belong behind the existing API/session modules and the contract in [`docs/contracts/api-contracts.md`](../../docs/contracts/api-contracts.md). Do not invent endpoints or bypass auth, shop context, standard errors or idempotency handling.
 
@@ -28,7 +28,10 @@ The repository-level [`AGENTS.md`](../../AGENTS.md) is the canonical policy. Rea
 ## UI and visual verification
 
 - Reuse theme tokens, existing artwork and icon semantics. Do not add screen-specific colors, decorative effects or hardcoded physical screenshot coordinates. Keep touch targets and safe-area behavior usable on narrow and wide devices.
-- For bottom-tab changes, derive geometry from measured width and shared constants; keep the bar attached to the safe area and preserve routes, labels and active-state semantics.
+- For bottom-tab changes, derive SVG geometry, center action, tab regions and touch targets from the same measured bar width and shared constants. Keep curve depth separate from SVG placement and filled-body height; keep the bar bottom-attached, with safe-area fill below the visual bar rather than an opaque layer behind its shoulders. Derive active state from pathname for shortcuts outside `Tabs`; decorative SVG must not intercept touches.
+- Shared surfaces use `colors.bg`, `colors.card` and `colors.surfaceMuted` for their intended roles. Preserve brand illustrations and action icon semantics; glass is limited to explicitly requested frequent-use sales/chat controls, not auth, settings or dialogs. Preserve disabled/destructive contrast.
+- Keep navigation immediate via `SCREEN_ANIMATION`; do not add a competing shared/per-route entrance animation. Use one keyboard strategy per screen, not overlapping keyboard avoidance and manual translations. Menu motion uses the existing `ACTION_MENU_DURATION`; do not apply it to all micro-interactions.
+- Compare native/web evidence at matched logical viewport widths and record platform, safe-area inset and pixel density when available. Keep text scaling, safe areas and practical 44pt iOS / 48dp Android touch targets usable.
 - For any visual change, inspect the real running UI: inspect → implement → run → capture → review → iterate. A typecheck or screenshot of a mockup is not visual evidence. If no native runtime is available, report visual verification as not performed and give the exact manual steps.
 - For voice/read-order changes, check the shared `/voice` route on web and an Android native runtime, including unsupported-capability messaging, permission failure and the successful recognition path when the model is available.
 

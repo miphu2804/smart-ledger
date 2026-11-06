@@ -5,6 +5,7 @@ description: "Test-driven records and local verification evidence for Zalo web s
 owner: Core owner
 status: stable
 author: miphu2804
+stale_after: 2027-01-01T11:30:50+07:00
 ---
 # CORE-015 local verification evidence
 

@@ -5,6 +5,7 @@ description: "Core guide for Zalo Android sign-in: verification and staging acti
 owner: Core owner
 status: stable
 author: miphu2804
+stale_after: 2027-01-01T11:30:50+07:00
 ---
 # CORE-016 — Android Core integration and V18 rollout
 

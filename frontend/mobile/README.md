@@ -5,12 +5,13 @@ description: "How to run, configure and test the OWNER mobile app, including Fir
 owner: FE owner
 author: miphu2804
 status: stable
+stale_after: 2027-01-05T22:18:48+07:00
 ---
 # Sổ Nghe Lời — Mobile (Expo)
 
 The OWNER mobile app is an Expo Router application. The route tree is under `app/`: `(auth)` contains onboarding, `(tabs)` contains the main navigation, and protected top-level routes include sales, orders, assistant, reports, settings and `/voice`. Shared behavior is under `src/`, with Core clients in `src/lib/*Api.ts` and application state in `src/store/AppStore.tsx`.
 
-This guide describes the checked-in implementation. Code presence does not prove that a build is deployed or that a product acceptance criterion has passed; deployment and integrated acceptance are not verified here.
+Source review: `staging` commit `a2766ee3a37e23c0f03fd43383b608c1b2fac898`. This guide describes the checked-in implementation. Code presence does not prove that a build is deployed or that a product acceptance criterion has passed; deployment and integrated acceptance are not verified here.
 
 ## Run and test
 
@@ -80,6 +81,10 @@ The current native path requests microphone permission, captures 16 kHz mono PCM
 The `/voice` screen passes typed or transcribed text to `src/lib/parseOrder.ts`. `parseOrder()` is a deterministic, rule-based parser: it recognizes quantities, units, prices and known products, returns unknown or ambiguous items for user handling, and can produce expense drafts that the caller must confirm. It is not AI order recognition and does not call the AI service.
 
 Keep parser examples and edge cases in [`tests/parseOrder.test.ts`](tests/parseOrder.test.ts). When changing parsing behavior, update focused tests and preserve the confirmation step before saving expenses or adding unknown products.
+
+## Detailed operations
+
+The FE-owned [Mobile integration and native operations](docs/operations.md) guide preserves release commands, provider setup, speech-library patches, APK packaging, diagnostics and report-calculation limitations. Its measurements and device/provider evidence retain their original limits; the guide is not fresh device acceptance.
 
 ## Repository workflow and diagnostics
 

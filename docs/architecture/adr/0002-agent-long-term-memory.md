@@ -4,11 +4,11 @@ title: "ADR-0002: Agent long-term memory modeled on TencentDB for PostgreSQL, bu
 description: "Proposed: pgvector design for agent long-term memory; option A is in the AI code behind `AGENT_MEMORY_ENABLED`, off by default."
 owner: not assigned
 status: draft
-generated: { by: human:miphu2804, at: 2026-11-06T22:18:48+07:00 }
+author: miphu2804
 ---
 # ADR-0002: Agent long-term memory modeled on TencentDB for PostgreSQL, built on Supabase pgvector
 
-- **Status:** Proposed. There is no dedicated FR/AC for memory yet (`FR-027`/`AC-022` only cover chat history); it is not product behavior until the PO approves the requirement and the team accepts this ADR. The [Contract](../../contracts/api-contracts.md) already describes `memory/settings` and the SSE event `memory`, which only work when the flag is on and are waiting for PO approval. Option A already has code behind the `AGENT_MEMORY_ENABLED` flag (off by default), see the [AI README](../../../backend/ai/README.md#long-term-memory-off-by-default); when it is off, chat behavior does not change
+- **Status:** Proposed. There is no dedicated FR/AC for memory yet (`FR-027`/`AC-022` only cover chat history); it is not product behavior until the PO approves the requirement and the team accepts this ADR. The [Contract](../../contracts/api-contracts.md) already describes `memory/settings` and the SSE event `memory`, which only work when the flag is on and are waiting for PO approval. Option A already has code behind the `AGENT_MEMORY_ENABLED` flag (off by default), see the [AI README](../../../backend/ai/docs/architecture.md#long-term-memory-and-onnx-embeddings); when it is off, chat behavior does not change
 - **Date:** 2026-10-14
 - **Owner:** not assigned
 
@@ -18,7 +18,9 @@ Diagram source: [`agent-memory.drawio`](../diagrams/src/agent-memory.drawio), ex
 
 ## Context
 
-- The Agent currently remembers only within one conversation: each turn sends the most recent `AGENT_HISTORY_TURNS` turns (default 30), with no summary and no tool to search history ([Chat context](../../contracts/api-contracts.md#chat-context), [AI README](../../../backend/ai/README.md#chat-history-and-context)). Habits or preferences the shop owner stated in another conversation do not reach the model.
+The provider settings, staging observations and evaluation results below are dated design evidence from 2026-10-14 onward, not today's runtime configuration. Current defaults (including ONNX) and re-embedding operations are owned by the [AI memory guide](../../../backend/ai/docs/architecture.md#long-term-memory-and-onnx-embeddings); this cleanup does not change this ADR's proposed status.
+
+- The Agent currently remembers only within one conversation: each turn sends the most recent `AGENT_HISTORY_TURNS` turns (default 30), with no summary and no tool to search history ([Chat context](../../contracts/api-contracts.md#chat-context), [AI README](../../../backend/ai/docs/architecture.md#chat-history-and-context)). Habits or preferences the shop owner stated in another conversation do not reach the model.
 - The team looked at three Tencent "long-term memory" options. Only one runs on PostgreSQL: the Agent Long-Term Memory feature of TencentDB for PostgreSQL, described in the official guide.
 - [ADR-0001](0001-vector-store-pgvector.md) already decided: embeddings live in Supabase PostgreSQL, and every vector query filters by `shop_id` in the same SQL statement.
 - The PRD has no requirement for long-term memory. This ADR only records the findings and the architecture direction so the PO can decide whether to build it.
@@ -38,7 +40,7 @@ The content below was checked against the original pages [Agent Long-Term Memory
 | Summarization, compaction | `tencentdb_ai.chat_completions(...)` merges memories older than 7 days by day | Implemented in `AgentMemoryService.remember`, after the write step: memories older than 7 days are grouped by conversation and day (Vietnam time), and the chat model merges each group into 1–5 facts replacing the old group in one transaction. Grouping by conversation as well means deleting a chat still deletes the summary; at most 3 groups per turn |
 | Hybrid search (RAG page) | Vector + `ts_rank(to_tsvector('chinese', …))`, merged with RRF | PostgreSQL has no Vietnamese text search configuration; staging has `pg_trgm`, `unaccent`, `pgroonga` 3.2.5 available (not enabled) if the keyword part is needed later |
 | Tenant isolation | Row-level security: a policy compares `tenant_id` with `current_setting('app.tenant_id')` | The same idea as the `smartledger.shop_id` setting of the `ai_read` views; for the write table, keep the repository's current approach of an explicit `WHERE shop_id AND user_id` |
-| Embedding | `tencentdb_ai.get_embedding('bge-m3', …)` runs inside the database; the page says `bge-m3` is only an example | This extension is not available; the AI service embeds through `pydantic_ai.Embedder`, chosen by `AGENT_MEMORY_EMBEDDING_PROVIDER`: `sentence-transformers` (default) runs the model inside the process, or `cloudflare` calls Workers AI (see [Embedding](#embedding)) |
+| Embedding | `tencentdb_ai.get_embedding('bge-m3', …)` runs inside the database; the page says `bge-m3` is only an example | This extension is not available; the AI service embeds through `pydantic_ai.Embedder`, chosen by `AGENT_MEMORY_EMBEDDING_PROVIDER`: `sentence-transformers` (the default at that review) runs the model inside the process, or `cloudflare` calls Workers AI (see [Embedding](#embedding)) |
 | Apache AGE | Version 1.5.x, entity graph with openCypher | Not usable: `pg_available_extensions` on staging (PostgreSQL 17.11) has no `age` |
 | Access method | Direct SQL on the `memory.*` tables, or the `/memory/records` endpoint through PostgREST | PostgREST is not needed: Core does not read memory, and AI connects to the database directly |
 
@@ -46,7 +48,7 @@ The guide describes a do-it-yourself setup: users create the schema and tables t
 
 ## Embedding
 
-- The current chat provider is a gateway through `OPENAI_BASE_URL`; by default `MODEL_PROVIDER=anthropic` calls `/v1/messages` (`openai` calls `/v1/responses`, `openai-chat` calls `/chat/completions`) ([AI README](../../../backend/ai/README.md)). On 2026-10-14, calling `POST /v1/embeddings` (`text-embedding-3-small`) through the proxy configured in the AI `.env` returned 404. So the default (`AGENT_MEMORY_EMBEDDING_PROVIDER=sentence-transformers`) embeds with `paraphrase-multilingual-MiniLM-L12-v2` running locally in the AI service (the `memory` dependency group): no secret is needed and chat content is not sent out to be embedded; the `cloudflare` provider sends messages and facts to Cloudflare Workers AI to embed.
+- At the 2026-10-14 review, the chat provider was a gateway through `OPENAI_BASE_URL`; the then-default `MODEL_PROVIDER=anthropic` calls `/v1/messages` (`openai` calls `/v1/responses`, `openai-chat` calls `/chat/completions`) ([AI README](../../../backend/ai/README.md)). On 2026-10-14, calling `POST /v1/embeddings` (`text-embedding-3-small`) through the proxy configured in the AI `.env` returned 404. The default at that review (`AGENT_MEMORY_EMBEDDING_PROVIDER=sentence-transformers`) embeds with `paraphrase-multilingual-MiniLM-L12-v2` running locally in the AI service (the `memory` dependency group): no secret is needed and chat content is not sent out to be embedded; the `cloudflare` provider sends messages and facts to Cloudflare Workers AI to embed.
 - [VN-MTEB](https://arxiv.org/abs/2507.21500) (EACL 2026 Findings, 41 datasets translated from MTEB) only measures open-source models. Average Retrieval score (15 datasets) and overall average:
 
   | Model | Dim | Retrieval | Average |
@@ -89,7 +91,7 @@ Keep **D** until the PO approves the requirement. If the PO approves, follow **A
 
 ## Consequences
 
-- When building: add FR/NFR/AC to the PRD (and the BRD if the PO treats this as a new business scope), update [Chat context](../../contracts/api-contracts.md#chat-context), the [AI README](../../../backend/ai/README.md#chat-history-and-context), [Technical design §1](../technical-design.md#1-scope), `erd.dbml` and the privacy page if needed, because chat content is additionally sent to the chat model to extract and summarize facts.
+- When building: add FR/NFR/AC to the PRD (and the BRD if the PO treats this as a new business scope), update [Chat context](../../contracts/api-contracts.md#chat-context), the [AI README](../../../backend/ai/docs/architecture.md#chat-history-and-context), [Technical design §1](../technical-design.md#1-scope), `erd.dbml` and the privacy page if needed, because chat content is additionally sent to the chat model to extract and summarize facts.
 - When enabled with the `sentence-transformers` provider, the AI image must install the `memory` group (sentence-transformers, `torch`), because the current chat proxy does not serve `/v1/embeddings`. The `cloudflare` provider does not need this group but sends the shop owner's messages and facts to Cloudflare to embed, and needs `CLOUDFLARE_ACCOUNT_ID` and `CLOUDFLARE_API_TOKEN`.
 - Each turn with memory costs one extra embed on read (local, or one Workers AI call with `cloudflare`); after the turn it costs one more model call and one fact embed on write and, when old memory needs summarizing, at most 3 model calls and 3 embeds (each group takes one model call and one embed of the replacement facts).
 - The request and response of `/internal/v1/agent/chat` and `/api/v1/agent/chat` do not change; the `memory/settings` endpoint and the SSE event `memory` of the stream route are added in the "Additions" sections below.

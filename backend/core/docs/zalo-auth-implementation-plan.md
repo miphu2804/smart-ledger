@@ -5,6 +5,7 @@ description: "Design and implementation plan for Zalo web sign-in in Core."
 owner: Core owner
 status: stable
 author: miphu2804
+stale_after: 2026-12-15T20:00:02+07:00
 ---
 # CORE-015: Zalo authentication implementation plan
 
@@ -134,7 +135,7 @@ data. Cleanup is feature-gated and must not query nonexistent tables when Zalo
 - Enabled configuration needs app ID, app secret, exact HTTPS callback URL,
   allowlisted frontend origins and a separate 32-byte session encryption key.
   Environment variable names are defined in Core configuration/tests and
-  [Core authentication setup](../README.md#zalo-and-core-authentication),
+  [runtime configuration](#runtime-configuration),
   not inferred from the smoke helper's file.
 - Missing/unapproved schema is fail-closed, not auto-DDL. The feature must not be
   enabled on an application database until V17 from merged code is applied and rollout is approved.
@@ -150,6 +151,25 @@ data. Cleanup is feature-gated and must not query nonexistent tables when Zalo
 - Add abuse controls for public authorization/exchange and TTL cleanup; document
   per-instance versus shared limits honestly. They are not a substitute for
   deployment-level rate limiting.
+
+## Runtime configuration
+
+Zalo web and Android remain disabled by runtime default and require their reviewed V17/V18 rollout before activation. The canonical implementation plan owns the web contract and safeguards; the [Android runbook](zalo-android-preparation.md) owns V18 activation/recovery; the [manual guide](zalo-manual-login.md) is isolated local tooling only. Do not copy `ZALO_MANUAL_*` settings to a VPS.
+
+The host/IntelliJ configuration names are:
+
+| Variable | Meaning |
+|---|---|
+| `ZALO_ENABLED` / `ZALO_NATIVE_ENABLED` | Feature flags; both default `false` |
+| `ZALO_APP_ID`, `ZALO_APP_SECRET` | Provider ID and server-only secret; never FE/Git/logs/chat |
+| `ZALO_CALLBACK_URL` | Exact public HTTPS `/api/v1/auth/zalo/callback` |
+| `ZALO_CLIENT_ORIGINS` | Exact HTTPS FE origins, no path/trailing slash/wildcard |
+| `ZALO_SESSION_ENCRYPTION_KEY` | Standard Base64 of a separate random 32-byte AES key; not app/Firebase credentials |
+| `ZALO_SESSION_TTL_SECONDS`, `ZALO_PROOF_TTL_SECONDS` | Defaults 300/90; allowed 60–600 and 15–90, proof ≤ session |
+| `ZALO_HTTP_TIMEOUT_SECONDS` | Default 10; allowed 1–30 per provider request |
+
+No provider tokens, callback query/body, proof, verifier, cookies or credentials belong in logs. Configure trusted proxy handling and edge throttling before any hosted activation. Local Zalo tests use only disposable PostgreSQL and do not establish FE, real-provider, staging, APK or production acceptance.
+
 
 ## Local implementation checklist
 

@@ -32,7 +32,7 @@ cd backend/ai && uv run python -m src.main
 cd backend/ai && uv run uvicorn src.main:app --reload --port 8001   # or this one: restarts on each code change
 ```
 
-Scripts run the same way, without `python` in front: `uv run evaluation/run.py agent_chat --dry-run`. The [AI README](../../backend/ai/README.md#scripts) lists them.
+Scripts run the same way, without `python` in front: `uv run evaluation/run.py agent_chat --dry-run`. The [Evaluation guide](../../backend/ai/evaluation/README.md) owns evaluation commands and options.
 
 ```bash
 cd backend/ai && uv run ruff check && uv run ruff format --check && uv run pytest
@@ -156,7 +156,7 @@ After a pull request with a Core or AI migration merges, one person checks out `
    FLYWAY_ENABLED=true docker compose --env-file backend/core/.env --env-file backend/ai/.env up --build core
    ```
 
-2. Push the AI migrations, as in the [AI README](../../backend/ai/README.md#schema-and-migrations):
+2. Push the AI migrations, as in the [AI README](../../backend/ai/docs/architecture.md#database-and-migrations):
 
    ```bash
    npx supabase@2.119.0 db push --db-url "$POSTGRES_URL"

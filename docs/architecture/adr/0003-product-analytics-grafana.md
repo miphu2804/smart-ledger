@@ -4,7 +4,7 @@ title: "ADR-0003: Product analytics in Grafana, read from Core and AI data"
 description: "Proposed: product usage metrics in Grafana, read from Core and AI data through a read-only role."
 owner: not assigned
 status: draft
-generated: { by: human:miphu2804, at: 2026-11-06T22:18:48+07:00 }
+author: miphu2804
 ---
 # ADR-0003: Product analytics in Grafana, read from Core and AI data
 
@@ -27,7 +27,7 @@ generated: { by: human:miphu2804, at: 2026-11-06T22:18:48+07:00 }
 
 - Core is frozen except for the scope of PR #368 ([AGENTS.md](../../../AGENTS.md)); the P1 design must not edit Core, add migrations or add endpoints.
 - The VPS has 4 GB, and monitoring is limited to about 1 GB RAM; Grafana already uses 256 MB.
-- The Supabase session pooler allows only 15 clients; Core holds up to 10 (Hikari default), AI holds up to 4 ([AI README](../../../backend/ai/README.md#database-access)).
+- The Supabase session pooler allows only 15 clients; Core holds up to 10 (Hikari default), AI holds up to 4 ([AI README](../../../backend/ai/docs/architecture.md#database-and-migrations)).
 - The Supabase direct host is IPv6-only; a VPS without IPv6 uses the session pooler ([CI/CD](../../development/ci-cd.md#vps)).
 - Do not store or read PII through Grafana: no customer names/phone numbers, no chat content, no expense descriptions, no emails (except the columns approved for DAU/MAU).
 

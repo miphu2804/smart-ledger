@@ -5,6 +5,7 @@ description: "Technical map of the mobile screen flows, generated from Expo Rout
 owner: Product owner
 author: miphu2804
 status: stable
+stale_after: 2027-01-03T18:40:27+07:00
 ---
 # User flows
 

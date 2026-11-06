@@ -4,14 +4,14 @@ title: "ADR-0009: Trace every Agent chat turn to HoneyHive, redacting sensitive 
 description: "Accepted for AI: HoneyHive traces each Agent chat turn with redacted content; Core correlation still needs owner approval."
 owner: project owner
 status: stable
-generated: { by: human:miphu2804, at: 2026-11-06T22:18:48+07:00 }
+author: miphu2804
 ---
 # ADR-0009: Trace every Agent chat turn to HoneyHive, redacting sensitive data first
 
 - **Status:** Accepted for the AI part; the code was merged into `staging` through PR #467. The Core correlation part in section 4 is still Proposed and needs a separate owner approval under [AGENTS.md](../../../AGENTS.md#scope).
 - **Date:** 2026-11-01
 - **Owner:** the project owner decides to send chat content to HoneyHive; the AI service owner keeps the code and tests.
-- **Related:** [`NFR-007`, `NFR-008`](../../product/product-requirements.md), [ADR-0006](0006-deterministic-agent-guardrails.md), [ADR-0008](0008-bifrost-owns-routing-and-fallback.md), [AI README](../../../backend/ai/README.md#observability), [`src/observability.py`](../../../backend/ai/src/observability.py), [eval suite](../../../backend/ai/evaluation/agent_chat/README.md).
+- **Related:** [`NFR-007`, `NFR-008`](../../product/product-requirements.md), [ADR-0006](0006-deterministic-agent-guardrails.md), [ADR-0008](0008-bifrost-owns-routing-and-fallback.md), [AI README](../../../backend/ai/docs/architecture.md#observability), [`src/observability.py`](../../../backend/ai/src/observability.py), [eval suite](../../../backend/ai/evaluation/agent_chat/README.md).
 
 ## 1. Context
 

@@ -11,6 +11,8 @@ stale_after: 2027-01-05T22:18:48+07:00
 
 ## 1. Overview
 
+Current-schema review: `staging` commit `a2766ee3a37e23c0f03fd43383b608c1b2fac898`, against the checked-in V1–V20 SQL. Historical reviews below retain their original dates; no live database was inspected.
+
 CORE-019 adds owner-approved V20 on 2026-10-31: private `user_rate_limit_windows` and `user_rate_limit_reservations`, bringing the checked-in Core schema to 25 tables. Quota is committed with business changes; the feature remains default-off and this document does not establish shared-DB rollout. [Policy and recovery](../../backend/core/docs/user-rate-limits.md) describe activation and retention. The two tables below are additive; the earlier V19 review remains a dated snapshot.
 
 CORE-018 on `feat/core-daily-activity` added V19 and `user_daily_activity` on 2026-10-29; its historical review counted 23 Core tables at that revision. The previous full mapping review was V1–V18 (22 tables) against `feat/admin-dashboard-growth` at `3e93dd1` on 2026-10-26. These dated reviews do not override the current V1–V20/25-table mapping or establish shared-database migration.

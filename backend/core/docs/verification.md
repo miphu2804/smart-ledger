@@ -8,7 +8,7 @@ author: miphu2804
 ---
 # SmartLedger Core — verification and regression guide
 
-This guide owns detailed Core regression commands moved out of the service landing page. It is an engineering verification guide, not a product contract or deployment approval. The [API contracts](../../../docs/contracts/api-contracts.md), feature handoffs and [technical design](../../../docs/architecture/technical-design.md) own behavior; local tests prove implementation against their checked-in revision only.
+Source review: `staging` commit `a2766ee3a37e23c0f03fd43383b608c1b2fac898`. This Core-owned guide preserves detailed regression commands, provider setup and smoke procedures moved out of the service landing page. Commands and `scripts/` paths are relative to `backend/core` unless stated otherwise. It is an engineering verification guide, not a product contract or deployment approval. The [API contracts](../../../docs/contracts/api-contracts.md), feature handoffs and [technical design](../../../docs/architecture/technical-design.md) own behavior; local tests prove implementation against their checked-in revision only.
 
 ## Verification map
 
@@ -21,7 +21,7 @@ This guide owns detailed Core regression commands moved out of the service landi
 | Admin growth | [admin handoff](admin-dashboard-growth.md) | `AdminDashboardControllerWebTest,AdminAccessAuditServiceTest,AdminDashboardPostgresTest` |
 | Daily activity and quotas | [CORE-018](user-daily-activity.md), [CORE-019](user-rate-limits.md) | `UserDailyActivity*`, `UserRateLimit*` |
 | Stock adjustment | [CORE-021 handoff](stock-adjustments.md) | `ProductStockAdjustmentTest`, contract and product tests |
-| Media | [Core setup](../README.md#cloudinary-media) and [media contract](../../../docs/contracts/api-contracts.md#1-auth-and-shop) | `Cloudinary*`, `Media*`, `ImageUploadValidatorTest` |
+| Media | [Media setup](#cloudinary-media) and [media contract](../../../docs/contracts/api-contracts.md#1-auth-and-shop) | `Cloudinary*`, `Media*`, `ImageUploadValidatorTest` |
 | Zalo | [web plan/evidence](zalo-auth-implementation-plan.md), [Android runbook](zalo-android-preparation.md) | `*Zalo*`, Node popup/landing helpers |
 
 ## Migration evidence and safety
@@ -163,6 +163,69 @@ For a real local Cloudinary smoke test only, use a disposable/local schema with 
 [CORE-019](user-rate-limits.md) owns V20 commit-based cross-instance quotas. Enforcement defaults off; all writers must be upgraded before activation. Do not trust unreviewed forwarded headers, use RAM on storage errors, repair Flyway history or drop quota/business/audit tables during rollback. Replay remains free at full quota; provider I/O stays outside database transactions.
 
 V15 OWNER notifications use existing `notification_events` and `notification_recipients`, with nullable `products.low_stock_threshold`; no historical alerts or thresholds are backfilled. Tracked stock zero is OUT_OF_STOCK; positive stock at/below threshold is LOW_STOCK. Level changes, restocking above threshold, disabling tracking and archive resolve old alerts; a resolved alert remains unread until marked read. The read APIs use an OWNER bearer token and `shopId`, page 0 with size 1–100, and reject any inaccessible batch ID atomically; INACTIVE shops expose only status notifications and ARCHIVED shops are excluded. V15 adoption/migration failures roll back and require forward correction, never baseline/repair. `NotificationPostgresTest` and `SaleRefundMigrationPostgresTest` cover lifecycle, rollback, read concurrency and migration retry. No push delivery, device registration, email/SMS or FE acceptance is implied.
+
+## Cloudinary media
+
+Core accepts JPEG/PNG by validated bytes rather than filename/MIME, limits uploads to 5 MiB and 2048×2048, and never sends `CLOUDINARY_API_SECRET` or provider public IDs to clients. Startup fails if a media credential or unsafe prefix is missing. Use separate credentials or at least prefixes such as `smartledger/local`, `smartledger/staging` and `smartledger/prod`. Product image/logo uploads are public media; user avatars are authenticated media. When disabled, media writes return `503 media_unavailable`, cleanup is absent, and session endpoints still work with a stored avatar reference.
+
+Replacement/deletion writes a `media_cleanup_jobs` row with the database change. The worker claims PENDING jobs using `FOR UPDATE SKIP LOCKED`, checks current references and active uploads, and retries only PENDING jobs. Provider deletion occurs while the per-job transaction is open; an asset uploaded before a database rollback may still need operational cleanup. All uploads require `Idempotency-Key`; an active duplicate returns `409 media_upload_in_progress`, a completed request replays its snapshot, and expired leases are reclaimed atomically so stale uploaders cannot complete a newer lease. Firebase `avatar_url` remains the fallback; DELETE removes only a custom Cloudinary avatar, while disabled media returns `503` when a custom reference exists and returns `204` for an absent reference. Apply V13/V14 only through the reviewed migration workflow; see the [API contract](../../../docs/contracts/api-contracts.md#1-auth-and-shop) and [verification guide](#cloudinary-media).
+
+
+| Variable | Meaning |
+|---|---|
+| `CLOUDINARY_ENABLED` | `false` by default; enable only with all Cloudinary values below |
+| `CLOUDINARY_CLOUD_NAME`, `CLOUDINARY_API_KEY`, `CLOUDINARY_API_SECRET` | Server-only media credentials; never put them in mobile/web variables |
+| `CLOUDINARY_PUBLIC_ID_PREFIX` | Required when media is enabled; use a separate safe namespace such as `smartledger/local` |
+| `MEDIA_UPLOAD_LEASE_SECONDS` | PENDING upload lease, default `300`; expired leases can be reclaimed safely |
+| `CLOUDINARY_CLEANUP_FIXED_DELAY_MS` | Optional cleanup-worker delay, default `60000`; shorten only for local testing |
+
+## Browser, deployment and health checks
+
+For a browser calling Core directly, configure exact origins in the process running Core, for example:
+
+```powershell
+$env:CORS_ALLOWED_ORIGINS = 'http://localhost:8081,http://127.0.0.1:8081'
+```
+
+Use actual HTTPS FE origins in hosted environments, with no path or trailing slash. Wildcards and wildcard preview domains are rejected. CORS allows `Authorization`, `Content-Type`, `X-Shop-Id` and `Idempotency-Key`; it does not grant authentication or shop access. Native clients and PowerShell still use normal bearer and authorization checks.
+
+Unauthenticated health endpoints expose status without component details or credentials:
+
+| Endpoint | Purpose |
+|---|---|
+| `/actuator/health/liveness` | Process availability; no PostgreSQL/AI check |
+| `/actuator/health/readiness` | PostgreSQL readiness; `503` when not ready |
+| `/actuator/health` | Aggregate status and probe names |
+
+Point deployment checks at readiness. Health does not verify Firebase, schema completeness, AI availability or the whole business flow; health is the only exposed Actuator surface.
+
+Keep Firebase projects, database credentials, FE origins and internal tokens separate per environment. Do not set the Auth Emulator on staging/production, put service-account JSON or database passwords in Git/FE configuration, or use a production database for local tests. On production explicitly set `OPENAPI_ENABLED=false` and `SWAGGER_UI_ENABLED=false`; there is no automatic environment detection and later `--env-file`/process values can override earlier ones.
+
+After startup, test real Firebase tokens (valid, wrong project and expired), OWNER/ADMIN permissions and cross-shop denial, then the FE business flow with mocks disabled. Health or a mocked web test alone is not CORE-004 acceptance.
+
+### Read-only staging auth smoke check
+
+Use [scripts/verify_staging_auth.ps1](../scripts/verify_staging_auth.ps1) only against the actual HTTPS staging origin. It performs GET requests, creates no users/sessions/data, and is not production UAT. Prepare two existing OWNER profiles with different ACTIVE shops and one existing ADMIN through the approved fixture process; the script does not create them.
+
+Set `CORE_STAGING_URL`, `CORE_STAGING_FIREBASE_PROJECT_ID`, `CORE_STAGING_SHOP_A_ID`, `CORE_STAGING_SHOP_B_ID`, `CORE_STAGING_OWNER_A_TOKEN`, `CORE_STAGING_OWNER_B_TOKEN`, `CORE_STAGING_ADMIN_TOKEN`, `CORE_STAGING_WRONG_PROJECT_TOKEN` and `CORE_STAGING_EXPIRED_TOKEN` in the script process. Use genuinely issued Firebase ID tokens; do not edit JWTs, paste tokens into chat/source/command arguments, or use service-account JSON as an ID token. Clear token variables and close the terminal afterward.
+
+```powershell
+.\scripts\verify_staging_auth.ps1
+```
+
+The 54 checks cover readiness, rejection, roles, own-shop access and cross-shop/ADMIN denial across nine OWNER read APIs. JWT decoding checks fixture metadata only; signatures are verified by Core. Missing fixtures, redirects, network failures or unexpected contracts fail the run. The offline guard test uses synthetic fixtures and no network; neither it nor this smoke check proves FE integration, writes, provider UI or production state.
+
+
+## Time display
+
+Core stores UTC internally, API timestamps carry Vietnam's `+07:00` offset, and report periods use the Vietnam calendar. Clients must parse the offset, not add seven hours. Date/time inputs require `Z` or `+07:00`. To display PostgreSQL `TIMESTAMPTZ` in Vietnam time for one SQL connection:
+
+```sql
+SET TIME ZONE 'Asia/Ho_Chi_Minh';
+```
+
+This changes display only and must be reapplied after reconnecting.
+
 
 ## Zalo verification boundary
 

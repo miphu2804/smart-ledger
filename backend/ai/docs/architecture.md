@@ -9,13 +9,20 @@ stale_after: 2027-01-05T22:18:48+07:00
 ---
 # SmartLedger AI service architecture
 
-This guide is the canonical owner for volatile AI settings and implementation boundaries. It is checked against `backend/ai/src` at the current repository revision. An implemented code path, a default-off flag, a configured environment and an accepted or deployed feature are different states; this page does not infer deployment or product acceptance.
+This AI-owned guide is the canonical documentation owner for runtime settings and implementation boundaries, backed by `src/app_config.py` and composition in `src/main.py`. Source review: `staging` commit `a2766ee3a37e23c0f03fd43383b608c1b2fac898`; measured numbers retain their original evaluation context and were not remeasured. An implemented code path, a default-off flag, a configured environment and an accepted or deployed feature are different states; this page does not infer deployment or product acceptance.
 
 ## Service composition
 
 `src/main.py` builds the application, PostgreSQL history repository, optional Redis history cache, model factory, optional tier router, read-only shop-data repository, calculation service, Monty sandbox, optional memory service and observability. Core supplies the authenticated user/shop context and the internal token; the model cannot choose either tenant.
 
-A chat turn uses the latest `AGENT_HISTORY_TURNS` exchanges verbatim, with earlier ```` ```actions ```` blocks removed. The current shop time follows the message but is not stored. `chat_conversations.summary` and `summary_through_message_id` are unused compatibility columns.
+## Chat history and context
+
+- History is never summarized: older messages than `AGENT_HISTORY_TURNS` (default 30 exchanges) simply do not reach the model. 30 turns at the 2000-character cap fit a 100k-token window.
+- The current shop time (`Asia/Ho_Chi_Minh`) follows the new message after a cache breakpoint and is never stored, so instructions and history stay a cacheable prefix.
+- `AgentConversationRepository.recent_messages` checks the conversation belongs to the user and shop before reading it.
+- With `REDIS_URL` set, the repository keeps each conversation's latest messages in Redis for 24 hours, keyed by conversation, user and shop, so a repeat turn skips the database read; `save_exchange` updates a cached entry after it commits, `delete_conversation` removes it, and an unset or unreachable Redis makes every turn read PostgreSQL. Start a local one with `docker run -d --rm --name smartledger-local-redis -p 127.0.0.1:6379:6379 redis:7-alpine redis-server --maxmemory 64mb --maxmemory-policy allkeys-lru` and set `REDIS_URL=redis://127.0.0.1:6379/0`.
+- `chat_conversations.summary` and `summary_through_message_id` are unused and kept only so the previous release can roll back.
+
 
 ## Model provider and routing
 
@@ -27,6 +34,8 @@ A chat turn uses the latest `AGENT_HISTORY_TURNS` exchanges verbatim, with earli
 | `openai_chat` | `OpenAIChatProvider` | `/chat/completions` |
 
 The code default is `chat` → `gpt-6-luna` over `openai_responses` with `effort: medium`. An alias without an effort uses `MODEL_REASONING_EFFORT` (default `low`). `MODEL_FALLBACKS` is a JSON list of `protocol:model`; each fallback is built with the global reasoning effort (`low` by default), not the primary alias's effort. Fallbacks are mainly for direct-provider environments; Bifrost routing and fallback rules remain in `deploy/vps/bifrost.json`.
+
+`session_settings` sends `x-bf-session-id` (`conversation-<id>` for each turn; one-off IDs for drafts/memory) and `x-bf-lh-shop-id` for log grouping. Alias `effort` and `service_tier` map to `openai_reasoning_effort` and `openai_service_tier`; supported efforts depend on the model, while service tiers are `auto`, `default`, `flex` or `priority`. An omitted tier leaves the provider default. Fallback attempts use the remaining turn timeout, so they mainly cover fast failures.
 
 `OPENAI_API_KEY` is the shared provider or Bifrost virtual key. `OPENAI_BASE_URL` selects the OpenAI-compatible API and defaults to `https://api.openai.com/v1` when blank. Provider clients also send the key as `x-bf-vk`; OpenAI ignores that header. Through Bifrost, model IDs have no provider prefix. `mercury-3` is served by Inception through `/chat/completions`, so its alias must use `openai_chat`.
 
@@ -59,7 +68,15 @@ If tiering is off, the classifier URL is blank, or any tier alias is missing, ev
 
 The SQL guard rejects statements over 4000 characters, accepts exactly one `SELECT` over the allowlisted views/functions through `sqlglot`, re-renders it with `LIMIT`, and the repository runs it in one `READ ONLY` transaction with a bound shop ID, statement timeout, row cap and 200-character text-cell cap. A rejected query returns an `Error[CODE]` for the model to correct; connection and other operational failures fail the turn with `503 ai_unavailable`. Refunds, stock-in history and customer contacts are not exposed.
 
-`suggest_restock(period)` is also read-only. It considers `CONFIRMED` sales, uses `COVER_DAYS=7` and the closed periods `last_7_days`/`last_30_days`, and returns a suggested positive quantity. These policy defaults remain provisional and are not product acceptance.
+## Restock suggestions
+
+`suggest_restock(period)` returns tracked ACTIVE products below cover, most urgent first, each with a suggested quantity and a fixed Vietnamese reason. It changes nothing.
+
+- Only `CONFIRMED` sales in the period count.
+- Suggested quantity is `ceil(sold_qty / days * COVER_DAYS - max(stock_qty, 0))`, shown only when positive.
+- `COVER_DAYS` (7, in `src/restock/policy.py`) and the periods `last_7_days` and `last_30_days` are provisional.
+- It runs one fixed `SELECT` through the same guard and pool as `query_shop_data` and flags a list cut by the row cap.
+
 
 ## Guardrails and answer safety
 
@@ -91,7 +108,7 @@ The final answer may contain a generated ```` ```actions ```` block only for up 
 | Nested tool calls | `SANDBOX_MAX_TOOL_CALLS` (3) | Nested calls do not count against `AGENT_TOOL_CALL_LIMIT` |
 | Host suspensions | `SANDBOX_MAX_SUSPENSIONS` (1000) | Code Mode resource limit |
 
-The OS/container limit remains the final process boundary. If tools are later folded into Monty, keep its nested-call limit aligned with the per-turn tool limit to avoid multiplying database load.
+The wrapper passes tool names and resource limits to Code Mode; it adds no explicit host filesystem or network permission grants. `SANDBOX_TOOLS=()` exposes no nested data tools. This describes repository wiring, not an independently verified audit of every dependency sandbox permission. The OS/container limit remains the final process boundary. The outer guardrail counts one `run_code` as one call and does not see nested calls; if tools are later folded into Monty, keep its nested-call limit aligned with the per-turn tool limit to avoid multiplying database load. Calculation and sandbox defaults are provisional, not product acceptance.
 
 ## Long-term memory and ONNX embeddings
 
@@ -99,21 +116,34 @@ The OS/container limit remains the final process boundary. If tools are later fo
 
 The code default is `AGENT_MEMORY_EMBEDDING_PROVIDER=onnx` and `AGENT_MEMORY_EMBEDDING_MODEL=models/static-mrl-int8`. `OnnxEmbeddingModel` loads `model.onnx` and `tokenizer.json` with CPU `onnxruntime`, one thread per call, no torch, and stores 384-dimensional normalized vectors. The Docker image's pinned int8 export is the static multilingual model; it adds roughly 330 MB of memory and its measured memory-evaluation recall is lower than the comparison embeddinggemma result (0.753 versus 0.861 at 384 dimensions). A missing/unreadable model turns memory off while chat remains available.
 
-Other providers are `cloudflare` (Workers AI, sending owner text/facts outside the service) and `sentence-transformers` (the optional memory dependency group). Vectors from different models cannot be compared: changing provider/model requires a dry-run then applied `uv run python -m src.memory.reembed` with the new environment settings. For example, run the dry run first, then add `--apply`; the migration's `vector(384)` dimension must continue to match the embedder.
+Other providers are `cloudflare` (Workers AI, sending owner text/facts outside the service) and `sentence-transformers` (requires `uv sync --group memory`, omitted from the Docker image). Memory needs `20261014000000_agent_memories.sql` and `20261015000000_agent_memory_visibility.sql`; the migration's `vector(384)` dimension must match the embedder. A failed search answers without memories, the stream emits `memory` before its first `delta`, and extracted facts containing a Vietnamese phone number are dropped. The owner's switch defaults on when no row exists; switching it off stops recall/writes without deleting data.
+
+Vectors from different models cannot be compared. An authorized environment change must set the new embedding values and deploy before re-embedding, so memories written in between cannot keep old-model vectors. From `backend/ai` with that environment's `POSTGRES_URL` and new settings, run `uv run python -m src.memory.reembed` first as a dry run, then with `--apply`. Recall is off-target between deployment and completion; the script writes all vectors in one transaction, and rerunning with the old settings restores old-model vectors. This procedure is retained operational guidance, not authorization to change Dopbase or a shared database.
 
 ## Draft parser boundary
 
-`src/drafts/service.py` contains a text `DraftService.parse` for `SALE` and `EXPENSE`, but there is no draft HTTP route and no AI voice/image endpoint. The planned `/internal/v1/drafts/parse` remains target scope. The mobile Android voice flow is separate: it uses on-device sherpa-onnx speech recognition and the mobile rule-based `parseOrder()` parser; it does not call this service for order recognition.
+`DraftService.parse(shop_id, mode, text)` in `src/drafts/service.py` turns owner text or an STT transcript into a `DraftView`. It writes nothing and has no endpoint yet; the planned `/internal/v1/drafts/parse` and audio belong to #3.
+
+- `SALE` matches lines against the shop's ACTIVE catalog; an unknown id, ambiguous line or `confidence` below 0.7 leaves the product empty with a Vietnamese warning, and a line with quantity 0 or less is dropped with one. Price always comes from the catalog.
+- `EXPENSE` makes one line per expense with the amount in `unit_price`.
+- Any model or catalog failure raises `DraftUnavailableError`, which the endpoint is to map to `503 ai_unavailable`.
 
 ## Streaming and persistence
 
-History and input checks run before the first byte. A pre-stream failure is normal JSON; a later failure is an SSE `error` event. The agent uses `agent.iter()` with `stream_text(delta=True)` so later tool calls are not skipped. `reset` discards text that preceded a data-tool call or retry; the stored answer equals the text after the last reset. Nothing is saved if the run is incomplete or the client closes the stream.
+The [stream contract](../../../docs/contracts/api-contracts.md#chat-answer-stream) defines the events. How the service produces them:
+
+- History and input checks run before the first byte, so a pre-stream failure is a normal JSON error; a later failure ends the stream with an `error` event carrying the same code.
+- The run uses `agent.iter()` with `stream_text(delta=True)`; `run_stream` would stop at the first final-looking output and skip later tool calls.
+- `AnswerScreen.screened_prefix` releases only text no continuation can turn into a leak, holding back a short tail (up to 400 characters after a `select`).
+- `reset` discards shown text when a data tool call or a retry follows it. The text after the last `reset` always equals the stored answer.
+- Nothing is saved unless the run completes; closing the stream cancels the run.
 
 ## Observability
 
-`/metrics` exposes request rate, status and latency through `prometheus-fastapi-instrumentator`, timed to the last streamed byte. Logs avoid shop data at normal levels: tool names, call IDs, argument/result sizes and error codes are visible at `INFO`/`WARNING`; SQL, results, reasons and memory tracebacks are `DEBUG`-only.
-
-With `HH_API_KEY` and `HH_SOURCE=production`, one HoneyHive session covers a chat turn and its model, tool and embedding spans. The redacted question, prompts, tool arguments/results and answer are content in the trace; raw media is not sent, but customer names and phone numbers typed by an owner can reach HoneyHive (`NFR-008`). The tier classifier records a separate model span with Bifrost-reported usage. `HH_SAMPLE_RATE` controls sampling. Any other source, including local and staging, sends no traces. HoneyHive is not the business database; runtime traces do not populate the planned `ai_requests` table.
+- **Logs:** stdout at `LOG_LEVEL`. At `INFO` and `WARNING`, `src/agent/tool_events.py` logs each tool call with its name, call id and the size of its arguments and result, and a rejected query, a turn without an answer or a failed memory step logs its code or error type, so server logs hold no shop data; the SQL, results and reasons, each cut to 1000 characters, and memory tracebacks log at `DEBUG` only. A tool retry logs at `WARNING`.
+- **Traces:** with `HH_API_KEY` set and `HH_SOURCE=production`, `src/observability.py` sends one [HoneyHive](https://docs.honeyhive.ai/v2) span per turn, model request, tool call and memory embedding, with timing, model, tokens, tool names, errors, `shop_id` and the content, grouped into one HoneyHive session per turn. The content is the prompts, the redacted question, tool arguments, tool results and the answer, so customer names and phone numbers the owner types reach HoneyHive (`NFR-008`); raw media does not, and `InputRedaction` removes keys, tokens, card numbers, IBANs and emails before the session opens. `tests/unit_tests/test_observability.py` checks both. The session opens with the redacted question, `user_id`, `shop_id`, `conversation_id`, the model, `prompt_version` (a hash of the instructions and tool definitions) and `git_sha`, the commit the deploy workflow builds into the image, and closes with the answer and the turn's tokens, model requests and tool calls, plus `first_text_ms` for a streamed turn, the wait from the turn's arrival to the first words the owner sees, memory recall and any preamble included, so the session list reads like the chat and filters by prompt version or release. A turn that fails, times out or is cancelled instead gets `metadata.error`, the guardrail code such as `answer_timeout`, the exception type, or `cancelled` when the owner closed the stream. Each update waits for the session to be created first, up to five seconds, because HoneyHive loses an update for a session it does not have yet, and a session HoneyHive refuses logs a `WARNING`. Those updates are blocking HTTP calls, so they run on two threads of their own and a slow HoneyHive cannot hold the threads the database calls use. The tier classifier calls Bifrost's `/v1/decisions` over plain HTTP, which no agent instrumentation sees, so it records its own `tier classifier` span of type `model` inside the turn's `llm router` span, with the model and the `prompt_tokens`, `completion_tokens` and `total_tokens` Bifrost reports, which HoneyHive adds to the session's token totals and model events. Only the chat agent opens sessions; memory runs inside the chat turn's session with its `shop_id`, and a draft run has none, so the SDK drops its spans. `HH_SAMPLE_RATE` (default 1) traces that share of turns; a turn outside the sample opens no session, so the SDK drops its spans too, and the SDK's warning for each dropped span is filtered out. A turn sends about seven events, more with tool calls, against the free plan's monthly cap. Cost stays 0 on HoneyHive: it sums the `metadata.cost` the app sets on events and prices nothing itself, and Bifrost, which prices every model request, writes that cost only to its own log, so read it there (`deploy/vps/bifrost.json` holds the one price override, for `mercury-3`, which Bifrost's built-in price list lacks). Cloudflare embeddings, when selected, run outside Bifrost and have no cost record there; the default ONNX embedder runs locally. Any other `HH_SOURCE` (the default `local`, or `staging`) turns tracing off, so the free plan's monthly events stay for production. FastAPI requests are not instrumented because that would record the unredacted message. The turn waits on HoneyHive only once, before its first span, until the session exists, up to five seconds: a span that reaches HoneyHive first makes it create the session itself with source `api`, start time 0 and no inputs, which the later start does not fix. The session start goes out before the history read, so the read hides part of that wait, and `history_ms` reaches the session as a later update; a slow or down HoneyHive costs a turn at most that wait and loses only the session fields and the spans. The session fields go out through HoneyHive's sessions API with the turn's start time, because the SDK's `acreate_session` sends none and HoneyHive would then time the session from 1970 to its last span. On shutdown the app waits up to ten seconds for memory writes, cancels any still running before the database pool closes, waits up to ten seconds for session updates, flushes queued spans for up to five seconds, then shuts the tracer down; `deploy/vps/compose.yaml` gives the container 60 seconds to stop, enough for an open stream to finish first. Tracing starts in `lifespan`, not at import, and the tests clear `HH_API_KEY`, so a test run sends nothing to HoneyHive.
+- **Online evaluators:** HoneyHive scores every new `query_shop_data` call for a refused query and every turn's answer, on its session, for leaked internals, figures no tool supports, forbidden Markdown, a chart the app cannot draw and a reply not in Vietnamese, with Python evaluators kept as config as code in [`.honeyhive`](../../../.honeyhive/README.md) at the repository root, together with the charts and the alerts on a slow p95 turn, on the query error rate and on failed turns, all on `production` traffic only; `sync-evaluators.sh` and `sync-dashboards.sh` there apply them, by hand or from the workflows on a merge into `main`.
+- **Metrics:** `/metrics` exposes request rate, status and latency per route through `prometheus-fastapi-instrumentator`, timed to the last streamed byte, for the dashboards in `deploy/monitoring/`.
 
 ## Database and migrations
 

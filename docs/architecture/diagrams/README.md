@@ -13,6 +13,8 @@ Sources live in [`src/`](src/), exports in [`images/`](images/). Reference: [`sr
 
 ## Reading scope — Core audit 2026-10-26
 
+The artifact classification below preserves dated diagram evidence. Its current schema boundary was checked against `staging` commit `a2766ee3a37e23c0f03fd43383b608c1b2fac898`; this documentation review did not rerender diagrams or inspect live deployment.
+
 | Artifact | What it represents | Implementation boundary |
 |---|---|---|
 | `architecture.mmd`, `architecture.drawio`, `architecture.svg/png` | Target architecture, including future services/infrastructure | Use [technical design §1](../technical-design.md#1-scope) for code status; the target image does not prove those services exist |

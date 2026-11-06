@@ -21,7 +21,7 @@ SmartLedger AI is the internal FastAPI service for the owner's Agent chat. Core 
 
 ## Routes
 
-`src/main.py` is the composition root. Every `/internal/v1` route inherits the `X-Internal-Token` check. `/health` and `/metrics` are unauthenticated and remain container-network endpoints.
+`src/main.py` is the composition root. Every `/internal/v1` route inherits the `X-Internal-Token` check. `/health` and `/metrics` are unauthenticated; hosted delivery must restrict them to the internal network. The local Compose stack publishes the AI port, so local reachability is not an access-control guarantee. `/health` checks no dependency.
 
 | Method | Path | Purpose |
 |---|---|---|
