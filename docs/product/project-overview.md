@@ -1,10 +1,17 @@
+---
+type: Product Overview
+title: "Mô tả sản phẩm"
+description: "Vị trí sản phẩm, người dùng và phạm vi MVP môn EXE201 của Sổ Nghe Lời."
+owner: Chủ sản phẩm
+status: stable
+generated: { by: human:TranTho918, at: 2026-11-06T04:32:37+07:00 }
+stale_after: 2027-01-05T04:32:37+07:00
+---
 # Mô tả sản phẩm
 
 | Siêu dữ liệu | Giá trị |
 |---|---|
 | Trạng thái | MVP môn EXE201 — tập trung luồng cốt lõi, demo đầu-cuối và kiểm chứng người dùng |
-| Chủ sở hữu | Chủ sản phẩm |
-| Cập nhật lần cuối | 2026-11-06 |
 | Tên tiếng Anh | So Nghe Loi — AI Voice POS |
 
 ## Tài liệu liên quan
@@ -15,7 +22,7 @@
 - [Yêu cầu sản phẩm](product-requirements.md): hành vi sản phẩm có thể quan sát và nghiệm thu.
 - [Demo và kiểm chứng MVP](mvp-demo-validation.md): kịch bản, dữ liệu thử, phản hồi và cách chọn việc còn lại cho EXE201.
 - [Thiết kế kỹ thuật](../architecture/technical-design.md): cách hệ thống hiện thực yêu cầu sản phẩm đã duyệt.
-- [Sơ đồ kiến trúc MVP](../architecture/diagrams/src/architecture.mmd): Mobile, Core, Data, AI và AI infrastructure.
+- [Sơ đồ kiến trúc đích](../architecture/diagrams/src/architecture.mmd): Mobile, Core, Data, AI và AI infrastructure.
 
 ## 0. Tra nhanh shorthand
 
@@ -23,7 +30,7 @@
 |---|---|
 | `AI` | Artificial Intelligence — trí tuệ nhân tạo. |
 | `API` | Application Programming Interface — giao diện để các hệ thống trao đổi dữ liệu. |
-| `MVP` | Minimum Viable Product — phiên bản tối thiểu để kiểm chứng giá trị sản phẩm. |
+| `MVP` | Phạm vi phát hành đầu tiên của SmartLedger, nay đang chạy production. Tên này được giữ làm nhãn phạm vi và ưu tiên (ví dụ `P0 — MVP`) để không đổi truy vết; nó không có nghĩa sản phẩm còn là bản thử nghiệm. |
 | `POS` | Point of Sale — hệ thống ghi nhận và quản lý bán hàng tại điểm bán. |
 | `STT` | Speech-to-Text — chuyển giọng nói thành văn bản. |
 
@@ -33,7 +40,7 @@ Sổ Nghe Lời là dự án MVP của nhóm trong môn EXE201: thử nghiệm c
 
 Hai giao diện đã có vẫn được giữ: `OWNER` dùng mobile vận hành tiệm; `ADMIN` dùng web hỗ trợ hồ sơ/trạng thái và không sửa sổ của chủ tiệm. Nhóm ưu tiên nối và làm ổn định luồng OWNER; chọn phần hỗ trợ có ích để demo thêm, không mở rộng dashboard chỉ để đủ nhiều tính năng.
 
-Mobile có đường nhận giọng nói theo nền tảng và parser FE; Bobi chat gọi AI qua Core. Các API parse audio/ảnh mới, RAG và memory dài hạn chưa cần hoàn thành cho demo chính. Mọi đề xuất phải được người bán kiểm tra, AI không tự ghi sổ. Phần đã triển khai và giới hạn tích hợp được ghi tại [thiết kế kỹ thuật §1](../architecture/technical-design.md#1-phạm-vi); thay đổi ưu tiên không xóa chức năng hoặc biến phần chưa có thành đã có.
+Mobile có đường nhận giọng nói theo nền tảng và parser FE; Bobi chat gọi AI qua Core. Các API parse audio/ảnh mới, RAG và memory dài hạn chưa cần hoàn thành cho demo chính. Mọi đề xuất phải được người bán kiểm tra, AI không tự ghi sổ. Phần đã triển khai và giới hạn tích hợp được ghi tại [thiết kế kỹ thuật §1](../architecture/technical-design.md#1-scope); thay đổi ưu tiên không xóa chức năng hoặc biến phần chưa có thành đã có.
 
 ## 2. Vấn đề
 
@@ -84,7 +91,7 @@ Không yêu cầu thêm microservice, nhiều vùng, mục tiêu tải lớn, SL
 
 MVP không phải phần mềm kế toán, không tính/kê khai thuế, thu hộ hoặc quản lý kho đầy đủ theo lô/kho. Lợi nhuận là ước tính vận hành; đơn bán không phải hóa đơn điện tử. Demo dùng dữ liệu thử không nhạy cảm và công bố giới hạn auth/privacy; phạm vi môn học không làm mất yêu cầu bảo vệ dữ liệu hoặc chứng minh đủ điều kiện thương mại.
 
-ADMIN không được giả danh OWNER hoặc sửa invoice, expense, debt và tồn kho trong MVP. Truy cập dữ liệu hỗ trợ phải có audit.
+ADMIN không được giả danh OWNER hoặc sửa invoice, expense, debt và tồn kho. Truy cập dữ liệu hỗ trợ phải có audit.
 
 ## 8. Mở rộng hóa đơn điện tử — chưa cam kết vào MVP
 
@@ -92,6 +99,6 @@ Hoãn sau EXE201. Các mã ứng viên và câu hỏi pháp lý được giữ t
 
 ## 9. Nguồn và giới hạn
 
-- Nguồn lịch sử Core/FE: FE EXE201, kiểm tra 2026-09-15. Xem [thiết kế kỹ thuật §1](../architecture/technical-design.md#1-phạm-vi) để phân biệt hiện trạng với đích MVP.
+- Nguồn lịch sử Core/FE: FE EXE201, kiểm tra 2026-09-15. Xem [thiết kế kỹ thuật §1](../architecture/technical-design.md#1-scope) để phân biệt hiện trạng với đích MVP.
 - Ưu tiên EXE201 theo chỉ đạo chủ dự án ngày 2026-11-06; không thay API hoặc trạng thái triển khai chỉ bằng việc sửa docs.
 - Kết quả demo và phản hồi phải được ghi sau khi thực hiện theo [mẫu kiểm chứng](mvp-demo-validation.md#5-ghi-kết-quả-và-chọn-việc-còn-lại); đợt sửa tài liệu không chạy lại ứng dụng hoặc tự xác nhận BO/AC đạt.

@@ -1,3 +1,13 @@
+### 2026-11-06 — Docs describe SmartLedger as running in production, are in English outside product and carry OKF frontmatter
+
+| Area | Change |
+|---|---|
+| Docs index | • All 31 documents in `docs/` start with OKF v0.2 frontmatter (`type`, `title`, `description`, `owner`, `status`, `generated`, `stale_after`); the owner and last-update rows left the metadata tables<br>• `docs/index.md` lists every document for agents and replaces the hand-kept document map in `docs/README.md`; a one-off script built the indexes and was then removed, so agents keep them by hand under the `AGENTS.md` rules<br>• `AGENTS.md` requires docs to change in the same pull request as the code, refreshed dates, an updated index and no new document for a topic that already has one |
+| Docs language and index | • Every document outside `docs/product/` is in English: technical design, API contracts, the ADRs, design, marketing, the READMEs under `docs/`, the frontend READMEs and `BLOCKERS.md`; anchors changed with the headings and 79 links across the repository were rewritten (0 broken)<br>• The index also covers 23 repository documents outside `docs/` (service READMEs, `backend/core/docs/`, `CONTRIBUTING.md`, `SECURITY.md` and others) with frontmatter, uses strict OKF entries (title, path and description) and gives every folder with two or more entries its own `index.md`<br>• `generated.by` names the person who last changed a document (`human:<GitHub login>`, from Git history for untouched documents) and every timestamp uses `+07:00`; `AGENTS.md` and the docs conventions state the rules<br>• Fixed on the way: the frontend README no longer says web admin has no Core API, the mobile README no longer lists Google sign-in as missing, and the ADR-0003 link to a missing anchor |
+| Docs | • `AGENTS.md`, the docs index, technical design, API contract, ERD description, diagram guide and the mobile README say SmartLedger runs in production and no longer call it documentation-first; the architecture is called the target architecture<br>• Stacked on #550: the product documents keep its EXE201 course MVP priorities and wording, gain frontmatter and index entries, and its new audit and demo documents are listed in `docs/product/index.md`; the EXE201 priority paragraph in technical design §1 is translated to English<br>• Warnings about provisional requirements, unaccepted features and the auth gap stay as they were |
+
+Check: `grep -rniE "\bMVP\b|prototype|documentation-first"` over the Markdown files; the remaining hits are scope or priority labels, dated decisions (ADRs, open questions, the mobile UI migration plan), design prototype references and the diagram label "MVP target" in `architecture.drawio`, left because its SVG and PNG would need a re-export. Commit: the one that adds this entry.
+
 ### 2026-11-06 — Tập trung hoàn thành MVP môn EXE201
 
 | Area | Change |
@@ -185,11 +195,3 @@ Check: `bifrost.json` passes `check-jsonschema` against the `transports/v2.4.0` 
 | Web | • Admin header: no subtitle under the page title and no line under the header<br>• Khách hàng and Nhật ký truy cập: the faded "dữ liệu hỗ trợ tối thiểu" and log notices are gone<br>• The avatar moves from the header to the bottom of the sidebar, under Hệ thống, as a row with name and role; clicking it opens the menu above it (email, Hồ sơ, Phiên & quyền truy cập, Đăng xuất); when the sidebar is collapsed only the avatar shows and the menu opens 240 px wide<br>• Admin labels say "chủ tiệm" instead of OWNER or "chủ cơ sở" (the role value stays `OWNER`)<br>• On desktop (1280 px and up) the sidebar column stays 72 px and the open sidebar slides over the content, which is centered up to 1200 px wide, so opening or closing it never moves the content; it starts collapsed |
 
 Check: `npm run typecheck`, `oxlint` and `npm run build` pass; on the mock admin at 1440 × 900, 1024 × 768 and 375 × 812 the menu opens above the avatar and is not cut off. Not verified: real Core mode in a browser. Commit: the one that adds this entry.
-
-### 2026-11-04 — LLM router call shows up in HoneyHive
-
-| Area | Change |
-|---|---|
-| AI | • The tier classification call to Bifrost runs inside an `llm router` span of the turn's HoneyHive session, with the user messages as input, the tier and alias as output and the mechanism as metadata; the classifier calls Bifrost over plain HTTP, which the agent instrumentation never saw |
-
-Check: `uv run ruff check` and `uv run pytest tests/unit_tests` (472 passed). Not verified: the span on a real HoneyHive session, since traces run only in production. Commit: the one that adds this entry.

@@ -1,3 +1,12 @@
+---
+type: Reference
+title: "User flows"
+description: "Screen-to-screen map of the mobile app with staging screenshots, linked to source files and `FR-*` codes."
+owner: Chủ sản phẩm
+status: stable
+generated: { by: human:orei1i, at: 2026-11-04T18:40:27+07:00 }
+stale_after: 2027-01-03T18:40:27+07:00
+---
 # User flows
 
 The user flow map shows how the mobile app moves from screen to screen: screenshots, decisions, system steps and failure edges in red, each node linked to its source file under `frontend/mobile` and its `FR-*` codes in the [PRD](../product-requirements.md).

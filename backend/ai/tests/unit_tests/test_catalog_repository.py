@@ -110,4 +110,4 @@ def test_catalog_product_id_is_int_matching_the_core_bigint_contract() -> None:
 
     contract = (REPO_ROOT / "docs/contracts/api-contracts.md").read_text()
     assert '"product_id": "uuid-or-null"' not in contract
-    assert "`product_id` là `BIGINT`" in contract
+    assert "`product_id` is the `BIGINT`" in contract

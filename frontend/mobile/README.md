@@ -1,170 +1,179 @@
+---
+type: Service Guide
+title: "Sổ Nghe Lời — Mobile (Expo)"
+description: "How to run, configure and test the OWNER mobile app, including Firebase, speech and Core setup."
+owner: FE owner
+status: stable
+generated: { by: human:miphu2804, at: 2026-11-06T22:18:48+07:00 }
+stale_after: 2027-01-05T22:18:48+07:00
+---
 # Sổ Nghe Lời — Mobile (Expo)
 
-App OWNER của Sổ Nghe Lời. Chế độ chạy lấy hoàn toàn từ env: `EXPO_PUBLIC_API_ENDPOINT`, `EXPO_PUBLIC_USE_MOCK`, `EXPO_PUBLIC_MOCK_CORE`, `EXPO_PUBLIC_MOCK_SHOPS` bắt buộc đặt (copy `.env.example`), thiếu thì app dừng ngay khi mở (`src/config.ts`). `USE_MOCK=false` dùng Firebase và Core thật (xem [Nối Core thật](#nối-core-thật)); đặt `EXPO_PUBLIC_USE_MOCK=true` để mọi lời gọi Core đi vào bộ giả lập trong bộ nhớ `src/lib/mockCore.ts` — mở app là test được ngay, không cần backend.
+The OWNER app of Sổ Nghe Lời. The run mode comes entirely from env: `EXPO_PUBLIC_API_ENDPOINT`, `EXPO_PUBLIC_USE_MOCK`, `EXPO_PUBLIC_MOCK_CORE` and `EXPO_PUBLIC_MOCK_SHOPS` must be set (copy `.env.example`), and the app stops on launch if any is missing (`src/config.ts`). `USE_MOCK=false` uses the real Firebase and Core (see [Connect to the real Core](#connect-to-the-real-core)); set `EXPO_PUBLIC_USE_MOCK=true` so every Core call goes to the in-memory simulator `src/lib/mockCore.ts` — the app is testable right away, with no backend.
 
-Stack: Expo SDK 57 · React Native 0.86 · expo-router · TypeScript · react-native-svg · font Plus Jakarta Sans.
+Stack: Expo SDK 57, React Native 0.86, expo-router, TypeScript, react-native-svg, the Plus Jakarta Sans font.
 
-## Chạy
+## Run
 
 ```bash
 npm install
-npx expo start          # quét QR bằng Expo Go (bản hỗ trợ SDK 57)
-npm run web             # hoặc bấm w: chạy trên trình duyệt (khung giới hạn 440px)
+npx expo start          # scan the QR with Expo Go (a build that supports SDK 57)
+npm run web             # or press w: run in the browser (440px frame)
 npm run typecheck
-npm test                # test parser câu trả lời của trợ lý (node --test, không cần thiết bị)
-npm run export:web      # build web tĩnh ra dist/
-../../scripts/release/ios-device-release.sh   # mặc định: build Release (Core staging) và cài lên iOS Simulator; menu cho chọn iPhone đã ghép; --simulator, --device <tên|UDID>, --check chỉ kiểm tra
-../../scripts/release/android-release.sh      # mặc định trên máy: build APK Release (Core staging) cho ABI của emulator, cài và mở trên Android emulator (tự bật AVD nếu chưa chạy)
-../../scripts/release/android-release.sh --build-only [--abis arm64-v8a]   # chỉ build APK giống hệt CI và in dung lượng; --install [--device <serial>] cài lên điện thoại qua adb; --check chỉ kiểm tra
+npm test                # tests for the assistant answer parser (node --test, no device needed)
+npm run export:web      # build static web into dist/
+../../scripts/release/ios-device-release.sh   # default: build Release (staging Core) and install on the iOS Simulator; a menu picks a paired iPhone; --simulator, --device <name|UDID>, --check only checks
+../../scripts/release/android-release.sh      # default on a machine: build a Release APK (staging Core) for the emulator ABI, install and open it on the Android emulator (starts the AVD if it is not running)
+../../scripts/release/android-release.sh --build-only [--abis arm64-v8a]   # build the APK exactly like CI and print its size; --install [--device <serial>] installs on a phone through adb; --check only checks
 ```
 
-Hai script build trên máy tự kiểm tra môi trường trước khi build. Máy mới cài thiếu gì (Xcode, license, CocoaPods, JDK 17, Android Studio và SDK, file Firebase, Apple ID, provisioning profile, iPhone chưa bấm Trust, Developer Mode, USB debugging, điện thoại không hợp ABI hoặc Android quá cũ, máy đã cài bản ký key khác…) thì script liệt kê đủ các lỗi, mỗi lỗi kèm cách sửa, rồi hỏi có muốn mở trang tải, mở Xcode hoặc Android Studio, hay chạy lệnh sửa không. Mỗi lần chỉ chạy một cách sửa: lệnh chạy thành công thì script tự kiểm tra lại từ đầu, còn mở trang hay mở app thì script dừng để bạn làm xong rồi chạy lại. Thiếu iOS Simulator runtime hoặc chưa có AVD thì script đề xuất lệnh tải hoặc tạo. Nếu Node đầu PATH khác bản ghim (`NODE_MAJOR` trong `mobile-release.yml`) mà bản ghim đã cài qua Homebrew `node@22`, nvm, fnm, Volta, asdf, mise hoặc n, script tự dùng bản ghim cho lần chạy đó (không đổi Node mặc định của máy), cài lại `node_modules` khi lần cài trước chạy bằng major khác, và ghi lại đường dẫn Node cho Xcode trong `ios/.xcode.env.local`. Thông báo trong terminal viết bằng tiếng Anh.
+The two local build scripts check the environment before building. When a new machine is missing something (Xcode, its license, CocoaPods, JDK 17, Android Studio and the SDK, Firebase files, an Apple ID, a provisioning profile, an iPhone that has not tapped Trust, Developer Mode, USB debugging, a phone with an unsupported ABI or an Android version that is too old, an installed build signed with a different key…), the script lists every error with its fix, then asks whether to open the download page, open Xcode or Android Studio, or run the fix command. It runs one fix at a time: when a command succeeds the script rechecks from the start, and when it opens a page or an app it stops so you can finish and run it again. When the iOS Simulator runtime or an AVD is missing, the script offers the command to download or create it. If the first Node on PATH differs from the pinned version (`NODE_MAJOR` in `mobile-release.yml`) and the pinned version is installed through Homebrew `node@22`, nvm, fnm, Volta, asdf, mise or n, the script uses the pinned version for that run (without changing the machine's default Node), reinstalls `node_modules` when the previous install ran on a different major, and records the Node path for Xcode in `ios/.xcode.env.local`. Terminal messages are in English.
 
-## Xem thử với dữ liệu mẫu
+## Try it with sample data
 
-- Bấm **Tạo tài khoản** ở chân thẻ đăng nhập, nhập email và mật khẩu bất kỳ (từ 6 ký tự); màn xác minh email chỉ cần bấm **Tôi đã xác minh**. Bản dev có nút **Vào app** dưới thẻ để vào thẳng người dùng mẫu.
-- Email nào cũng là người dùng mới: sau khi xác minh sẽ đi qua bước tạo tiệm (tên + ngành hàng). Chỉ nút **Vào app** (bản dev) mới vào thẳng tiệm mẫu “Tiệm tạp hoá cô Thỏ”.
-- Lần đầu một tài khoản vào Tổng quan trên máy, app chạy hướng dẫn dạng lớp phủ `src/components/GuideTour.tsx` (các bước ở `src/lib/guideSteps.ts`): khoanh sáng từng nút (Đọc đơn, Chọn hàng, Quét mã, Trợ lý, Bobi, Thông báo, menu chuyển nhanh, tab Đơn hàng, tab Quản lý). Xong hoặc bỏ qua thì nhớ trên máy, không tự mở lại; xem lại ở Quản lý → Xem lại hướng dẫn.
-- Tải lại app (reload) để đưa dữ liệu trong bộ nhớ về trạng thái ban đầu.
+- Tap **Tạo tài khoản** at the bottom of the sign-in card and enter any email and password (6 characters or more); on the email verification screen just tap **Tôi đã xác minh**. Dev builds have a **Vào app** button under the card that goes straight to the sample user.
+- Every email is a new user: after verification it goes through shop creation (name and industry). Only the **Vào app** button (dev builds) goes straight to the sample shop “Tiệm tạp hoá cô Thỏ”.
+- The first time an account opens Tổng quan on a device, the app runs the overlay guide `src/components/GuideTour.tsx` (steps in `src/lib/guideSteps.ts`): it highlights each button (Đọc đơn, Chọn hàng, Quét mã, Trợ lý, Bobi, Thông báo, the quick-switch menu, the Đơn hàng tab, the Quản lý tab). Finishing or skipping is remembered on the device and the guide does not reopen by itself; replay it from Quản lý → Xem lại hướng dẫn.
+- Reload the app to reset the in-memory data to its initial state.
 
-## Màn hình
+## Screens
 
-| Route | Màn |
+| Route | Screen |
 | --- | --- |
 | `/` | Splash |
-| `/(auth)/welcome`, `/email`, `/verify-email`, `/profile`, `/setup` | Chọn cách đăng nhập, email + mật khẩu (đăng ký, quên mật khẩu), xác minh email, nhập tên lần đầu, tạo tiệm |
-| `/(tabs)` | Trang chủ: doanh thu hôm nay/tuần này/tháng này, việc cần xử lý, gợi ý và bán chạy |
-| `/analytics` | Phân tích theo kỳ: doanh thu, diễn biến theo giờ/ngày trong tuần/tuần trong tháng, chi phí, lãi gộp ước tính, bán chạy, công nợ |
-| `/(tabs)/invoices` | Đơn hàng: cuộn vô hạn, 20 đơn mỗi lần; lọc theo thời gian và tìm kiếm chạy ở Core |
-| `/(tabs)/sales` | Bán hàng: vào thẳng danh mục theo số trang (20 món mỗi trang, tìm/lọc/sắp xếp ở Core), chọn món và xem giỏ; Zen ring (kéo thả, dính cạnh trái/phải, giữ vị trí qua các tab) mở Hỏi đáp, Đọc đơn hoặc Báo cáo hôm nay |
-| `/(tabs)/more` | Quản lý: hồ sơ, báo cáo, hàng hoá, chi phí, công nợ, cài đặt và đăng xuất |
-| `/expenses` | Chi phí theo tháng, cơ cấu chi, thêm chi phí bằng giọng nói / nhập tay |
-| `/voice` | Đọc đơn: nhập văn bản hoặc giữ nút mic, hỏi thêm món lạ vào danh mục, sửa số lượng. Mic: web dùng Web Speech API (`vi-VN`); Android dùng model sherpa-onnx chạy trên máy (xem “Nhận dạng giọng nói trên Android”), không còn câu mẫu giả. Không có gì hỗ trợ thì app báo rõ và dùng nút Nhập tay |
-| `/pos` | Chọn hàng nhanh dạng lưới, giỏ hàng, thêm nhanh mặt hàng vào danh mục |
-| `/checkout` | Thanh toán: tiền mặt (tiền thối), chuyển khoản (QR minh hoạ), ghi nợ |
-| `/invoice/[id]` | Chi tiết đơn bán nội bộ: xem đơn, void toàn bộ và xem khoản hoàn; chưa có in/sửa sale |
-| `/products` | Hàng hoá & tồn kho, thêm/sửa/xoá, “chụp ảnh AI” giả lập |
-| `/debts` | Sổ nợ: trả một phần / trả hết, lịch sử, gọi / nhắc nợ |
-| `/bestsellers` | Xếp hạng món bán chạy, gợi ý hàng bán chậm |
-| `/profile` | Sửa thông tin tiệm (tên, địa chỉ, ngành hàng) lưu lên Core qua `PATCH /api/v1/shops/{shopId}`; họ tên, email, Facebook và tài khoản ngân hàng chỉ lưu trên máy |
-| `/settings` | Âm thanh, rung, đọc lại đơn, tự mở in |
-| `/notifications` | Thông báo trong app |
-| `/ai` | Hỏi đáp với trợ lý qua `src/lib/agentApi.ts` → Core `/api/v1/agent/*`; lịch sử hội thoại. Câu trả lời của trợ lý qua `components/ChatText.tsx`, đọc bằng `lib/chatMarkdown.ts` cho cả chữ đang stream lẫn câu đã lưu: `**đậm**`, `` `mã` ``, tiêu đề, danh sách `-`/`1.`, bảng, khối ```chart (biểu đồ cột/vùng) và khối ```actions (`splitActions` tách khỏi chữ; nút mở màn hình theo `SCREEN_LINKS` hiện ở thẻ riêng dưới bong bóng, chỉ khi câu đã xong); ký hiệu khác hiện nguyên chữ. Khi bật mock, `mockCore` trả lời giả; hỏi có chữ "biểu đồ" hoặc "bảng" để xem bảng và biểu đồ, hỏi "sắp hết hàng" để xem thẻ nút mở màn hình dưới bong bóng |
-| `/printer` | Màn cấu hình máy in K80/K58; chưa có kết nối thiết bị |
-| `/debug` | Chẩn đoán kết nối, chỉ có ở bản dev (xem [Debug](#debug)) |
+| `/(auth)/welcome`, `/email`, `/verify-email`, `/profile`, `/setup` | Choose a sign-in method, email and password (sign up, forgot password), email verification, first-time name entry, shop creation |
+| `/(tabs)` | Home: revenue today/this week/this month, tasks to handle, suggestions and best sellers |
+| `/analytics` | Analysis by period: revenue, trend by hour/day of week/week of month, expenses, estimated gross profit, best sellers, debts |
+| `/(tabs)/invoices` | Orders: infinite scroll, 20 orders at a time; time filter and search run in Core |
+| `/(tabs)/sales` | Sales: opens straight to the paged catalog (20 items per page, search/filter/sort in Core), pick items and view the cart; the Zen ring (drag and drop, snaps to the left/right edge, keeps its position across tabs) opens Q&A, Đọc đơn or today's report |
+| `/(tabs)/more` | Management: profile, reports, goods, expenses, debts, settings and sign out |
+| `/expenses` | Expenses by month, expense breakdown, add an expense by voice / manual entry |
+| `/voice` | Đọc đơn: type text or hold the mic button, offer to add unknown items to the catalog, edit quantities. Mic: web uses the Web Speech API (`vi-VN`); Android uses the sherpa-onnx model on the device (see “Speech recognition on Android”), with no fake sample phrases any more. When nothing is supported the app says so and uses the Nhập tay button |
+| `/pos` | Quick item picking in a grid, the cart, quickly adding an item to the catalog |
+| `/checkout` | Payment: cash (change), bank transfer (illustrative QR), credit |
+| `/invoice/[id]` | Internal sale detail: view the order, void it in full and view the refund; no printing/sale editing yet |
+| `/products` | Goods and stock, add/edit/delete, simulated “AI photo” |
+| `/debts` | Debt book: partial / full repayment, history, call / remind |
+| `/bestsellers` | Best-seller ranking, slow-seller suggestions |
+| `/profile` | Edit shop details (name, address, industry), saved to Core through `PATCH /api/v1/shops/{shopId}`; full name, email, Facebook and bank account are stored only on the device |
+| `/settings` | Sound, vibration, read back the order, auto-open printing |
+| `/notifications` | In-app notifications |
+| `/ai` | Q&A with the assistant through `src/lib/agentApi.ts` → Core `/api/v1/agent/*`; conversation history. Assistant answers go through `components/ChatText.tsx` and are read by `lib/chatMarkdown.ts` for both streaming text and stored answers: `**bold**`, `` `code` ``, headings, `-`/`1.` lists, tables, ```chart blocks (bar/area charts) and ```actions blocks (`splitActions` separates them from the text; buttons that open screens per `SCREEN_LINKS` show in a separate card under the bubble, only once the answer is complete); other markup shows as plain text. With mocks on, `mockCore` answers with fake data; ask with the word "biểu đồ" or "bảng" to see tables and charts, and ask "sắp hết hàng" to see the screen button card under the bubble |
+| `/printer` | K80/K58 printer settings screen; no device connection yet |
+| `/debug` | Connection diagnostics, dev builds only (see [Debug](#debug)) |
 
-`/staff` còn file route nhưng không có lối vào: MVP chỉ có hai vai trò OWNER và ADMIN.
+`/staff` still has a route file but no entry point: the product has only the OWNER and ADMIN roles.
 
-## Thử nhận diện đơn
+## Try order recognition
 
-Ô “Nhập tên hàng + giá” ở màn `/voice` chạy bộ nhận diện rule-based trong `src/lib/parseOrder.ts`. Ví dụ:
+The “Nhập tên hàng + giá” field on the `/voice` screen runs the rule-based recognizer in `src/lib/parseOrder.ts`. Examples:
 
 - `2 ly cà phê sữa 50 nghìn, thêm 1 trà đá`
 - `bán 3 bánh mì 45k, 2 coca`
 - `lấy 1 chục trứng với 2 gói mì`
-- `bán 1 hộp sữa chua nếp cẩm 12k` → món chưa có, app hỏi có thêm vào danh mục không
-- `bánh mì 20k cà phê 20k` hoặc nói “bánh mì hai mươi nghìn cà phê hai mươi nghìn” → hai món, mỗi món một giá
+- `bán 1 hộp sữa chua nếp cẩm 12k` → the item does not exist yet, so the app asks whether to add it to the catalog
+- `bánh mì 20k cà phê 20k` or saying “bánh mì hai mươi nghìn cà phê hai mươi nghìn” → two items, each with its own price
 
-Chữ nhận được từ mic (hay gõ tay) đi qua `parseOrder()` (`src/lib/parseOrder.ts`); app chưa gọi AI để nhận diện đơn. Model giọng nói xuất câu liền, không dấu câu, số đọc bằng chữ, nên `parseOrder` đọc cả số tiền viết bằng chữ số (`20k`, `20.000đ`, `1,5tr`) lẫn bằng chữ (`hai mươi nghìn`, `hai lăm ca`) và tách món theo ba cách: (1) dấu câu và các từ nối (`và`, `với`, `thêm`, `kèm`, `cùng`, `rồi`, `nha`, `nhé`); (2) mỗi giá nói ra kết thúc một món (“bánh mì 20k cà phê 20k” → hai món có giá; món chưa có trong kho thì hỏi thêm vào danh mục với giá điền sẵn); (3) câu liền có nhiều món trong kho thì cắt trước mỗi tên món, lùi qua số lượng và đơn vị đứng ngay trước (“hai cà phê sữa một bánh mì thịt”). Hạn chế: nhiều món chưa có trong kho, không nói giá và không có từ nối vẫn gộp thành một; giá nói trước tên món và giá không kèm đơn vị tiền (“bánh mì hai mươi”) không được nhận; món có trong kho luôn lấy giá của kho, giá nói ra chỉ dùng để tách món. “Chi”, “mua”, “trả”, “nộp”… chỉ mở một khoản chi khi đứng đầu mệnh đề, sau một giá hoặc sau một món trong kho (nên “trà sữa 30k”, “chị lấy bánh mì 20k”, “bánh mì ba chỉ 20k” là món, không phải chi). `src/sst/` là khung cũ chưa chạy model thật và chưa màn nào dùng; nhận dạng giọng nói đang chạy nằm ở `src/lib/speech/`.
+Text from the mic (or typed) goes through `parseOrder()` (`src/lib/parseOrder.ts`); the app does not call AI to recognize orders yet. The speech model outputs one run-on sentence with no punctuation and numbers spoken as words, so `parseOrder` reads amounts written as digits (`20k`, `20.000đ`, `1,5tr`) as well as words (`hai mươi nghìn`, `hai lăm ca`) and splits items in three ways: (1) punctuation and connecting words (`và`, `với`, `thêm`, `kèm`, `cùng`, `rồi`, `nha`, `nhé`); (2) each spoken price ends an item (“bánh mì 20k cà phê 20k” → two priced items; an item not in stock prompts to add it to the catalog with the price prefilled); (3) a run-on sentence with several items in stock is cut before each item name, stepping back over the quantity and unit right before it (“hai cà phê sữa một bánh mì thịt”). Limits: several items not in stock, with no price and no connecting word, are still merged into one; a price spoken before the item name and a price without a currency unit (“bánh mì hai mươi”) are not recognized; an item in stock always takes the stock price, and a spoken price is only used to split items. “Chi”, “mua”, “trả”, “nộp”… open an expense only at the start of a clause, after a price or after an item in stock (so “trà sữa 30k”, “chị lấy bánh mì 20k”, “bánh mì ba chỉ 20k” are items, not expenses). `src/sst/` is an old skeleton that never ran a real model and no screen uses it; the working speech recognition is in `src/lib/speech/`.
 
-### Nhận dạng giọng nói trên Android
+### Speech recognition on Android
 
-Màn Đọc đơn nhận giọng nói trên Android bằng model tiếng Việt streaming Zipformer chạy ngay trên máy (thư viện `react-native-sherpa-onnx`, kèm đọc mic native). Code ở `src/lib/speech/` (`sherpaEngine.ts`; phần thuần để kiểm thử ở `core.ts`).
+The Đọc đơn screen recognizes speech on Android with a Vietnamese streaming Zipformer model that runs on the device (the `react-native-sherpa-onnx` library, with native mic capture). The code is in `src/lib/speech/` (`sherpaEngine.ts`; the pure, testable part in `core.ts`).
 
-- **Cần bản dev client mới:** thư viện có mô-đun native, nên phải build lại dev client (`npx eas-cli build --profile dev-client --platform android`) sau khi cài. Bản cũ chưa có mô-đun thì màn Đọc đơn báo “chưa hỗ trợ ghi âm giọng nói” thay vì sập.
-- **Model không nằm trong git** (49 MB). File ở `assets/models/` (xem `assets/models/README.md`); app tải về bộ nhớ của app ở lần đầu mở màn Đọc đơn từ `EXPO_PUBLIC_STT_MODEL_URL`. Khi phát triển chạy `node scripts/serve-stt-model.js` để phục vụ thư mục đó, rồi đặt `EXPO_PUBLIC_STT_MODEL_URL=http://10.0.2.2:8090/` (emulator) hoặc `http://<IP máy tính>:8090/` (điện thoại thật, cần mở cổng 8090 trên tường lửa).
-- **Nhúng model vào APK (chạy offline):** plugin `plugins/withBundledSttModel.js` chép model vào `android/app/src/main/assets/models/stt-model-<phiên bản>/` khi `expo prebuild`; thư mục `android/` đã sinh sẵn thì chạy `node plugins/withBundledSttModel.js`. App tự nhận model nhúng (`listAssetModels`) và bỏ qua bước tải; thư viện chép nó ra bộ nhớ app ở lần mở đầu. Máy build không có model thì plugin chỉ cảnh báo và APK rơi về cách tải ở trên. Tên thư mục lấy từ `STT_MODEL_VERSION` trong `src/lib/speech/core.ts`.
-- **Bản vá thư viện:** `react-native-sherpa-onnx` 0.4.4 cố định `modelType = "zipformer"` cho mọi model transducer nên model `zipformer2` (như model đang dùng) làm app sập lúc nạp. `patches/react-native-sherpa-onnx+0.4.4.patch` (áp tự động bởi `postinstall` qua `patch-package`, kể cả trên máy build EAS) để trống giá trị này cho sherpa-onnx tự nhận loại theo metadata. Nâng phiên bản thư viện thì xem lại bản vá, và đổi bản vá là phải build lại dev client.
-- **Quyền micro:** app xin quyền khi mở màn Đọc đơn. Khi giữ nút mic có thanh “Mức mic” đo từ micro thật; không ra chữ thì app báo “micro không thu được âm thanh” hoặc “có tiếng nhưng chưa nhận ra chữ”.
-- **FFmpeg và libarchive tắt:** `plugins/withAndroidApkSize.js` đặt `sherpaOnnxDisableFfmpeg` và `sherpaOnnxDisableLibarchive` vì app chỉ nhận dạng PCM từ mic và tải model từng file. Các hàm `convertAudio*`, `decodeAudioFileToFloatSamples` (file không phải WAV) và `extractTarBz2` của thư viện vì vậy báo lỗi; cần dùng thì bỏ cờ trong plugin và bỏ các file `.so` tương ứng khỏi `packagingOptions.exclude` trong `app.json`.
-- **Chưa kiểm tra / chưa làm:** iOS; hotword từ menu (`bpe.model`); tinh chỉnh thời gian ngắt câu; Android 15+ yêu cầu thư viện native căn lề 16 KB khi đưa lên Google Play (cần kiểm tra các file `.so` của sherpa-onnx).
+- **Needs a new dev client:** the library has a native module, so the dev client must be rebuilt (`npx eas-cli build --profile dev-client --platform android`) after installing it. An older build without the module shows “chưa hỗ trợ ghi âm giọng nói” on the Đọc đơn screen instead of crashing.
+- **The model is not in git** (49 MB). The files go in `assets/models/` (see `assets/models/README.md`); the app downloads them into app storage from `EXPO_PUBLIC_STT_MODEL_URL` the first time the Đọc đơn screen opens. During development, run `node scripts/serve-stt-model.js` to serve that folder, then set `EXPO_PUBLIC_STT_MODEL_URL=http://10.0.2.2:8090/` (emulator) or `http://<computer IP>:8090/` (a real phone; port 8090 must be open in the firewall).
+- **Embed the model in the APK (offline):** the plugin `plugins/withBundledSttModel.js` copies the model into `android/app/src/main/assets/models/stt-model-<version>/` on `expo prebuild`; if the `android/` folder is already generated, run `node plugins/withBundledSttModel.js`. The app detects the embedded model (`listAssetModels`) and skips the download; the library copies it into app storage on first launch. If the build machine has no model, the plugin only warns and the APK falls back to the download above. The folder name comes from `STT_MODEL_VERSION` in `src/lib/speech/core.ts`.
+- **Library patch:** `react-native-sherpa-onnx` 0.4.4 hard-codes `modelType = "zipformer"` for every transducer model, so a `zipformer2` model (like the one in use) crashes the app on load. `patches/react-native-sherpa-onnx+0.4.4.patch` (applied automatically by `postinstall` through `patch-package`, including on EAS build machines) leaves this value empty so sherpa-onnx detects the type from metadata. When upgrading the library, review the patch, and any patch change requires rebuilding the dev client.
+- **Microphone permission:** the app asks for permission when the Đọc đơn screen opens. While the mic button is held, a “Mức mic” bar measures the real microphone; when no text comes out, the app says “micro không thu được âm thanh” or “có tiếng nhưng chưa nhận ra chữ”.
+- **FFmpeg and libarchive are off:** `plugins/withAndroidApkSize.js` sets `sherpaOnnxDisableFfmpeg` and `sherpaOnnxDisableLibarchive` because the app only recognizes PCM from the mic and downloads the model file by file. The library's `convertAudio*`, `decodeAudioFileToFloatSamples` (for non-WAV files) and `extractTarBz2` therefore fail; to use them, remove the flags in the plugin and remove the matching `.so` files from `packagingOptions.exclude` in `app.json`.
+- **Not checked / not done:** iOS; menu hotwords (`bpe.model`); tuning the sentence-end timeout; Android 15+ requires native libraries aligned to 16 KB for Google Play (the sherpa-onnx `.so` files need checking).
 
-### Dung lượng APK Android
+### Android APK size
 
-Bản release dùng các thiết lập sau (đo trên `arm64-v8a`, cùng commit: 95,2 MB → 40,3 MB; xem [CI/CD](../../docs/development/ci-cd.md#measured-and-not-yet-verified)):
+Release builds use these settings (measured on `arm64-v8a`, same commit: 95.2 MB → 40.3 MB; see [CI/CD](../../docs/development/ci-cd.md#measured-and-not-yet-verified)):
 
-- `expo-build-properties` trong `app.json`: `useLegacyPackaging` nén các file `.so` trong APK (trước đó lưu không nén, chiếm 62 MB); `enableMinifyInReleaseBuilds` và `enableShrinkResourcesInReleaseBuilds` bật R8 và bỏ resource không dùng; `packagingOptions.exclude` bỏ file `.so` của FFmpeg và libarchive.
-- `extraProguardRules` giữ nguyên các class `com.k2fsa.sherpa.onnx.**` và `com.sherpaonnx.**`: code native của sherpa-onnx đọc chúng theo tên mà thư viện không kèm luật R8 cho chúng. Thêm thư viện native khác mà sập ở bản release (không sập ở bản debug) thì nghi R8 trước và thêm luật `-keep` ở đây.
-- `plugins/withAndroidApkSize.js`: tắt FFmpeg và libarchive trong sherpa-onnx (xem mục Nhận dạng giọng nói trên Android) và chỉ giữ chuỗi `vi`, `en` của các thư viện.
-- Đo lại: `scripts/release/apk-contents.sh <file.apk>` in dung lượng theo ABI, dex, resource, assets và 40 file lớn nhất; `scripts/release/android-release.sh` (chạy ở máy và trong CI) gọi script này sau mỗi lần build APK.
-- Đánh đổi: thư viện native được giải nén ra máy khi cài, nên dung lượng sau khi cài lớn hơn file APK; cài từ Google Play (AAB) không bị ảnh hưởng.
+- `expo-build-properties` in `app.json`: `useLegacyPackaging` compresses the `.so` files in the APK (previously stored uncompressed, taking 62 MB); `enableMinifyInReleaseBuilds` and `enableShrinkResourcesInReleaseBuilds` enable R8 and drop unused resources; `packagingOptions.exclude` drops the FFmpeg and libarchive `.so` files.
+- `extraProguardRules` keeps the `com.k2fsa.sherpa.onnx.**` and `com.sherpaonnx.**` classes intact: sherpa-onnx native code reads them by name and the library ships no R8 rules for them. If another native library crashes in release (but not in debug), suspect R8 first and add a `-keep` rule here.
+- `plugins/withAndroidApkSize.js`: disables FFmpeg and libarchive in sherpa-onnx (see Speech recognition on Android) and keeps only the `vi` and `en` strings of the libraries.
+- Remeasure: `scripts/release/apk-contents.sh <file.apk>` prints the size by ABI, dex, resources, assets and the 40 largest files; `scripts/release/android-release.sh` (run locally and in CI) calls it after every APK build.
+- Trade-off: native libraries are extracted onto the device at install, so the installed size is larger than the APK file; installs from Google Play (AAB) are not affected.
 
-## Cấu trúc
+## Structure
 
 ```
-app/                    route (expo-router)
+app/                    routes (expo-router)
 src/
-  theme.ts              màu, font, bo góc, đổ bóng (theo prototype)
+  theme.ts              colors, fonts, radii, shadows (per the prototype)
   config.ts             EXPO_PUBLIC_API_ENDPOINT, EXPO_PUBLIC_USE_MOCK
-  data/types.ts         kiểu dữ liệu dùng chung
-  data/mock.ts          dữ liệu mẫu + bộ sinh hoá đơn/chi phí theo ngày hiện tại
-  store/AppStore.tsx    state toàn app (context) + mọi action, gọi Core qua lib/*Api.ts
-  lib/                  format tiền/ngày, thống kê, bộ nhận diện đơn rule-based
-  lib/auth/             đăng nhập: giao diện AuthClient, mock, Firebase (native + web)
-  lib/api.ts            client gọi Core (Bearer Firebase ID token, X-Shop-Id, Idempotency-Key, lỗi chuẩn); USE_MOCK → mockCore
+  data/types.ts         shared data types
+  data/mock.ts          sample data + invoice/expense generators based on the current date
+  store/AppStore.tsx    app-wide state (context) + every action, calls Core through lib/*Api.ts
+  lib/                  money/date formatting, statistics, rule-based order recognizer
+  lib/auth/             sign-in: the AuthClient interface, mock, Firebase (native + web)
+  lib/api.ts            Core client (Bearer Firebase ID token, X-Shop-Id, Idempotency-Key, standard errors); USE_MOCK → mockCore
   lib/*Api.ts           session, catalog, customer, sales, debt, expense, agent
-  lib/mockCore.ts       giả lập các endpoint Core trong bộ nhớ
-  lib/useCoreData.ts    tải đơn, sản phẩm, nợ, chi phí từ Core cho Home, Quản lý, Phân tích, Bán chạy, Thông báo
-  lib/usePagedList.ts   danh sách cuộn vô hạn 20 dòng mỗi lần (Đơn hàng); lib/usePagedPage.ts danh sách theo số trang (Bán hàng)
-  lib/checkoutSession.ts giữ đơn nháp giữa các lần bấm thanh toán để thử lại không ghi trùng sale
-  lib/speech/           nhận dạng giọng nói trên máy (Android): tải model, đọc mic, sherpa-onnx; core.ts là phần thuần
-  sst/                  khung nhận dạng giọng nói cũ (chưa chạy model thật), chưa được màn nào dùng
-  components/           UI kit, biểu đồ, logo, toast, QR minh hoạ
+  lib/mockCore.ts       in-memory simulation of the Core endpoints
+  lib/useCoreData.ts    loads orders, products, debts, expenses from Core for Home, Management, Analytics, Best sellers, Notifications
+  lib/usePagedList.ts   infinite list, 20 rows at a time (Orders); lib/usePagedPage.ts paged list (Sales)
+  lib/checkoutSession.ts keeps the draft between payment taps so a retry does not record a duplicate sale
+  lib/speech/           on-device speech recognition (Android): model download, mic capture, sherpa-onnx; core.ts is the pure part
+  sst/                  old speech recognition skeleton (never ran a real model), not used by any screen
+  components/           UI kit, charts, logo, toast, illustrative QR
 ```
 
-## Gắn Firebase (đăng nhập bằng email, Facebook và Google)
+## Set up Firebase (email, Facebook and Google sign-in)
 
-Code đã nối sẵn theo `docs/contracts/api-contracts.md`: Firebase xác thực (email + mật khẩu, Facebook hoặc Google) → app gửi Firebase ID token (`Authorization: Bearer …`) tới `POST /api/v1/auth/session` → nhận `SessionView` (role, tiệm, `needsOnboarding`). Với `EXPO_PUBLIC_USE_MOCK=true` app chạy giả lập (không gọi Firebase); với `false` app dùng Firebase + Core thật. Chỉ cần cài gói và điền cấu hình:
+The code is already wired per `docs/contracts/api-contracts.md`: Firebase authenticates (email and password, Facebook or Google) → the app sends the Firebase ID token (`Authorization: Bearer …`) to `POST /api/v1/auth/session` → receives a `SessionView` (role, shops, `needsOnboarding`). With `EXPO_PUBLIC_USE_MOCK=true` the app runs simulated (no Firebase calls); with `false` it uses the real Firebase and Core. You only need to install packages and fill in configuration:
 
-1. **Firebase Console** → Authentication → Sign-in method → bật **Email/Password** (và **Facebook**, **Google** nếu dùng, xem các mục bên dưới). App không còn đăng nhập bằng số điện thoại.
-   - Templates → *Email address verification* và *Password reset*: đặt tên người gửi, tiêu đề; điền *Reply-to* là email hỗ trợ của dự án (Firebase gửi từ địa chỉ `noreply@…firebaseapp.com`; muốn gửi từ địa chỉ riêng cần SMTP tuỳ chỉnh).
-   - Settings → *Authorized domains*: thêm domain của bản web (localhost có sẵn).
-2. **Thêm app** trong Project settings → Your apps:
-   - **Web** → lấy 4 giá trị điền vào `.env` (`EXPO_PUBLIC_FIREBASE_API_KEY`, `_AUTH_DOMAIN`, `_PROJECT_ID`, `_APP_ID`).
-   - **Android** (package `vn.teamhexa.songheloi`) → tải `google-services.json`; thêm **SHA-1 và SHA-256** của keystore dùng để build (`npx eas-cli credentials -p android`).
-   - **iOS** (bundle `vn.teamhexa.songheloi`) → tải `GoogleService-Info.plist`; upload **APNs key** ở Cloud Messaging để xác minh SMS không cần reCAPTCHA.
-   - Đặt hai file trên vào thư mục `frontend/mobile/`.
-3. **Cài gói native** (trong `frontend/mobile`; Firebase JS SDK cho web đã có trong dependencies):
+1. **Firebase Console** → Authentication → Sign-in method → enable **Email/Password** (and **Facebook**, **Google** if used; see the sections below). The app no longer signs in with a phone number.
+   - Templates → *Email address verification* and *Password reset*: set the sender name and subject; set *Reply-to* to the project's support email (Firebase sends from `noreply@…firebaseapp.com`; sending from your own address needs custom SMTP).
+   - Settings → *Authorized domains*: add the web build's domain (localhost is already there).
+2. **Add apps** in Project settings → Your apps:
+   - **Web** → take the 4 values for `.env` (`EXPO_PUBLIC_FIREBASE_API_KEY`, `_AUTH_DOMAIN`, `_PROJECT_ID`, `_APP_ID`).
+   - **Android** (package `vn.teamhexa.songheloi`) → download `google-services.json`; add the **SHA-1 and SHA-256** of the build keystore (`npx eas-cli credentials -p android`).
+   - **iOS** (bundle `vn.teamhexa.songheloi`) → download `GoogleService-Info.plist`; upload an **APNs key** under Cloud Messaging so SMS verification does not need reCAPTCHA.
+   - Put both files in `frontend/mobile/`.
+3. **Install the native packages** (in `frontend/mobile`; the Firebase JS SDK for web is already in dependencies):
    ```bash
    npx expo install @react-native-firebase/app @react-native-firebase/auth expo-build-properties
    ```
-4. **`app.json`** đã cấu hình sẵn `googleServicesFile` cho `android`/`ios` và các plugin:
+4. **`app.json`** already configures `googleServicesFile` for `android`/`ios` and the plugins:
    ```json
    ["@react-native-firebase/app", { "ios": { "disableSPM": true } }],
    "@react-native-firebase/auth",
    ["expo-build-properties", { "ios": { "useFrameworks": "static", "usePrecompiledModules": false } }]
    ```
-   `disableSPM` tránh lỗi `pod install` khi Firebase cài qua SPM cùng static frameworks; `usePrecompiledModules: false` tránh app crash lúc mở vì thiếu `FirebaseCoreInternal.framework`. Thư mục `ios/` được sinh từ `app.json` (gitignore), nên đừng sửa tay trong đó.
-5. **`.env`** (copy từ `.env.example`): `EXPO_PUBLIC_USE_MOCK=false`, `EXPO_PUBLIC_API_ENDPOINT=<URL Core>`, cùng 4 biến Firebase web. Để thử riêng Firebase khi chưa chạy Core, đặt `EXPO_PUBLIC_MOCK_CORE=true` (giả lập `/auth/session`, `/me`, `/shops`). Đổi `.env` xong phải chạy lại `npx expo start --clear` (Metro cache giá trị cũ).
-6. **Chạy**:
-   - Web: `npm run web` — dùng Firebase JS SDK + reCAPTCHA vô hình.
-   - Android/iOS: **không chạy trên Expo Go** (React Native Firebase cần code native). Tạo development build: `npx eas-cli build --profile dev-client --platform android` (profile `development` không nhận được `GOOGLE_SERVICES_JSON`, xem bên dưới), cài bản build và chạy `npx expo start --dev-client`. iOS cần tài khoản Apple Developer.
+   `disableSPM` avoids a `pod install` error when Firebase installs through SPM together with static frameworks; `usePrecompiledModules: false` avoids a launch crash from a missing `FirebaseCoreInternal.framework`. The `ios/` folder is generated from `app.json` (gitignored), so do not edit it by hand.
+5. **`.env`** (copied from `.env.example`): `EXPO_PUBLIC_USE_MOCK=false`, `EXPO_PUBLIC_API_ENDPOINT=<Core URL>`, plus the 4 Firebase web variables. To try Firebase alone without Core, set `EXPO_PUBLIC_MOCK_CORE=true` (simulates `/auth/session`, `/me`, `/shops`). After changing `.env`, rerun `npx expo start --clear` (Metro caches old values).
+6. **Run**:
+   - Web: `npm run web` — uses the Firebase JS SDK + invisible reCAPTCHA.
+   - Android/iOS: **does not run in Expo Go** (React Native Firebase needs native code). Create a development build: `npx eas-cli build --profile dev-client --platform android` (the `development` profile does not receive `GOOGLE_SERVICES_JSON`, see below), install it and run `npx expo start --dev-client`. iOS needs an Apple Developer account.
 
-Profile trong `eas.json`:
+Profiles in `eas.json`:
 
-- `development`: development client, cài nội bộ.
-- `dev-client`: kế thừa `development`, nhưng dùng environment `preview` để nhận biến file `GOOGLE_SERVICES_JSON` và ra APK. Dùng để thử đăng nhập Firebase và gọi Core thật từ emulator Android: cài APK vào emulator, đặt trong `.env` `EXPO_PUBLIC_API_ENDPOINT` theo [Nối Core thật](#nối-core-thật) cùng `EXPO_PUBLIC_USE_MOCK`, `EXPO_PUBLIC_MOCK_CORE`, `EXPO_PUBLIC_MOCK_SHOPS` đều `false`, rồi chạy `npx expo start --dev-client --android`. JS nạp từ Metro nên đổi địa chỉ Core chỉ cần sửa `.env` và chạy lại Metro, không phải build lại APK. Cùng keystore với `phone-test` nên cài đè được lên bản đó và dùng chung SHA đã đăng ký trong Firebase.
-- `preview`: bản cài nội bộ, Android ra APK.
-- `phone-test`: kế thừa `preview`, Firebase thật với phiên Core giả lập (`MOCK_CORE`, `MOCK_SHOPS`) để thử đăng nhập Firebase (email) trên máy thật khi chưa có Core deploy; các màn nghiệp vụ vẫn gọi API thật nên báo lỗi mạng nếu không tới được Core.
-- `production`: tự tăng số build.
+- `development`: development client, internal install.
+- `dev-client`: extends `development` but uses the `preview` environment to receive the `GOOGLE_SERVICES_JSON` file variable and produce an APK. Use it to try Firebase sign-in and call the real Core from the Android emulator: install the APK on the emulator, set `EXPO_PUBLIC_API_ENDPOINT` in `.env` per [Connect to the real Core](#connect-to-the-real-core) with `EXPO_PUBLIC_USE_MOCK`, `EXPO_PUBLIC_MOCK_CORE` and `EXPO_PUBLIC_MOCK_SHOPS` all `false`, then run `npx expo start --dev-client --android`. JS loads from Metro, so changing the Core address only needs an `.env` edit and a Metro restart, not an APK rebuild. It shares the `phone-test` keystore, so it installs over that build and uses the same SHA registered in Firebase.
+- `preview`: internal install build, an APK on Android.
+- `phone-test`: extends `preview`, real Firebase with a simulated Core session (`MOCK_CORE`, `MOCK_SHOPS`) to try Firebase (email) sign-in on a real device before Core is deployed; the business screens still call the real API, so they show network errors when Core is unreachable.
+- `production`: auto-increments the build number.
 
-`google-services.json` bị gitignore nên build trên EAS không thấy file này. `app.config.js` đọc đường dẫn từ biến môi trường kiểu file `GOOGLE_SERVICES_JSON` (`eas env:create --type file`, hiện đặt trong environment `preview`); ở máy local vẫn dùng `./google-services.json`. `.env` cũng không lên EAS, nên profile phải tự đặt các biến `EXPO_PUBLIC_*`. Mỗi keystore build cần thêm SHA-1/SHA-256 vào Firebase trước khi đăng nhập được.
+`google-services.json` is gitignored, so EAS builds cannot see it. `app.config.js` reads the path from the file-type environment variable `GOOGLE_SERVICES_JSON` (`eas env:create --type file`, currently set in the `preview` environment); local machines still use `./google-services.json`. `.env` does not reach EAS either, so each profile must set its own `EXPO_PUBLIC_*` variables. Every build keystore needs its SHA-1/SHA-256 added to Firebase before sign-in works.
 
-Nơi code: `src/lib/auth/` (giao diện `AuthClient`; `mock.ts`, `firebase.ts` cho native, `firebase.web.ts` cho web), `src/lib/api.ts` (Bearer + `X-Shop-Id` + lỗi `{code,message,traceId}`, 401 → đăng xuất), `src/lib/sessionApi.ts` (`/auth/session`, `/me`, `/shops`), luồng đăng nhập trong `src/store/AppStore.tsx` (`signIn`, `logout`, khởi động chờ Firebase khôi phục phiên).
+Where the code lives: `src/lib/auth/` (the `AuthClient` interface; `mock.ts`, `firebase.ts` for native, `firebase.web.ts` for web), `src/lib/api.ts` (Bearer + `X-Shop-Id` + `{code,message,traceId}` errors, 401 → sign out), `src/lib/sessionApi.ts` (`/auth/session`, `/me`, `/shops`), and the sign-in flow in `src/store/AppStore.tsx` (`signIn`, `logout`, startup waits for Firebase to restore the session).
 
-### Nối Core thật
+### Connect to the real Core
 
-Luồng: Firebase xác thực (email hoặc Facebook) → FE gửi **Firebase ID token** (`Authorization: Bearer …`) xuống Core → Core xác thực bằng Firebase Admin SDK, tạo/tìm tài khoản, trả phiên.
+Flow: Firebase authenticates (email or Facebook) → FE sends the **Firebase ID token** (`Authorization: Bearer …`) to Core → Core verifies it with the Firebase Admin SDK, creates/finds the account and returns the session.
 
-1. Đăng nhập lần đầu: `POST /api/v1/auth/session` với `{ displayName }`. Core **bắt buộc** `displayName` cho tài khoản mới (thiếu → 400) nên app có màn “Bạn tên gì?” (`app/(auth)/profile.tsx`). Các lần sau không cần gửi.
-2. Mở lại app: Firebase tự khôi phục phiên → `GET /api/v1/me`. `404 auth_profile_not_found` (Firebase còn đăng nhập nhưng Core chưa có tài khoản) → app vào lại màn nhập tên. `401` → đăng xuất. `403 account_disabled` → đăng xuất và báo tài khoản bị khoá.
-3. `needsOnboarding = true` (chưa có tiệm) → màn tạo tiệm, gọi `POST /shops` thật (Core lưu một `industry` dạng chuỗi — các ngành đã chọn được nối bằng ", ").
+1. First sign-in: `POST /api/v1/auth/session` with `{ displayName }`. Core **requires** `displayName` for a new account (missing → 400), so the app has the “Bạn tên gì?” screen (`app/(auth)/profile.tsx`). Later sign-ins do not send it.
+2. Reopening the app: Firebase restores the session → `GET /api/v1/me`. `404 auth_profile_not_found` (still signed in to Firebase but Core has no account) → the app returns to the name screen. `401` → sign out. `403 account_disabled` → sign out and report that the account is locked.
+3. `needsOnboarding = true` (no shop yet) → the shop creation screen, which calls the real `POST /shops` (Core stores `industry` as a string — the chosen industries are joined with ", ").
 
-Các API nghiệp vụ (danh mục/sản phẩm, khách, POS/checkout tạo đơn nháp rồi xác nhận, đơn hàng, công nợ, chi phí, trợ lý) đều cần header `X-Shop-Id`; hợp đồng nằm trong [API contracts](../../docs/contracts/api-contracts.md). Khi chạy với Core thật, mobile dùng các client `src/lib/*Api.ts` cho những luồng đã nối; Home/Analytics chưa gọi `/api/v1/reports/summary` (xem [Chỉ số trên Home/Analytics](#chỉ-số-trên-homeanalytics)). `SaleDraft.confirm` chấp nhận `initialPaidVnd` bất kỳ từ 0 tới tổng đơn — trả thiếu thì Core (`SaleDraftServiceImpl.confirm`/`customerForConfirmation`) tự tạo một `Debt` cho khách (cần có `customerId` có sẵn hoặc `customerName` để Core tạo khách mới, thiếu cả hai thì lỗi `customer_required_for_debt`); khớp với màn Thanh toán ghi nợ của mobile. `EXPO_PUBLIC_USE_MOCK=true` bật chế độ xem trước không cần Core thật — `src/lib/mockCore.ts` giả lập các endpoint trên trong bộ nhớ.
+The business APIs (catalog/products, customers, POS/checkout creating a draft then confirming, orders, debts, expenses, assistant) all need the `X-Shop-Id` header; the contract is in [API contracts](../../docs/contracts/api-contracts.md). With the real Core, mobile uses the `src/lib/*Api.ts` clients for the connected flows; Home/Analytics do not call `/api/v1/reports/summary` yet (see [Home/Analytics metrics](#homeanalytics-metrics)). `SaleDraft.confirm` accepts any `initialPaidVnd` from 0 to the order total — when underpaid, Core (`SaleDraftServiceImpl.confirm`/`customerForConfirmation`) creates a `Debt` for the customer (it needs an existing `customerId` or a `customerName` so Core can create a new customer; with neither it fails with `customer_required_for_debt`); this matches the mobile credit payment screen. `EXPO_PUBLIC_USE_MOCK=true` enables a preview mode without the real Core — `src/lib/mockCore.ts` simulates those endpoints in memory.
 
-Checkout mobile hiện yêu cầu mỗi món có `productId`. Luồng “Món ngoài danh mục” tạo nhanh một Product với `tracked=false` rồi thêm vào giỏ; chưa dùng custom item `productId=null` dù Core đã hỗ trợ.
+Mobile checkout currently requires a `productId` for every item. The “Món ngoài danh mục” flow quickly creates a Product with `tracked=false`, then adds it to the cart; it does not use a custom item with `productId=null` yet, although Core supports it.
 
-Khi dev mobile, app gọi Core staging trên VPS (bản deploy từ nhánh `staging`, xem [CI/CD](../../docs/development/ci-cd.md)), nên máy dev không cần chạy backend hay Docker. Domain staging cố định, không đổi sau mỗi lần deploy. `.env`:
+During mobile development the app calls the staging Core on the VPS (deployed from the `staging` branch, see [CI/CD](../../docs/development/ci-cd.md)), so dev machines need no backend or Docker. The staging domain is fixed and does not change between deploys. `.env`:
 
 ```
 EXPO_PUBLIC_USE_MOCK=false
@@ -173,88 +182,88 @@ EXPO_PUBLIC_MOCK_SHOPS=false
 EXPO_PUBLIC_API_ENDPOINT=https://staging.103-162-31-93.sslip.io
 ```
 
-- Dữ liệu tạo từ app nằm trong database staging, dùng chung với cả nhóm và môi trường UAT.
-- App gọi bản Core đã merge vào `staging`; API chưa merge thì chưa gọi được.
-- Firebase của app (`google-services.json`, biến `EXPO_PUBLIC_FIREBASE_*`) phải cùng project với `FIREBASE_PROJECT_ID` của Core staging, nếu không Core trả `401`.
+- Data created from the app lives in the staging database, shared with the whole team and the UAT environment.
+- The app calls the Core merged into `staging`; unmerged APIs cannot be called yet.
+- The app's Firebase (`google-services.json`, the `EXPO_PUBLIC_FIREBASE_*` variables) must be the same project as the staging Core's `FIREBASE_PROJECT_ID`, otherwise Core returns `401`.
 
-Chỉ chạy Core trên máy khi đang sửa backend (xem [Local development](../../docs/development/local-development.md#run-each-service)); khi đó đặt `EXPO_PUBLIC_API_ENDPOINT=http://<IP LAN của máy chạy Core>:8000` (máy ảo Android: `http://10.0.2.2:8000`, cổng `8000` khi chạy bằng Compose). Core cần `FIREBASE_PROJECT_ID` trùng project của `google-services.json` và file service account (xem `backend/core/.env.example`). Điện thoại và máy chạy Core phải cùng mạng.
+Run Core locally only when changing the backend (see [Local development](../../docs/development/local-development.md#run-each-service)); then set `EXPO_PUBLIC_API_ENDPOINT=http://<LAN IP of the machine running Core>:8000` (Android emulator: `http://10.0.2.2:8000`, port `8000` when running with Compose). Core needs a `FIREBASE_PROJECT_ID` matching the project of `google-services.json` and a service account file (see `backend/core/.env.example`). The phone and the machine running Core must be on the same network.
 
-### Chỉ số trên Home/Analytics
+### Home/Analytics metrics
 
-Home và Analytics lấy danh sách sale/product/debt/expense qua [`useCoreData.ts`](src/lib/useCoreData.ts), chuyển dữ liệu bằng [`coreAdapters.ts`](src/lib/coreAdapters.ts), rồi tính chỉ số trên thiết bị bằng [`stats.ts`](src/lib/stats.ts). Đây không phải response của Core summary:
+Home and Analytics load the sale/product/debt/expense lists through [`useCoreData.ts`](src/lib/useCoreData.ts), convert the data with [`coreAdapters.ts`](src/lib/coreAdapters.ts), then compute metrics on the device with [`stats.ts`](src/lib/stats.ts). This is not the Core summary response:
 
-- Đơn dùng `soldAt` làm thời điểm bán; loại các đơn hiện đã `VOIDED` và lọc kỳ theo giờ thiết bị. Hủy một đơn kỳ trước có thể làm số liệu kỳ bán cũ thay đổi, không tạo điều chỉnh ở kỳ `voidedAt` như Core.
-- Doanh thu là tổng giá trị các đơn còn lại, không tách `grossRevenueVnd`, `voidedRevenueVnd`, `netRevenueVnd` hoặc dòng tiền theo `receivedAt`/`refundedAt`.
-- Lãi gộp là doanh thu trừ giá vốn **ước tính**, chưa trừ khoản chi vận hành. Giá vốn lấy từ danh mục hiện có; thiếu `costPriceVnd` thì adapter ước tính 60% giá bán danh mục, còn dòng không khớp product dùng 60% đơn giá dòng. Đây không phải snapshot giá vốn lịch sử hoặc lợi nhuận chính thức.
+- Orders use `soldAt` as the sale time; orders currently `VOIDED` are excluded and periods are filtered by device time. Voiding an order from an earlier period can change that old period's figures, instead of creating an adjustment in the `voidedAt` period as Core does.
+- Revenue is the total of the remaining orders, without separating `grossRevenueVnd`, `voidedRevenueVnd`, `netRevenueVnd` or cash flow by `receivedAt`/`refundedAt`.
+- Gross profit is revenue minus the **estimated** cost of goods, before operating expenses. Cost comes from the current catalog; without `costPriceVnd` the adapter estimates 60% of the catalog selling price, and a line that matches no product uses 60% of the line unit price. This is not a historical cost snapshot or official profit.
 
-Định nghĩa summary chuẩn của Core nằm trong [API contract — Tổng quan theo kỳ](../../docs/contracts/api-contracts.md#tổng-quan-theo-kỳ). Việc nối FE sang summary cần task tích hợp và nghiệm thu riêng; sửa tài liệu này không chứng minh báo cáo mobile đã tương đương Core hay đã đạt `FR-006`/`AC-031`.
+The standard Core summary definition is in [API contract — Period overview](../../docs/contracts/api-contracts.md#period-overview). Moving FE to the summary needs its own integration task and acceptance; editing this document does not prove that mobile reports match Core or meet `FR-006`/`AC-031`.
 
-### Đăng nhập bằng email + mật khẩu
+### Email and password sign-in
 
-Màn đầu là một thẻ theo bố cục Runpod (`app/(auth)/welcome.tsx`): nút Google và Zalo, ô **Địa chỉ email** với nút **Tiếp tục** sang `app/(auth)/email.tsx` (email điền sẵn), **Quên mật khẩu?** và chân thẻ **Chưa có tài khoản? Tạo tài khoản**; cách đăng nhập thành công gần nhất trên máy có nhãn **Lần trước dùng** (`src/lib/lastSignInStorage.ts`). Không còn nút Facebook; Zalo bấm được khi build có cấu hình Zalo (Android: `EXPO_PUBLIC_ZALO_NATIVE_CLIENT_ID`, web: `EXPO_PUBLIC_ZALO_LOGIN=true`), còn lại hiện nhãn “Sắp có”; app không còn đăng nhập bằng số điện thoại.
+The first screen is a card in the Runpod layout (`app/(auth)/welcome.tsx`): Google and Zalo buttons, an **Địa chỉ email** field with a **Tiếp tục** button to `app/(auth)/email.tsx` (email prefilled), **Quên mật khẩu?** and the card footer **Chưa có tài khoản? Tạo tài khoản**; the most recent successful sign-in method on the device has a **Lần trước dùng** label (`src/lib/lastSignInStorage.ts`). There is no Facebook button any more; Zalo is clickable when the build has Zalo configuration (Android: `EXPO_PUBLIC_ZALO_NATIVE_CLIENT_ID`, web: `EXPO_PUBLIC_ZALO_LOGIN=true`), otherwise it shows the “Sắp có” label; the app no longer signs in with a phone number.
 
-- **Tạo tài khoản** tự đăng ký bằng Firebase (`createUserWithEmailAndPassword`, không cần ai thêm user trong Console), gửi thư xác minh (`sendEmailVerification`) rồi chuyển sang `app/(auth)/verify-email.tsx`. Chỉ khi người dùng bấm **Tôi đã xác minh** và Firebase báo `emailVerified` thì app mới gửi Firebase ID token xuống Core (`POST /auth/session`). Mở lại app khi chưa xác minh vẫn quay về màn này. Đây là chặn ở phía app; Core chưa kiểm tra `email_verified`.
-- **Đăng nhập** bằng email chưa xác minh cũng đi qua màn xác minh (không tự gửi lại thư; bấm **Gửi lại thư xác minh**, chờ 60 giây giữa hai lần). Sai email hoặc mật khẩu hiện gợi ý “tạo tài khoản” hoặc “đặt lại mật khẩu” thay vì báo lỗi.
-- **Quên mật khẩu** gửi thư đặt lại (`sendPasswordResetEmail`); email chưa đăng ký cũng báo đã gửi để không lộ email nào có tài khoản.
-- Cần bật Email/Password ở Firebase Console → Authentication → Sign-in method; đặt *Reply-to* của hai mẫu thư ở mục Templates. Biến `EXPO_PUBLIC_SUPPORT_EMAIL` (tuỳ chọn) hiện dòng “Cần hỗ trợ?” ở màn xác minh.
+- **Tạo tài khoản** self-registers through Firebase (`createUserWithEmailAndPassword`, nobody needs to add the user in the Console), sends a verification email (`sendEmailVerification`), then moves to `app/(auth)/verify-email.tsx`. Only when the user taps **Tôi đã xác minh** and Firebase reports `emailVerified` does the app send the Firebase ID token to Core (`POST /auth/session`). Reopening the app before verification returns to this screen. This is an app-side block; Core does not check `email_verified` yet.
+- **Signing in** with an unverified email also goes through the verification screen (it does not resend the email by itself; tap **Gửi lại thư xác minh**, with 60 seconds between sends). A wrong email or password shows a “tạo tài khoản” or “đặt lại mật khẩu” suggestion instead of an error.
+- **Forgot password** sends a reset email (`sendPasswordResetEmail`); an unregistered email also reports that it was sent, so it does not reveal which emails have accounts.
+- Email/Password must be enabled in Firebase Console → Authentication → Sign-in method; set *Reply-to* of both email templates under Templates. The optional variable `EXPO_PUBLIC_SUPPORT_EMAIL` shows the “Cần hỗ trợ?” line on the verification screen.
 
-### Đăng nhập bằng Facebook
+### Facebook sign-in
 
-Màn đăng nhập đã bỏ nút Facebook; mã đăng nhập Facebook và SDK vẫn giữ để bật lại khi cần. Khi có nút, luồng đăng nhập bằng Facebook SDK (`react-native-fbsdk-next`) rồi đổi mã truy cập sang tài khoản Firebase (`FacebookAuthProvider.credential` + `signInWithCredential`, ở `src/lib/auth/firebase.ts`). Sau đó luồng giống email: gửi Firebase ID token xuống Core (`POST /auth/session`); tài khoản mới (Core đòi `displayName`) đi qua màn "Bạn tên gì?" rồi màn tạo tiệm. Core chỉ lưu Firebase UID nên không cần sửa. Trên web dùng cửa sổ popup của Firebase; bản mock đăng nhập vào một người dùng mẫu (`facebook.demo@example.com`).
+The sign-in screen has dropped the Facebook button; the Facebook sign-in code and SDK are kept so it can be turned back on. With the button, the flow signs in through the Facebook SDK (`react-native-fbsdk-next`), then exchanges the access token for a Firebase account (`FacebookAuthProvider.credential` + `signInWithCredential`, in `src/lib/auth/firebase.ts`). After that the flow matches email: send the Firebase ID token to Core (`POST /auth/session`); a new account (Core requires `displayName`) goes through the "Bạn tên gì?" screen, then shop creation. Core stores only the Firebase UID, so it needs no change. The web uses Firebase's popup window; the mock build signs in as a sample user (`facebook.demo@example.com`).
 
-Cấu hình một lần (người quản trị app Facebook và Firebase làm):
+One-time setup (done by the Facebook app and Firebase administrator):
 
-1. **Meta for Developers:** tạo app, thêm sản phẩm Facebook Login. Lấy **App ID** (Cài đặt ứng dụng → Cơ bản), **App Secret** (cùng trang) và **Client Token** (Cài đặt ứng dụng → Nâng cao → Bảo mật). Thêm nền tảng **Android**: tên gói `vn.teamhexa.songheloi`, tên lớp `vn.teamhexa.songheloi.MainActivity`, **key hash** của khoá ký (Base64 của SHA-1: khoá EAS `QU+neYI9yeNs0x2cI7KScGEbywI=`, khoá debug `Xo8WBi6jzSxKDVR4drqm84yr9iU=`; bản đưa lên Google Play cần thêm key hash của khoá Google). Chỉ người có vai trò trong app mới đăng nhập được khi app ở chế độ Development; muốn người khác dùng phải chuyển sang Live.
-2. **Firebase Console → Authentication → Sign-in method:** bật **Facebook**, dán App ID và App Secret. Thêm địa chỉ redirect Firebase hiển thị (`<project>.firebaseapp.com/__/auth/handler`) vào Facebook Login → Valid OAuth Redirect URIs.
-3. **Build:** `app.config.js` chỉ thêm plugin Facebook khi có `FACEBOOK_APP_ID` và `FACEBOOK_CLIENT_TOKEN` (đặt trong `.env` khi chạy `npx expo prebuild --platform android`, hoặc làm biến môi trường EAS). Hai giá trị này không đưa vào repo công khai và **App Secret không bao giờ đặt trong app hay `.env`**. Thư viện có mã native nên phải build lại dev client/APK, **không chạy trên Expo Go**; thiếu cấu hình thì bấm nút báo lỗi rõ ràng thay vì sập. Thư mục `android/` đã sinh sẵn thì chạy lại prebuild sau khi đổi hai biến.
+1. **Meta for Developers:** create an app and add the Facebook Login product. Take the **App ID** (App settings → Basic), the **App Secret** (same page) and the **Client Token** (App settings → Advanced → Security). Add the **Android** platform: package name `vn.teamhexa.songheloi`, class name `vn.teamhexa.songheloi.MainActivity`, and the signing key's **key hash** (Base64 of the SHA-1: EAS key `QU+neYI9yeNs0x2cI7KScGEbywI=`, debug key `Xo8WBi6jzSxKDVR4drqm84yr9iU=`; a Google Play build also needs the Google key's hash). While the app is in Development mode, only people with a role in the app can sign in; switch it to Live for others.
+2. **Firebase Console → Authentication → Sign-in method:** enable **Facebook** and paste the App ID and App Secret. Add the redirect address Firebase shows (`<project>.firebaseapp.com/__/auth/handler`) to Facebook Login → Valid OAuth Redirect URIs.
+3. **Build:** `app.config.js` adds the Facebook plugin only when `FACEBOOK_APP_ID` and `FACEBOOK_CLIENT_TOKEN` are present (set in `.env` when running `npx expo prebuild --platform android`, or as EAS environment variables). These two values are not committed to the public repo, and **the App Secret never goes into the app or `.env`**. The library has native code, so the dev client/APK must be rebuilt, and it **does not run in Expo Go**; without configuration, tapping the button shows a clear error instead of crashing. If the `android/` folder is already generated, rerun prebuild after changing the two variables.
 
-Giới hạn: mỗi cách đăng nhập là một tài khoản Firebase riêng, nên cùng một người đăng nhập bằng cách khác sẽ thành người dùng khác trong Core trừ khi liên kết ở Firebase (chưa làm). Nếu email Facebook đã dùng ở cách đăng nhập khác, Firebase có thể trả `account-exists-with-different-credential` và app báo người dùng dùng cách cũ. Chưa kiểm tra: iOS, và đăng nhập Facebook thật trên máy.
+Limits: each sign-in method is a separate Firebase account, so the same person signing in another way becomes a different Core user unless the accounts are linked in Firebase (not done). If the Facebook email is already used by another sign-in method, Firebase can return `account-exists-with-different-credential` and the app tells the user to use the earlier method. Not checked: iOS, and real Facebook sign-in on a device.
 
-### Đăng nhập bằng Google
+### Google sign-in
 
-Nút Google ở màn đầu (`app/(auth)/welcome.tsx`) dùng `@react-native-google-signin/google-signin` trên điện thoại: Google trả ID token, app đổi sang tài khoản Firebase (`GoogleAuthProvider.credential` + `signInWithCredential`, ở `src/lib/auth/firebase.ts`) rồi đi tiếp như Facebook (Core `POST /auth/session`, tài khoản mới qua màn "Bạn tên gì?"). Web dùng popup Google của Firebase (`signInWithPopup`); bản mock đăng nhập vào người dùng mẫu `google.demo@example.com`. Đăng xuất cũng đăng xuất khỏi Google để lần sau hiện lại hộp chọn tài khoản. Core không cần sửa.
+The Google button on the first screen (`app/(auth)/welcome.tsx`) uses `@react-native-google-signin/google-signin` on phones: Google returns an ID token, the app exchanges it for a Firebase account (`GoogleAuthProvider.credential` + `signInWithCredential`, in `src/lib/auth/firebase.ts`), then continues like Facebook (Core `POST /auth/session`, new accounts go through the "Bạn tên gì?" screen). The web uses Firebase's Google popup (`signInWithPopup`); the mock build signs in as the sample user `google.demo@example.com`. Signing out also signs out of Google so the account picker shows again next time. Core needs no change.
 
-Cấu hình một lần, trên **từng** Firebase project (staging `smart-ledger-c2892` cho `android-dev`/`android-staging`, production `smart-ledger-production` cho `android-production`):
+One-time setup, on **each** Firebase project (staging `smart-ledger-c2892` for `android-dev`/`android-staging`, production `smart-ledger-production` for `android-production`):
 
-1. **Authentication → Sign-in method:** bật **Google**.
-2. **Project settings → Your apps → Android `vn.teamhexa.songheloi` → Add fingerprint:** thêm SHA-1 và SHA-256 của mọi khoá ký bản build trỏ về project đó. Staging: khoá debug (`android/app/debug.keystore`, SHA-1 `5E:8F:16:06:2E:A3:CD:2C:4A:0D:54:78:76:BA:A6:F3:8C:AB:F6:25`). Production: khoá release (SHA-1 `F9:2B:40:76:E8:B8:01:BB:B9:D8:6E:78:8E:A5:3E:87:C2:54:A1:D5`; workflow in lại chứng chỉ ở bước "Publish the APK to R2"), sau này thêm khoá Google Play. Không thêm khoá debug vào production: khoá này công khai trong repo. Thiếu SHA của khoá nào thì bản ký bằng khoá đó bị Google từ chối (`DEVELOPER_ERROR`, app báo "Cách đăng nhập này chưa dùng được").
-3. **Tải lại `google-services.json`** (phải có `oauth_client` với `client_type` 1 mang SHA-1 ở trên và `client_type` 3) rồi cập nhật secret `ANDROID_GOOGLE_SERVICES_JSON` của môi trường GitHub tương ứng. `app.config.js` đọc Web client ID (`client_type` 3) từ chính file này vào `extra.googleWebClientId`, nên không có biến môi trường riêng.
-4. **Web:** thêm domain của bản web vào Authentication → Settings → Authorized domains.
+1. **Authentication → Sign-in method:** enable **Google**.
+2. **Project settings → Your apps → Android `vn.teamhexa.songheloi` → Add fingerprint:** add the SHA-1 and SHA-256 of every signing key whose builds point at that project. Staging: the debug key (`android/app/debug.keystore`, SHA-1 `5E:8F:16:06:2E:A3:CD:2C:4A:0D:54:78:76:BA:A6:F3:8C:AB:F6:25`). Production: the release key (SHA-1 `F9:2B:40:76:E8:B8:01:BB:B9:D8:6E:78:8E:A5:3E:87:C2:54:A1:D5`; the workflow prints the certificate in the "Publish the APK to R2" step), and later the Google Play key. Do not add the debug key to production: it is public in the repo. A build signed with a key whose SHA is missing is rejected by Google (`DEVELOPER_ERROR`, the app shows "Cách đăng nhập này chưa dùng được").
+3. **Download `google-services.json` again** (it must have an `oauth_client` with `client_type` 1 carrying the SHA-1 above and one with `client_type` 3), then update the `ANDROID_GOOGLE_SERVICES_JSON` secret of the matching GitHub environment. `app.config.js` reads the Web client ID (`client_type` 3) from this file into `extra.googleWebClientId`, so there is no separate environment variable.
+4. **Web:** add the web build's domain to Authentication → Settings → Authorized domains.
 
-Thư viện có mã native nên phải build lại APK. Plugin `@react-native-google-signin/google-signin` trong `app.json` gắn client iOS của `GoogleService-Info.plist` khi prebuild iOS; trên iOS thư viện tự dùng client đó nên không bắt buộc Web client ID (Android thì bắt buộc). Chưa kiểm tra: iOS. Giới hạn liên kết tài khoản giống Facebook (xem mục trên).
+The library has native code, so the APK must be rebuilt. The `@react-native-google-signin/google-signin` plugin in `app.json` attaches the iOS client from `GoogleService-Info.plist` on iOS prebuild; on iOS the library uses that client by itself, so the Web client ID is not required there (it is on Android). Not checked: iOS. The account linking limit is the same as Facebook (see above).
 
-## Test giao diện bằng Playwright
+## UI tests with Playwright
 
-Test trong `e2e/` chạy bản Expo web với dữ liệu mock trên cổng 8090, không cần Firebase hay Core. Playwright tự bật server rồi tắt khi xong; lần đầu Metro build mất vài phút.
+Tests in `e2e/` run the Expo web build with mock data on port 8090 and need no Firebase or Core. Playwright starts the server and stops it when done; the first Metro build takes a few minutes.
 
 ```bash
 npx playwright install chromium
 npm run test:e2e
 ```
 
-Thêm `-- --headed` để xem trình duyệt chạy, `-- --ui` để chạy từng bước. Báo cáo nằm ở `e2e-report/`, ảnh và trace của test lỗi ở `e2e-results/`.
+Add `-- --headed` to watch the browser, `-- --ui` to step through. The report is in `e2e-report/`, screenshots and traces of failing tests in `e2e-results/`.
 
 ## Debug
 
-- **Log:** chỉ chạy ở bản dev (`__DEV__`), mọi thứ có tiền tố `[api]`, `[auth]`, `[session]`. Không ghi token, mật khẩu, SĐT/email đầy đủ. Xem ở terminal đang chạy `npx expo start --dev-client` (bấm `j` mở React Native DevTools), hoặc:
+- **Logs:** only in dev builds (`__DEV__`), everything prefixed with `[api]`, `[auth]`, `[session]`. Tokens, passwords and full phone numbers/emails are never logged. View them in the terminal running `npx expo start --dev-client` (press `j` to open React Native DevTools), or:
   ```bash
   adb logcat -s ReactNativeJS
   ```
-- **Màn “Chẩn đoán kết nối”** (`/debug`, chỉ dùng nội bộ ở bản dev): hiện chế độ (mock/thật), `API_ENDPOINT`, trạng thái Firebase, nút **Kiểm tra kết nối Core** (gọi `/v3/api-docs` không cần token), **Xem token** (aud/iss/hạn dùng; Core cần `FIREBASE_PROJECT_ID` trùng `aud`), **Gọi GET /me**, và nhật ký gần đây. Màn này không nằm trong tab Quản lý.
-- **Chạy bản web để thử nhanh (không cần build APK):** `npm run web`, đăng nhập bằng email. Core chỉ nhận origin trong `CORS_ALLOWED_ORIGINS` (xem [CI/CD](../../docs/development/ci-cd.md)), nên `localhost` của máy dev bị chặn; chạy thêm proxy dev ở một terminal khác rồi trỏ app vào proxy:
+- **The “Chẩn đoán kết nối” screen** (`/debug`, internal use in dev builds only): shows the mode (mock/real), `API_ENDPOINT`, Firebase status, a **Kiểm tra kết nối Core** button (calls `/v3/api-docs` without a token), **Xem token** (aud/iss/expiry; Core needs `FIREBASE_PROJECT_ID` to match `aud`), **Gọi GET /me**, and the recent log. This screen is not in the Quản lý tab.
+- **Run the web build for a quick try (no APK build needed):** `npm run web` and sign in with email. Core accepts only origins in `CORS_ALLOWED_ORIGINS` (see [CI/CD](../../docs/development/ci-cd.md)), so the dev machine's `localhost` is blocked; run the dev proxy in another terminal and point the app at it:
   ```bash
   CORE_URL=https://staging.103-162-31-93.sslip.io node scripts/dev-cors-proxy.js
   ```
-  và đặt `EXPO_PUBLIC_API_ENDPOINT=http://127.0.0.1:8010` trong `.env` (chạy lại `npm run web -- --clear` sau khi đổi). Bỏ `CORE_URL` thì proxy trỏ về Core trên máy (`http://localhost:8000`). Chỉ Firebase mà chưa cần Core thì đặt `EXPO_PUBLIC_MOCK_CORE=true`, không cần proxy. Web không thử được: adapter native, đăng nhập SĐT trên máy thật, mạng Android.
-- **Timeout:** mọi lời gọi Core tự dừng sau 15 giây (`ApiError` code `timeout`) thay vì quay vô hạn khi sai IP hoặc tường lửa chặn.
-- **Lỗi thường gặp:** `network` = không tới được Core (IP, tường lửa, Android chặn HTTP); `timeout` = tường lửa thả gói; `401 unauthorized` = token không khớp project của Core; `400 validation_failed` ở `/auth/session` = tài khoản mới cần `displayName` (bình thường); `provider-disabled` = chưa bật phương thức đăng nhập trong Firebase Console.
+  and set `EXPO_PUBLIC_API_ENDPOINT=http://127.0.0.1:8010` in `.env` (rerun `npm run web -- --clear` after the change). Without `CORE_URL` the proxy points at the local Core (`http://localhost:8000`). For Firebase alone without Core, set `EXPO_PUBLIC_MOCK_CORE=true` and skip the proxy. The web cannot test native adapters, phone sign-in on a real device or Android networking.
+- **Timeout:** every Core call stops after 15 seconds (`ApiError` code `timeout`) instead of spinning forever on a wrong IP or a blocking firewall.
+- **Common errors:** `network` = Core unreachable (IP, firewall, Android blocking HTTP); `timeout` = the firewall drops packets; `401 unauthorized` = the token does not match Core's project; `400 validation_failed` on `/auth/session` = a new account needs `displayName` (normal); `provider-disabled` = the sign-in method is not enabled in Firebase Console.
 
-Chưa làm: đăng nhập Google/Apple (bản thật hiện báo “sắp có”; Facebook xem mục trên), Zalo trên iOS (Core chưa có luồng), nhận diện đơn bằng AI (màn Đọc đơn vẫn dùng `parseOrder()` trên máy).
+Not done: Apple sign-in (Facebook: see above), Zalo on iOS (Core has no flow for it), AI order recognition (the Đọc đơn screen still uses `parseOrder()` on the device).
 
-Ghi chú: mã QR chuyển khoản chỉ để minh hoạ, không xác nhận giao dịch ngân hàng.
+Note: the bank transfer QR code is illustrative only and does not confirm a bank transaction.
 
-## Vercel preview trên trình duyệt
+## Vercel browser preview
 
-`vercel.json` cấu hình Expo export ra `dist/` và chuyển các đường dẫn Expo Router về SPA entry. CD build web và tải lên Vercel (job `deploy-web` trong `cd.yml`, CI gọi sau khi job `mobile-web` qua): `staging` có alias cố định, `main` là production; PR tạm không có preview vì vượt giới hạn 100 deploy/ngày của Vercel Hobby. Biến `EXPO_PUBLIC_*` đặt ở GitHub Environment `vercel-preview`/`vercel-staging`/`vercel-production`, không đặt trên Vercel; xem [CI/CD](../../docs/development/ci-cd.md#mobile-web-on-vercel).
+`vercel.json` configures the Expo export to `dist/` and routes Expo Router paths to the SPA entry. CD builds the web app and uploads it to Vercel (the `deploy-web` job in `cd.yml`, called by CI after the `mobile-web` job passes): `staging` has a fixed alias and `main` is production; pull requests have no preview for now because of the Vercel Hobby limit of 100 deploys per day. The `EXPO_PUBLIC_*` variables are set in the GitHub Environments `vercel-preview`/`vercel-staging`/`vercel-production`, not on Vercel; see [CI/CD](../../docs/development/ci-cd.md#mobile-web-on-vercel).
 
-Các biến `EXPO_PUBLIC_*` được đóng vào bundle trình duyệt, vì vậy không đặt service-account keys ở đó. Preview web giúp kiểm tra giao diện responsive và luồng với Core staging; nó không thay thế kiểm tra native trên iOS/Android.
+`EXPO_PUBLIC_*` variables are baked into the browser bundle, so never put service-account keys there. The web preview helps check the responsive UI and flows against the staging Core; it does not replace native testing on iOS/Android.

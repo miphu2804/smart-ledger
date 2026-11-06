@@ -1,3 +1,12 @@
+---
+type: Runbook
+title: "CI/CD"
+description: "Flow from feature branch to the VPS and Vercel, GitHub environments, VPS provisioning and Core CORS origins."
+owner: Technical owner
+status: stable
+generated: { by: human:miphu2804, at: 2026-11-06T22:18:48+07:00 }
+stale_after: 2027-01-05T22:18:48+07:00
+---
 # CI/CD
 
 `backend/core` and `backend/ai` deploy to a VPS; the mobile web and the landing page (with the admin dashboard at `/admin`) deploy to Vercel. The Android app has its own manual workflow, see [Android build](#android-build). Branch and review rules are in [CONTRIBUTING](../../CONTRIBUTING.md).
@@ -497,7 +506,7 @@ Each `android-*` environment needs:
 
 - Secret `ANDROID_GOOGLE_SERVICES_JSON`: the content of `google-services.json`.
 - Variables `EXPO_PUBLIC_*`, as for the [mobile web](#mobile-web-on-vercel).
-- Variable `STT_MODEL_BASE_URL`: the public R2 address holding the speech model ([models README](../../frontend/mobile/assets/models/README.md#đưa-model-lên-r2)). A publish uploads missing files; a test build only warns.
+- Variable `STT_MODEL_BASE_URL`: the public R2 address holding the speech model ([models README](../../frontend/mobile/assets/models/README.md#put-the-model-on-r2)). A publish uploads missing files; a test build only warns.
 - Secrets `R2_ACCOUNT_ID`, `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY` and variables `R2_BUCKET`, `R2_PUBLIC_URL` (no trailing slash): where the build goes. Job `build` checks them before it starts, and the runner needs the `aws` CLI.
 
 The run page shows a summary (runner, toolchain, timings, size and SHA-256). A successful run that does not publish uploads the APK or AAB to R2 as `android/<environment>/ci/<run>/<file>` and puts its download link on the run page. GitHub artifacts are not used: the account's artifact storage is 500 MB, and a full quota failed every Android build from 2026-11-03.
@@ -561,6 +570,6 @@ One-time setup:
 ### Measured and not yet verified
 
 - `ubuntu-24.04`, `android-dev`, cold cache: about 12 minutes. A self-hosted Apple M4 Pro with a warm cache is about three times faster.
-- APK size settings in [`frontend/mobile/README.md`](../../frontend/mobile/README.md#dung-lượng-apk-android) cut the `arm64-v8a` APK from 95.2 MB to 40.3 MB; a two-ABI release APK is about 58 MB.
+- APK size settings in [`frontend/mobile/README.md`](../../frontend/mobile/README.md#android-apk-size) cut the `arm64-v8a` APK from 95.2 MB to 40.3 MB; a two-ABI release APK is about 58 MB.
 - Not yet run: `android-staging`, `android-production`, the self-hosted and `auto` paths, a full signed build, the R2 upload and the APK on a physical device.
 - iOS is built separately ([mobile-ios-device-release.md](mobile-ios-device-release.md)).

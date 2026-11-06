@@ -1,3 +1,12 @@
+---
+type: Handoff
+title: "Daily user activity — CORE-018"
+description: "Core guide for recording daily user activity: limits, retention, rollback and the DAU/MAU SQL."
+owner: Core owner
+status: stable
+generated: { by: human:thaonguyen1909, at: 2026-10-29T14:26:43+07:00 }
+stale_after: 2026-12-28T14:26:43+07:00
+---
 # Daily user activity — CORE-018
 
 Owner-approved implementation for [#409](https://github.com/miphu2804/smart-ledger/issues/409), prepared on `feat/core-daily-activity`. This records successful authenticated API use, including read-only report visits. It adds no FE endpoint and is separate from creation counts, business audit, realtime CCU and Core/JVM metrics. Local verification does not establish staging acceptance or production activation.

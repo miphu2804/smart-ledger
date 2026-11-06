@@ -1,3 +1,12 @@
+---
+type: Walkthrough
+title: "Service walkthrough"
+description: "Reading notes with diagrams of Core and AI service flows; explains code, does not decide behavior."
+owner: Technical owner
+status: stable
+generated: { by: human:miphu2804, at: 2026-11-06T22:18:48+07:00 }
+stale_after: 2027-01-05T22:18:48+07:00
+---
 # Service walkthrough
 
 Core documentation audit, 2026-10-26, against `feat/admin-dashboard-growth` at
@@ -8,11 +17,11 @@ runtime enablement, deployment and integrated acceptance remain separate.
 
 Core diagrams reviewed against `staging` commit [`b1de421c461d59473b3bb73aae103027afd67a89`](https://github.com/miphu2804/smart-ledger/tree/b1de421c461d59473b3bb73aae103027afd67a89) on 2026-10-06. AI diagrams (§8) were reviewed separately against `staging` commit [`f1a4818800446e82b0b3cb9eec24d2fa809f9436`](https://github.com/miphu2804/smart-ledger/tree/f1a4818800446e82b0b3cb9eec24d2fa809f9436) on 2026-10-16.
 
-Query-optimization update (#138), reviewed on 2026-10-10 against `perf/query-optimization` commit [`b6e4169dcfb9ffb2534b20baa9aa5e368b86d9b3`](https://github.com/miphu2804/smart-ledger/tree/b6e4169dcfb9ffb2534b20baa9aa5e368b86d9b3): the preparation note in §5.2 and confirm/void diagrams in §5.3/§6.3 reflect #134–#137. This is a branch-code review, not confirmation of staging deployment or FE acceptance; other diagrams retain the baseline above. Query budgets and regression evidence are described in [technical design §4.1](../technical-design.md#41-truy-vấn-theo-lô) and [§7](../technical-design.md#7-kiểm-chứng-trước-merge).
+Query-optimization update (#138), reviewed on 2026-10-10 against `perf/query-optimization` commit [`b6e4169dcfb9ffb2534b20baa9aa5e368b86d9b3`](https://github.com/miphu2804/smart-ledger/tree/b6e4169dcfb9ffb2534b20baa9aa5e368b86d9b3): the preparation note in §5.2 and confirm/void diagrams in §5.3/§6.3 reflect #134–#137. This is a branch-code review, not confirmation of staging deployment or FE acceptance; other diagrams retain the baseline above. Query budgets and regression evidence are described in [technical design §4.1](../technical-design.md#41-batched-queries) and [§7](../technical-design.md#7-pre-merge-verification).
 
 These are reading notes, not a source of truth — scope and behavior stay in `docs/product/` and `docs/contracts/`.
 
-CORE-013 (#181), reviewed on 2026-10-13 against `fix/core-concurrency` commit [`089611b`](https://github.com/miphu2804/smart-ledger/commit/089611b): session sync, profile/catalog writes and Category assignment use fresh rows under locks; void validates the restored total before assignment. The affected auth/void SVGs are re-rendered. This describes branch code and disposable PostgreSQL tests, not staging deployment or FE acceptance; see [technical design §4.4](../technical-design.md#44-concurrency-và-vòng-đời-core-013).
+CORE-013 (#181), reviewed on 2026-10-13 against `fix/core-concurrency` commit [`089611b`](https://github.com/miphu2804/smart-ledger/commit/089611b): session sync, profile/catalog writes and Category assignment use fresh rows under locks; void validates the restored total before assignment. The affected auth/void SVGs are re-rendered. This describes branch code and disposable PostgreSQL tests, not staging deployment or FE acceptance; see [technical design §4.4](../technical-design.md#44-concurrency-and-lifecycle-core-013).
 
 | Folder | Diagrams |
 |---|---|
@@ -487,7 +496,7 @@ Repayment and void share the lock order **Sale → Debt**. A restocking void the
 
 With `restockItems=true`, validate deduction snapshots before locking products. Only `stockDeducted=true` items contribute IDs; custom/non-deducted items do not restore stock, and unknown snapshots fail rather than guessing. One nonempty Product-lock query is scoped to the shop, ordered by ID and has no ACTIVE filter, so archived products remain eligible for restoration under the existing stock rules. Reconcile the restored product group once; an empty group skips both Product locking and open-alert reads. Restock audit, debt cancellation, full refund and idempotent replay keep their existing behavior.
 
-The stock-restoration limit, error response and retry rules are defined in the [sale void API contract](../../contracts/api-contracts.md#hủy-toàn-bộ-và-hoàn-tiền). `restoreStock()` validates before mutating that Product; a failure on a later item rolls back earlier stock/audit writes and the entire void transaction, including refund, debt, notification and idempotency reservation.
+The stock-restoration limit, error response and retry rules are defined in the [sale void API contract](../../contracts/api-contracts.md#full-void-and-refund). `restoreStock()` validates before mutating that Product; a failure on a later item rolls back earlier stock/audit writes and the entire void transaction, including refund, debt, notification and idempotency reservation.
 
 ```mermaid
 flowchart LR

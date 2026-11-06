@@ -1,3 +1,12 @@
+---
+type: Guide
+title: "SmartLedger"
+description: "Repository entry point: what the product is, how the services fit together and where to start."
+owner: Technical owner
+status: stable
+generated: { by: human:miphu2804, at: 2026-11-06T22:18:48+07:00 }
+stale_after: 2027-01-05T22:18:48+07:00
+---
 # SmartLedger
 
 AI voice POS for small shops (So Nghe Loi): say one sentence and the AI records the items, quantities, and prices. Product overview: [docs/product/project-overview.md](docs/product/project-overview.md).
@@ -32,7 +41,7 @@ AI voice POS for small shops (So Nghe Loi): say one sentence and the AI records 
 | Purple | One-time VPS setup with Ansible |
 | Orange | Runtime request flow from the app to Core, AI, and the database |
 
-Related: [Technical design §1](docs/architecture/technical-design.md#1-phạm-vi) (status per component), [ADRs](docs/architecture/adr/) (why), [CI/CD](docs/development/ci-cd.md) (pipeline).
+Related: [Technical design §1](docs/architecture/technical-design.md#1-scope) (status per component), [ADRs](docs/architecture/adr/) (why), [CI/CD](docs/development/ci-cd.md) (pipeline).
 
 | Part | Path | Runs on | Role |
 |---|---|---|---|

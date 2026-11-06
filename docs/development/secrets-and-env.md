@@ -1,3 +1,12 @@
+---
+type: Runbook
+title: "Secrets and env files"
+description: "Env files per environment kept in Dopbase, their format, onboarding, changing a secret and managing access."
+owner: Technical owner
+status: stable
+generated: { by: human:miphu2804, at: 2026-11-03T14:52:23+07:00 }
+stale_after: 2027-01-02T14:52:23+07:00
+---
 # Secrets and env files
 
 Every credential the team shares (local `.env` files, VPS service env files, GitHub Actions variables) lives in Dopbase, the team's secrets manager at `https://secrets.songheloi.id.vn` ([setup](ci-cd.md)). Each env file is one Dopbase project and each environment is a Dopbase environment of that project. `scripts/secrets/dopbase-sync.sh pull <environment>` writes them into `secrets/<environment>/env/`, which git ignores; tools read most files there directly, and `scripts/secrets/apply.sh dev dev` copies the few that a tool reads at a fixed path, pointing them at a local database.
