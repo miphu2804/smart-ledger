@@ -17,7 +17,7 @@ Source review: `staging` commit `a2766ee3a37e23c0f03fd43383b608c1b2fac898`. This
 | API and common service behavior | [API contracts](../../../docs/contracts/api-contracts.md) | `ApiDocumentationWebTest`, `CoreBusinessContractWebTest`, controller/service suites |
 | Barcode and catalog | [barcode contract](../../../docs/contracts/api-contracts.md#barcode-core-012) and [V16 ERD notes](../../../docs/architecture/erd-description.md#7-migration-alignment) | `ProductBarcode*`, `CatalogControllerWebTest` |
 | OWNER pagination and filtered totals | [pagination contract](../../../docs/contracts/api-contracts.md#pagination-of-owner-lists) and [sale summary](../../../docs/contracts/api-contracts.md#sales-list-totals-under-filters-core-014) | `Owner*`, `SalesListQueryPostgresTest`, `SalePaymentServiceTest` |
-| Transactions, locks and alerts | [technical design](../../../docs/architecture/technical-design.md#42-owner-list-pagination) | `ProductBatchLockPostgresTest`, `NotificationPostgresTest`, concurrency suites |
+| Transactions, locks and alerts | [batched queries](../../../docs/architecture/technical-design.md#41-batched-queries) and [concurrency](../../../docs/architecture/technical-design.md#44-concurrency-and-lifecycle-core-013) | `ProductBatchLockPostgresTest`, `NotificationPostgresTest`, concurrency suites |
 | Admin growth | [admin handoff](admin-dashboard-growth.md) | `AdminDashboardControllerWebTest,AdminAccessAuditServiceTest,AdminDashboardPostgresTest` |
 | Daily activity and quotas | [CORE-018](user-daily-activity.md), [CORE-019](user-rate-limits.md) | `UserDailyActivity*`, `UserRateLimit*` |
 | Stock adjustment | [CORE-021 handoff](stock-adjustments.md) | `ProductStockAdjustmentTest`, contract and product tests |

@@ -64,7 +64,7 @@ If tiering is off, the classifier URL is blank, or any tier alias is missing, ev
 
 ## Read-only shop data
 
-`query_shop_data` and `suggest_restock` exist only when `AI_SQL_READER_URL` is configured. The separate login is a member of the `NOLOGIN` `ai_sql_reader` role, which has `SELECT` only on the eight `ai_read` views. Views filter on the transaction setting `smartledger.shop_id`; an unset setting returns no rows and the views omit sensitive customer/contact and transfer-reference fields.
+`query_shop_data` and `suggest_restock` exist only when `AI_SQL_READER_URL` is configured. The separate login is a member of the `NOLOGIN` `ai_sql_reader` role, which has `SELECT` only on the eight `ai_read` views. The `security_barrier` views filter on the transaction setting `smartledger.shop_id`; an unset setting returns no rows and the views omit sensitive customer/contact and transfer-reference fields.
 
 The SQL guard rejects statements over 4000 characters, accepts exactly one `SELECT` over the allowlisted views/functions through `sqlglot`, re-renders it with `LIMIT`, and the repository runs it in one `READ ONLY` transaction with a bound shop ID, statement timeout, row cap and 200-character text-cell cap. A rejected query returns an `Error[CODE]` for the model to correct; connection and other operational failures fail the turn with `503 ai_unavailable`. Refunds, stock-in history and customer contacts are not exposed.
 
