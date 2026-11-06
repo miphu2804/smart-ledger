@@ -1,3 +1,11 @@
+### 2026-11-06 — Add shared documentation skills for agents
+
+| Area | Change |
+|---|---|
+| Agent tooling | • Add project-scoped `technical-writing`, `writing-for-agents` and `retro` skills with pinned hashes in `skills-lock.json`; expose Claude links through `.claude/skills` symlinks to `.agents/skills` |
+
+Check: `npx skills list --json` shows all three project skills for Claude Code, Codex, GitHub Copilot, Pi and Zed; `git diff --check`. No runtime changes. Commit: the one that adds this entry.
+
 ### 2026-11-06 — Docs describe SmartLedger as running in production, are in English outside product and carry OKF frontmatter
 
 | Area | Change |
