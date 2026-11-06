@@ -113,3 +113,22 @@ Change it in the Dopbase web UI or with `dopbase secret set <project>/<environme
 ## 6. Add or remove a person
 
 The maintainer creates or removes the person's Dopbase account and grants access per project. When someone leaves, rotate every secret they could read, because they may still hold a pulled copy.
+
+## 7. CI reads Dopbase
+
+Workflows read shared values from Dopbase at run time, so a value changed in Dopbase reaches the next run without a GitHub copy to update.
+
+- **Runner token.** One Dopbase runner token per group, stored as a GitHub environment secret named `DOPBASE_TOKEN_<GROUP>`: `CORE`, `AI`, `VPS`, `BIFROST`, `MONITOR` and `RELEASE`. A token reads one `<group>/<environment>`, so a leaked token reads only that group. `DOPBASE_TOKEN` is the fallback that a script reads when a group has none.
+- **Load.** `scripts/ci/load-dopbase.sh <project>/<environment> '<regex>'` writes the matching keys to the later steps of the job under their Dopbase names and masks each value in the log. Steps then read them as shell variables; a `${{ secrets.* }}` reference to the same name is no longer needed.
+- **Names.** A GitHub name matches its Dopbase key, so the same variable has one name in both places.
+
+| Group | Dopbase keys read by CI | Read by | Environment |
+|---|---|---|---|
+| `vps/<environment>` | `VPS_HOST`, `VPS_KNOWN_HOSTS`, `VPS_SSH_KEY` | `deploy-backend.yml` | `backend-staging`, `backend-production` |
+| `vps/<environment>` | `VPS_HOST`, `VPS_KNOWN_HOSTS` | `infra-run.yml` | GitHub environment of the run |
+| `ai/production` | `HH_API_KEY`, `HH_API_URL`, `HH_CONTROL_PLANE_URL`, `HH_DATA_PLANE_API_KEY`, `HH_CONTROL_PLANE_API_KEY` | `honeyhive-sync.yml`, `honeyhive-dashboards.yml` | `backend-production` |
+| `release/production` | `ANDROID_KEYSTORE_BASE64`, `ANDROID_KEYSTORE_PASSWORD` | `mobile-release.yml` (`android-production` only) | `android-production` |
+
+`VPS_USER` is no longer a variable: `start-ssh-agent.sh` defaults to `deploy`. `SMARTLEDGER_VPS_USER` (the admin login of Ansible) and `SSH_PRIVATE_KEY` (its key) stay in GitHub until Dopbase holds that key; see [CI/CD](ci-cd.md#github-environments).
+
+Note: `release/production` keeps `RELEASE_KEYSTORE`, a file path, for the local release script `scripts/release/android-release.sh`. CI needs the base64 content under a different name, so the two sets live side by side.
