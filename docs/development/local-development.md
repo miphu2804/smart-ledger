@@ -4,7 +4,7 @@ title: "Local development"
 description: "Setup, run commands, pre-PR checks, local Compose, the local database and the shared-database migration workflow."
 owner: Technical owner
 status: stable
-generated: { by: human:miphu2804, at: 2026-11-04T23:08:04+07:00 }
+author: miphu2804
 stale_after: 2027-01-03T23:08:04+07:00
 ---
 # Local development
@@ -13,7 +13,7 @@ How to install, run and check each service on a developer machine, how the local
 
 ## Prerequisites
 
-JDK 21, Python 3.11+ with [uv](https://docs.astral.sh/uv/), Node.js 20+, and Docker for the Compose stack and the local database. Frontends default to mock data and need no backend.
+JDK 21, Python 3.11+ with [uv](https://docs.astral.sh/uv/), Node.js 20+, and Docker for the Compose stack and the local database. Offline frontend demos can use mock data without a backend. Mobile requires explicit API endpoint and mock flags; configure them using the [Mobile guide](../../frontend/mobile/README.md) rather than assuming defaults.
 
 Get the team's credentials by following [`secrets/README.md`](../../secrets/README.md): it pulls them encrypted and writes `backend/core/.env`, `backend/ai/.env` and `frontend/mobile/.env`, with the staging database credentials. Without access, fill those files from their `.env.example` (the install commands below copy them when missing).
 
@@ -94,7 +94,7 @@ docker compose --env-file backend/core/.env --env-file backend/ai/.env up --buil
 
 ## Local Compose
 
-Dev and staging share the staging Supabase project; production uses a separate Supabase project. There is no local PostgreSQL container. Credentials live in each service's Git-ignored env file: `backend/core/.env` defines `DATABASE_URL` (JDBC), `DATABASE_USERNAME`, `DATABASE_PASSWORD`, and `backend/ai/.env` defines `POSTGRES_URL` and the optional `AI_SQL_READER_URL` for the shop-data tool. Production values are in `secrets/production/env/`. Service settings stay in each service's own file: `backend/core/.env` supplies `FIREBASE_PROJECT_ID` and `GOOGLE_APPLICATION_CREDENTIALS` (absolute host path of the service-account key, mounted read-only into the container), and Compose loads `backend/ai/.env` for model and API keys. Core calls AI at `AI_BASE_URL` (Compose sets `http://ai:8001`) with the shared `INTERNAL_API_TOKEN`: put the same value in `backend/ai/.env` and `backend/core/.env`; a missing or mismatched value makes every Agent call fail (`401` from AI, `503 ai_unavailable` from Core). Default stack is Core and AI. AI sends HoneyHive traces, with the redacted chat content, only when `HH_API_KEY` is set in `backend/ai/.env`.
+Dev and staging share the staging Supabase project; production uses a separate Supabase project. The default Compose stack has no PostgreSQL service; use the opt-in [local database script](#develop-against-the-local-database) for a separate disposable development database. Credentials live in each service's Git-ignored env file: `backend/core/.env` defines `DATABASE_URL` (JDBC), `DATABASE_USERNAME`, `DATABASE_PASSWORD`, and `backend/ai/.env` defines `POSTGRES_URL` and the optional `AI_SQL_READER_URL` for the shop-data tool. Production values are in `secrets/production/env/`. Service settings stay in each service's own file: `backend/core/.env` supplies `FIREBASE_PROJECT_ID` and `GOOGLE_APPLICATION_CREDENTIALS` (absolute host path of the service-account key, mounted read-only into the container), and Compose loads `backend/ai/.env` for model and API keys. Core calls AI at `AI_BASE_URL` (Compose sets `http://ai:8001`) with the shared `INTERNAL_API_TOKEN`: put the same value in `backend/ai/.env` and `backend/core/.env`; a missing or mismatched value makes every Agent call fail (`401` from AI, `503 ai_unavailable` from Core). Default stack is Core and AI. AI sends HoneyHive traces, with the redacted chat content, only when `HH_API_KEY` is set in `backend/ai/.env`.
 
 ```bash
 docker compose --env-file backend/core/.env --env-file backend/ai/.env up --build

@@ -4,7 +4,7 @@ title: "Mô tả sản phẩm"
 description: "Vị trí sản phẩm, người dùng và phạm vi MVP môn EXE201 của Sổ Nghe Lời."
 owner: Chủ sản phẩm
 status: stable
-generated: { by: human:TranTho918, at: 2026-11-06T04:32:37+07:00 }
+author: miphu2804
 stale_after: 2027-01-05T04:32:37+07:00
 ---
 # Mô tả sản phẩm
@@ -36,7 +36,7 @@ stale_after: 2027-01-05T04:32:37+07:00
 
 ## 1. Mô tả ngắn
 
-Sổ Nghe Lời là dự án MVP của nhóm trong môn EXE201: thử nghiệm cách giúp người bán nhỏ ghi đơn bằng giọng nói hoặc thao tác đơn giản, theo dõi tiền/nợ/chi phí và hiểu số liệu. Mục tiêu trong thời gian môn học là có sản phẩm dùng được, demo đầu-cuối và thu phản hồi thực tế; không xây hệ thống enterprise hoặc đặt điều kiện vận hành thương mại quy mô lớn.
+Sổ Nghe Lời đang chạy production và giúp người bán nhỏ ghi đơn bằng giọng nói hoặc thao tác đơn giản, theo dõi tiền/nợ/chi phí và hiểu số liệu. MVP EXE201 là nhãn phạm vi bàn giao và kiểm chứng của môn học, không mô tả hệ thống là prototype chưa deploy. Mục tiêu trong thời gian môn học là có sản phẩm dùng được, demo đầu-cuối và thu phản hồi thực tế; không xây hệ thống enterprise hoặc đặt điều kiện vận hành thương mại quy mô lớn.
 
 Hai giao diện đã có vẫn được giữ: `OWNER` dùng mobile vận hành tiệm; `ADMIN` dùng web hỗ trợ hồ sơ/trạng thái và không sửa sổ của chủ tiệm. Nhóm ưu tiên nối và làm ổn định luồng OWNER; chọn phần hỗ trợ có ích để demo thêm, không mở rộng dashboard chỉ để đủ nhiều tính năng.
 

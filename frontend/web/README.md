@@ -4,12 +4,12 @@ title: "Sổ Nghe Lời — Web (landing + admin)"
 description: "How to run and deploy the landing page and the admin pages, in mock and real mode."
 owner: FE owner
 status: stable
-generated: { by: human:miphu2804, at: 2026-11-06T22:18:48+07:00 }
+author: miphu2804
 stale_after: 2027-01-05T22:18:48+07:00
 ---
 # Sổ Nghe Lời — Web (landing + admin)
 
-An AI sales ledger for small shops: say one sentence and the AI records the items, quantities and prices. EXE201 project of Team HEXA (FPT University).
+Web clients for SmartLedger, which runs in production; EXE201 is the course delivery scope. The voice-POS vision is not an AI order-parsing implementation claim: Mobile currently combines speech recognition with a rule-based parser and owner review. See the [implementation boundary](../../docs/architecture/technical-design.md#1-scope).
 
 The landing page and admin pages. Built with Vite, React 19, TypeScript and react-router-dom.
 
