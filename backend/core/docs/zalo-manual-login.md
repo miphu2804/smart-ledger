@@ -4,8 +4,7 @@ title: "Manual Zalo login against local Core"
 description: "Opt-in local test kit for trying Zalo login against a local Core."
 owner: Core owner
 status: stable
-generated: { by: human:miphu2804, at: 2026-11-02T11:30:50+07:00 }
-stale_after: 2027-01-01T11:30:50+07:00
+author: miphu2804
 ---
 # Manual Zalo login against local Core
 
@@ -21,9 +20,9 @@ preparation is separate and does not deploy or run shared-DB migrations.
   `zalo_manual`, schema `core_zalo_manual`. Synthetic credentials are hard-coded
   exclusively for this disposable container. The launcher rejects other mounts,
   labels, ports or database settings. It does not load the repo `.env.staging`.
-- Existing V1–V18 migrations are applied only there. The test entry point is in
+- The checked-in V1–V20 migrations are applied only there. The test entry point is in
   `src/test`, not the packaged application. The earlier separate schema fixture
-  is retired; V17 is now the single SQL source.
+  is retired; V17 is now the single SQL source for the WEB auth-store migration.
 - Database data is in **tmpfs**: stopping/restarting the container or Docker
   loses it. Keep the container running between repeated-login checks. A Core
   restart alone preserves identity mappings, but invalidates in-flight OAuth

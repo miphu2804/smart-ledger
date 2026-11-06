@@ -4,8 +4,7 @@ title: "CORE-016 — Android Core integration and V18 rollout"
 description: "Core guide for Zalo Android sign-in: verification and staging activation after merge."
 owner: Core owner
 status: stable
-generated: { by: human:miphu2804, at: 2026-11-02T11:30:50+07:00 }
-stale_after: 2027-01-01T11:30:50+07:00
+author: miphu2804
 ---
 # CORE-016 — Android Core integration and V18 rollout
 
@@ -151,6 +150,6 @@ Native repository/controller/service/page and handoff DTO/result reached full me
 
 ## V18 verification — 2026-10-17
 
-Fresh Java 21 Maven `verify` with JaCoCo 0.8.14 passed **1,358 tests / 100 suites, zero failures/errors/skips**, using actual V1–V18 in disposable loopback/tmpfs PostgreSQL 16. The mandatory report gate accepts all 15 PostgreSQL suites, including 7 V18 migration cases and 14 native-flow cases; its 13 self-tests pass. The staging example has 2 passing configuration/default-off tests. All 11 Node helper/landing tests and 3 real Chrome popup scenarios pass with synthetic data. The V17 compatibility test uses a separate migrated schema rather than deleting V18 columns.
+Historical Java 21 Maven `verify` with JaCoCo 0.8.14 passed **1,358 tests / 100 suites, zero failures/errors/skips**, using the then-checked-in V1–V18 in disposable loopback/tmpfs PostgreSQL 16. The current checkout contains V1–V20; this dated result is retained as V18 history, not current-schema or deployment evidence. The mandatory report gate accepts all 15 PostgreSQL suites, including 7 V18 migration cases and 14 native-flow cases; its 13 self-tests pass. The staging example has 2 passing configuration/default-off tests. All 11 Node helper/landing tests and 3 real Chrome popup scenarios pass with synthetic data. The V17 compatibility test uses a separate migrated schema rather than deleting V18 columns.
 
-The production JAR contains all 18 migrations but no test fixture, manual tooling, staging env example or private credential file. Native repository/controller/service/page and DTO/result retain full measured Java line coverage; properties reach 40/42. This proves local Core/migration behavior, not VPS activation, shared-DB rollout, real native-provider/Firebase or signed-APK acceptance.
+At that historical checkpoint, the production JAR contained all 18 migrations but no test fixture, manual tooling, staging env example or private credential file. Native repository/controller/service/page and DTO/result retain full measured Java line coverage; properties reach 40/42. This proves only the then-checked-in local Core/migration behavior, not the current V20 schema, VPS activation, shared-DB rollout, real native-provider/Firebase or signed-APK acceptance.

@@ -4,8 +4,7 @@ title: "CORE-015 local verification evidence"
 description: "Test-driven records and local verification evidence for Zalo web sign-in."
 owner: Core owner
 status: stable
-generated: { by: human:miphu2804, at: 2026-11-02T11:30:50+07:00 }
-stale_after: 2027-01-01T11:30:50+07:00
+author: miphu2804
 ---
 # CORE-015 local verification evidence
 
@@ -17,7 +16,7 @@ evidence is appended below; older results are retained as dated checkpoints.
 Scope: Core-only implementation on `feat/zalo-login`, issue #238. No migration,
 frontend, canonical `docs/`, root progress, commit, push or deployment in this
 iteration. The user approved the implementation design. This evidence is not
-staging acceptance or a new source of product requirements.
+staging acceptance or a new source of product requirements. The V1–V16/V17 references below are dated historical checkpoints for the revisions named in each section; the current checked-in Core migration set is V1–V20. See the [current verification guide](verification.md#migration-evidence-and-safety) before interpreting a historical result as current-schema or deployment evidence.
 
 ## Test-first checkpoints
 

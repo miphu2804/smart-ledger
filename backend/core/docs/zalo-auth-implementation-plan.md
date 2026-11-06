@@ -4,8 +4,7 @@ title: "CORE-015: Zalo authentication implementation plan"
 description: "Design and implementation plan for Zalo web sign-in in Core."
 owner: Core owner
 status: stable
-generated: { by: human:thaonguyen1909, at: 2026-10-16T20:00:02+07:00 }
-stale_after: 2026-12-15T20:00:02+07:00
+author: miphu2804
 ---
 # CORE-015: Zalo authentication implementation plan
 
@@ -135,7 +134,7 @@ data. Cleanup is feature-gated and must not query nonexistent tables when Zalo
 - Enabled configuration needs app ID, app secret, exact HTTPS callback URL,
   allowlisted frontend origins and a separate 32-byte session encryption key.
   Environment variable names are defined in Core configuration/tests and
-  [Core README](../README.md#zalo-authentication-core-015-local-backend-implementation),
+  [Core authentication setup](../README.md#zalo-and-core-authentication),
   not inferred from the smoke helper's file.
 - Missing/unapproved schema is fail-closed, not auto-DDL. The feature must not be
   enabled on an application database until V17 from merged code is applied and rollout is approved.
