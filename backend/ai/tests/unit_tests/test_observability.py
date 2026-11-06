@@ -4,6 +4,7 @@ import json
 import logging
 import threading
 import time
+import uuid
 from collections import Counter
 from contextlib import contextmanager
 from dataclasses import replace
@@ -254,6 +255,40 @@ def test_key_traces_agents_with_message_content_but_no_media(monkeypatch) -> Non
     assert settings.include_content is True
     assert settings.include_binary_content is False
     assert embedder_settings is settings
+
+
+def test_spans_join_the_turn_session_without_asking_honeyhive_to_create_it(
+    monkeypatch,
+) -> None:
+    real_init = HoneyHiveTracer.init
+
+    def init(**kwargs):
+        # Test mode sends nothing; the span processor still stamps the attributes.
+        return real_init(**kwargs, test_mode=True)
+
+    monkeypatch.setattr(observability.HoneyHiveTracer, "init", init)
+    previous = Agent._instrument_default, Embedder._instrument_default
+    try:
+        traced = Observability.start(
+            AppConfig(HH_API_KEY="key", HH_SOURCE="production")
+        )
+    finally:
+        Agent.instrument_all(previous[0])
+        Embedder.instrument_all(previous[1])
+    exporter = InMemorySpanExporter()
+    traced._tracer.provider.add_span_processor(SimpleSpanProcessor(exporter))
+    session_id = str(uuid.uuid4())
+
+    token = context.attach(baggage.set_baggage("session_id", session_id))
+    try:
+        with traced._tracer.provider.get_tracer("test").start_as_current_span("tool"):
+            pass
+    finally:
+        context.detach(token)
+
+    (span,) = exporter.get_finished_spans()
+    assert span.attributes["honeyhive.session_id"] == session_id
+    assert "honeyhive.session_auto_create" not in span.attributes
 
 
 async def test_turn_opens_a_session_with_the_redacted_question() -> None:
