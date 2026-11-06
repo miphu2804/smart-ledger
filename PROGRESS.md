@@ -22,6 +22,14 @@ Check: ba sub-agent rà độc lập Core, AI/chat và mobile/web, sau đó đ�
 
 Check: kiểm tra 104 liên kết/anchor nội bộ, mã BRD, 55 dòng truy vết và 120 định nghĩa AC giữ nguyên; `git diff --check`. Chưa chạy runtime/provider/UAT vì chỉ sửa tài liệu. Commit: commit thêm mục này. Giữ nguyên log cũ theo yêu cầu append-only của phiên làm việc.
 
+### 2026-11-06 — Stop spans from asking HoneyHive to create their session
+
+| Area | Change |
+|---|---|
+| AI | • `Observability.start` turns off the SDK's `_session_auto_create` flag, which `skip_backend_session_creation` turned on: every span asked HoneyHive to create its session, and a span arriving after a session update often replaced the session that `start_turn_session` had opened with a bare one (source `api`, start time 0, no inputs), so after #542 production still showed 8 of 9 turns that way<br>• A new test runs a real tracer in test mode and checks that a turn's span carries its session id without the auto-create attribute |
+
+Check: `uv run pytest tests/unit_tests -q` (496 passed, 1 skipped), `ruff check` and `ruff format --check`; the new test fails without the fix. Against real HoneyHive: with a session update before the span, the flag on gave 6 of 8 bare sessions and the flag off 0 of 8; five streamed turns through the local service (uvicorn, local database, OpenAI direct) read back bare 5 of 5 before the fix and complete 5 of 5 after it (source, start time, question, `history_ms`, child spans). Not verified: production after deploy. Commit: the one that adds this entry.
+
 ### 2026-11-06 — Bobi refers to itself by name only
 
 | Area | Change |
@@ -185,36 +193,3 @@ Check: `npm run typecheck`, `oxlint` and `npm run build` pass; on the mock admin
 | AI | • The tier classification call to Bifrost runs inside an `llm router` span of the turn's HoneyHive session, with the user messages as input, the tier and alias as output and the mechanism as metadata; the classifier calls Bifrost over plain HTTP, which the agent instrumentation never saw |
 
 Check: `uv run ruff check` and `uv run pytest tests/unit_tests` (472 passed). Not verified: the span on a real HoneyHive session, since traces run only in production. Commit: the one that adds this entry.
-
-### 2026-11-04 — User flow map follows the new sign-in and the Bobi sheet
-
-| Area | Change |
-|---|---|
-| Docs | • Sign-in flow: the card from #499 (Google, Zalo, email with Tiếp tục, no Facebook), a "Quên mật khẩu?" edge straight from the sign-in screen, and the password screen with the email filled in<br>• Orders flow: the Bobi suggestion strip on Đơn hàng and a new "Hỏi Trợ lý Bobi" node for the sheet from #491, with a step that links to Trợ lý history<br>• Bobi flow: notes for the composer shared with the sheet (#505), the thought line while waiting (#513) and the five quick chips<br>• Seven screenshots retaken or added on staging: `welcome`, `email-login`, `invoices`, `ai-ask-sheet`, `chat-tro-ly-ai`, `chat-dat-cau-hoi`, `chat-tra-loi`; the README says how and which test data they show |
-
-Check: `npm run userflow` builds the page; the onboarding and orders flows render with the new edges and node on a local server. Not verified: other browsers. Commit: the one that adds this entry.
-
-### 2026-11-04 — Cleaner routes in the CI/CD and runtime diagram
-
-| Area | Change |
-|---|---|
-| Docs | • `ci-cd.drawio` and `ci-cd.svg`: Staging and Production use the same data lanes (SQL above traces), Core and AI share one SQL lane, and HoneyHive sits under Production DB<br>• Fixed the Loki icon offset, the `7. chat` arrows into LLM providers and the DB names in the diagram guide |
-
-Check: `validate.py` 0 errors; SVG exported with `drawio` and checked on rendered PNGs. Not verified: a dark viewer. Commit: the one that adds this entry.
-
-### 2026-11-04 — More room between messages in the Bobi sheet
-
-| Area | Change |
-|---|---|
-| Mobile | • In the "Hỏi Trợ lý Bobi" sheet on Orders, the answer has no bubble, so the open-screen button (`ScreenActions`, pulled up by `marginTop: -4` for the bubbles in `/ai`) covered the last line of the answer; it now sits 14 below the text<br>• Questions, answers and follow-up chips are 20 apart instead of 12, and the chips 10 instead of 8<br>• The scroll area reaches the sheet edges and pads inside, so the button's purple shadow is no longer cut straight at the left edge |
-
-Check: `npx tsc --noEmit` passes; on the mock web build at 390 × 844, a low-stock question in the sheet shows "Mở Hàng hoá" below the text with an uncut shadow. Not verified: a real phone. Commit: the one that adds this entry.
-
-### 2026-11-04 — Android builds go to R2 instead of GitHub artifacts
-
-| Area | Change |
-|---|---|
-| CI | • `mobile-release.yml` no longer uploads artifacts: from 2026-11-03 the account's 500 MB artifact quota failed every Android build after Gradle had finished<br>• A build that does not publish uploads its APK or AAB to R2 as `android/<environment>/ci/<run>/<file>` (`scripts/ci/upload-build.sh`) and puts the download link on the run page<br>• `check-upload-prerequisites.sh` (was `check-publish-prerequisites.sh`) checks the R2 settings on every build and the keystore only on a publish |
-| Docs | • `ci-cd.md` Android build: R2 settings for each `android-*` environment, a separate bucket for dev and staging, the lifecycle rule, and how to take the AAB to Google Play |
-
-Check: both scripts run with a fake `aws` CLI (missing settings, publish without keystore, no CLI, AAB and APK keys, failed upload); `bash -n`; `scripts/ci/check-provider-coupling.sh`; the workflow parses as YAML. Not verified: a real run, shellcheck and actionlint (CI runs them). `android-dev` and `android-staging` have no R2 settings yet, so their builds stop at the check until a bucket and token are added. Commit: the one that adds this entry.

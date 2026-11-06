@@ -82,6 +82,12 @@ class Observability:
             # Each chat turn opens its own session; one at startup would stay empty.
             skip_backend_session_creation=True,
         )
+        # Without a session id that option makes every span ask HoneyHive to create
+        # its session. `start_turn_session` creates it instead, and a span that asks
+        # after a session update has gone out often makes HoneyHive replace the session
+        # with a bare one: source `api`, start time 0, no inputs. The SDK has no option
+        # to keep the flag off.
+        tracer._session_auto_create = False
         # The SDK warns for each span it drops for having no session, which every turn
         # left out of the sample and every draft does by design.
         logging.getLogger("honeyhive.early_init").addFilter(
