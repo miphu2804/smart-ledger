@@ -1,3 +1,11 @@
+### 2026-11-07 — Source-verified documentation and private operations boundary (#555)
+
+| Area | Change |
+|---|---|
+| Docs | • Reconciled three independent fresh-context reviews against staging `a2766ee`; corrected reports, ADMIN contracts, AI authorization/privacy/persistence and current schema boundaries<br>• Removed unimplemented API/schema plans from current references; separated AI architecture from runtime detail<br>• Removed published demo access values, environment credential snapshots and deployment/network diagrams; private infrastructure and access procedures now point to the owner's external knowledge base, while privacy safeguards remain |
+
+Check: 72 Markdown documents and 715 internal links passed path/anchor/index/frontmatter checks; DBML matches 25 Core and 4 AI tables. All 14 walkthrough diagrams and the logical architecture rendered; the three changed walkthrough exports were updated. AI auth/observability tests: 37 passed. TypeScript token comparison confirms all three source-file edits are comment-only. BRD and nine ADR statuses are unchanged; PRD changes only diagram navigation. Live environments, private knowledge-base completeness, full secret scanning and Git-history removal were not verified or performed. Commit: the commit that adds this entry.
+
 ### 2026-11-07 — Production-first documentation and local ownership (#555)
 
 | Area | Change |
@@ -186,12 +194,3 @@ Check: `uv run ruff check`, `ruff format --check` and `uv run pytest tests/unit_
 | AI | • The First words wait, Tool calls per turn and Unsupported figure rate charts in `.honeyhive/charts/` filter on `event_type` `session` instead of `event_name` `agent-chat`; with the old filter HoneyHive searched events other than sessions for these session metrics and drew nothing |
 
 Check: the live chart list shows HoneyHive's own session charts filter on `event_type` `session`. Not verified: the three charts drawing data, since `sync-dashboards.sh` applies them only on a merge into `main` or a manual run. Commit: the one that adds this entry.
-
-### 2026-11-04 — Bifrost prices mercury-3
-
-| Area | Change |
-|---|---|
-| CI | • `deploy/vps/bifrost.json` adds a `governance.pricing_overrides` entry for `mercury-3` on provider `inception` at the launch price from Inception's models page, because Bifrost's synced catalog prices it only under OpenRouter and logged its requests without cost |
-| Docs | • ADR-0009 §5 and the AI README say why HoneyHive shows no cost: its session Cost sums the `metadata.cost` the app sets on events, and Bifrost writes the cost it computes only to its own log, not to the response; embeddings on Cloudflare have no cost record |
-
-Check: `bifrost.json` passes `check-jsonschema` against the `transports/v2.4.0` config schema; the override-only path for a model missing from the catalog read in `cost.go` of that tag. Not verified: a non-zero cost in a live Bifrost log, since the override applies only after deploy. Commit: the one that adds this entry.

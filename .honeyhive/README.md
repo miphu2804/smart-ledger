@@ -39,26 +39,13 @@ The charts show the wait for the first words, tool calls per turn, the query err
 | `alerts/` | `honeyhive alerts` | `sync-dashboards.sh`, created when no alert has the `name` |
 | `projects.yaml` | | the projects `sync-dashboards.sh` covers; staging and production share one and differ by `source` |
 
-The two scripts sit at the repository root and the workflows `.github/workflows/honeyhive-sync.yml` and `honeyhive-dashboards.yml` run them on every merge into `main`, as in HoneyHive's guide. Datasets and datapoints have no folder: the offline evaluation in `backend/ai/evaluation/agent_chat` keeps its cases and seed in files (`cases.yaml`, `seed.sql`) and hashes them into `suite_version`.
+The two scripts sit at the repository root and the workflows `.github/workflows/honeyhive-sync.yml` and `honeyhive-dashboards.yml` run them on pushes to `main` that match each workflow's path filters, or on manual dispatch. Datasets and datapoints have no folder: the offline evaluation in `backend/ai/evaluation/agent_chat` keeps its cases and seed in files (`cases.yaml`, `seed.sql`) and hashes them into `suite_version`.
 
 ## Apply
 
-Install the [HoneyHive CLI](https://docs.honeyhive.ai/v2/cli-reference/getting-started) (`brew install honeyhive`), `jq` and `yq` v4, then run from the repository root:
+Applying these files changes an external service. Use the [private operations knowledge base](https://app.notion.com/p/M-i-tr-ng-v-domain-407f1ce5c3ac80249cd0c2a28c259436) for approved access, credential scopes, target selection and execution; this repository does not publish environment mappings or provisioning commands.
 
-```bash
-v() { grep "^$1=" backend/ai/.env | cut -d= -f2-; }
-HH_PROJECT_API_KEY=$(v HH_API_KEY) HH_DATA_PLANE_URL=$(v HH_API_URL) bash sync-evaluators.sh
-HH_DATA_PLANE_API_KEY=$(v HH_DATA_PLANE_API_KEY) HH_DATA_PLANE_URL=$(v HH_API_URL) \
-  HH_CONTROL_PLANE_API_KEY=$(v HH_CONTROL_PLANE_API_KEY) HH_CONTROL_PLANE_URL=$(v HH_CONTROL_PLANE_URL) bash sync-dashboards.sh
-```
-
-Pass only these variables rather than sourcing the whole file: the CLI still reads `HH_API_KEY` and `HH_API_URL` as deprecated names and prints a warning on stdout, which breaks the `jq` in the scripts.
-
-Every value comes from `backend/ai/.env`, declared in `AppConfig` and `.env.example` and held in Dopbase `ai/production`; nothing is written into the scripts or workflows. The CLI names the project key `HH_PROJECT_API_KEY` and the data plane URL `HH_DATA_PLANE_URL`, which are the AI service's `HH_API_KEY` and `HH_API_URL`. `HH_DATA_PLANE_API_KEY` and `HH_CONTROL_PLANE_API_KEY` are fine-grained keys under Settings, Workspace, API Keys: a Data Plane key with `project.chart.list`, `.post` and `.put`, and a Control Plane key with `project.alert.list` and `.post`; with `HH_CONTROL_PLANE_URL` only `sync-dashboards.sh` reads them. The workflows read the keys from repository secrets and the URLs from repository variables, named as in Dopbase.
-
-Create a new evaluator locally and commit the `state.json` the run updates: an evaluator created in CI would get an ID the workflow cannot commit, so the workflow refuses to sync while an evaluator has no ID in `state.json`.
-
-Check a file before pushing it against the schema the CLI prints, for example `honeyhive metrics create --show-file-schema`, with `check-jsonschema`. An alert file has no `project_id`, which the script adds per project, so drop it from the schema's `required` first.
+Review configuration changes against the installed CLI schema before applying. A newly created evaluator needs its returned ID recorded in `state.json`; the workflow refuses to sync an evaluator without that ID. Repository configuration and passing tests do not establish live ingestion, access controls or retention approval.
 
 ## Limits
 

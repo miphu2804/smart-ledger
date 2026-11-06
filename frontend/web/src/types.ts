@@ -1,9 +1,6 @@
 /**
- * Kiểu dữ liệu dùng chung cho web quản trị.
- *
- * Backend (CORE-005) chưa có — các kiểu "DTO" bên dưới là hợp đồng API giả định
- * để frontend chạy bằng mock. Khi backend chốt hợp đồng, chỉ cần sửa file này
- * và các hàm trong src/services/*, giao diện giữ nguyên.
+ * Legacy types for mock ADMIN pages.
+ * Real Core requests and DTOs live in src/services/adminApi.ts.
  */
 
 export const INDUSTRIES = [

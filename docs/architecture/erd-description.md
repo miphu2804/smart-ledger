@@ -18,17 +18,17 @@ CORE-019 adds owner-approved V20 on 2026-10-31: private `user_rate_limit_windows
 CORE-018 on `feat/core-daily-activity` added V19 and `user_daily_activity` on 2026-10-29; its historical review counted 23 Core tables at that revision. The previous full mapping review was V1–V18 (22 tables) against `feat/admin-dashboard-growth` at `3e93dd1` on 2026-10-26. These dated reviews do not override the current V1–V20/25-table mapping or establish shared-database migration.
 The dated feature notes below preserve their original preparation boundaries.
 The `.dbml` file owns the logical schema; `.dbdiagram` is only the editor's table
-layout. AI tables and the planned `ai_requests` table retain their own status.
+layout. Only tables created by the checked-in Core/AI migrations are modeled.
 
 CORE-015 #238 on `feat/zalo-login`, prepared 2026-10-16 against staging `120779d`: additive V17 creates external Zalo identity mappings and short-lived OAuth sessions. Schema details and operational recovery are [below](#zalo-core-015-v17); preparation and disposable-PostgreSQL verification do not assert shared-DB rollout.
 
-CORE-016 #276 on `feat/zalo-android`: approved V18 extends the session store for Android; [migration and recovery](#zalo-android-core-016-v18) and the reviewed staging configuration are checked in, not applied to a shared DB or the VPS. Native remains off by runtime default; production activation and APK acceptance are separate.
+CORE-016 #276 on `feat/zalo-android`: approved V18 extends the session store for Android; [migration and recovery](#zalo-android-core-016-v18) and configuration examples are checked in; shared-DB migration and runtime enablement were not audited. Native remains off by runtime default; production activation and APK acceptance are separate.
 
 CORE-012 #163/#164 on `feat/core-barcode`, reviewed 2026-10-12: V16 replaces archived-inclusive barcode uniqueness with an ACTIVE-only partial index. This branch addition does not assert shared-DB migration or mobile/staging acceptance; older schema/AI snapshots below remain dated as stated.
 
-This ERD describes the target PostgreSQL database for **SmartLedger Phase 1**, an AI-assisted bookkeeping system for small businesses. It includes planned tables and relationships that are not yet in Core's Flyway migrations.
+This ERD documents SmartLedger's checked-in PostgreSQL schema. It excludes unimplemented tables and speculative relationships; migrations remain authoritative.
 
-The logical ERD includes authentication, shops, products, customers, drafts, sales, payments, refunds, debts, expenses, media cleanup jobs, Agent chat history, Agent long-term memory, AI request traces, idempotency, and audit logs. The current checked-in Core migration set is V1–V20 and contains 25 Core tables, including V20 quota tables; V19/23-table wording below is a historical review snapshot, not the current schema count. The AI baseline `supabase/migrations/20261005000000_ai_baseline.sql` creates the chat tables, enables the `vector` extension (pgvector), creates the read-only `ai_read` views (including `v_sales` and `v_sale_items`) and the `ai_sql_reader` role; later AI migrations add `v_debts`, `v_payments`, `v_expenses`, `agent_memories` and `agent_memory_settings`. `ai_requests` remains target design. Checked-in migrations do not establish deployment to a shared or production database.
+The logical ERD includes authentication, shops, products, customers, drafts, sales, payments, refunds, debts, expenses, media cleanup jobs, Agent chat history, Agent long-term memory, idempotency, and audit logs. The current checked-in Core migration set is V1–V20 and contains 25 Core tables, including V20 quota tables; V19/23-table wording below is a historical review snapshot, not the current schema count. The AI baseline `supabase/migrations/20261005000000_ai_baseline.sql` creates the chat tables, enables the `vector` extension (pgvector), creates the read-only `ai_read` views (including `v_sales` and `v_sale_items`) and the `ai_sql_reader` role; later AI migrations add `v_debts`, `v_payments`, `v_expenses`, `agent_memories` and `agent_memory_settings`. No migration creates an `ai_requests` table; indexed legacy request-reference columns have no foreign key. Checked-in migrations do not establish deployment to a shared or production database.
 
 Business decisions are owned by the [BRD](../product/business-requirements.md) and [PRD](../product/product-requirements.md); endpoint/JSON details are owned by the [API contract](../contracts/api-contracts.md). Core audit/schema alignment reviewed against `staging` commit `b1de421c461d59473b3bb73aae103027afd67a89` on 2026-10-06; AI sections were re-checked against `supabase/migrations/` and `backend/ai/src` at `staging` commit `f1a4818` on 2026-10-16.
 
@@ -83,15 +83,15 @@ Drafts do not affect revenue, stock, payments, or debts until confirmed.
 
 ### AI and System Safety
 
-- **chat_conversations**: Agent conversations per user and shop, created by the AI baseline in `supabase/migrations/`. `user_id` and `shop_id` reference `users` and `shops` (ON DELETE RESTRICT). The columns `summary` and `summary_through_message_id` are unused by the code: it neither reads nor writes them. They are kept so the previous release can roll back, and a later migration drops them after this deploy.
-- **chat_messages**: USER/ASSISTANT messages of a conversation; `conversation_id` references `chat_conversations`. Each chat turn reads the latest `AGENT_HISTORY_TURNS` exchanges; no message is folded or searched. `ai_request_id` is a plain indexed column with no foreign key until `ai_requests` exists.
+- **chat_conversations**: Agent conversations per user and shop, created by the AI baseline in `supabase/migrations/`. `user_id` and `shop_id` reference `users` and `shops` (ON DELETE RESTRICT). The columns `summary` and `summary_through_message_id` are unused by the code: it neither reads nor writes them. They remain in the checked-in schema for rollback compatibility; no removal is implied.
+- **chat_messages**: USER/ASSISTANT messages of a conversation; `conversation_id` references `chat_conversations`. Each chat turn reads the latest `AGENT_HISTORY_TURNS` exchanges; no message is folded or searched. `ai_request_id` is a plain indexed column with no foreign key or backing request table.
 - **ai_read views**: the AI baseline creates the `ai_read` schema with `v_shop_profile`, `v_categories`, `v_products`, `v_sales` and `v_sale_items`, used by the Agent's read-only shop-data tool and the restock suggestion. Migration `20261016000000_ai_read_ledger_views.sql` adds `v_debts` and `v_payments` (scoped to the shop through their sale) and `v_expenses` (ACTIVE only), without customer names, phone numbers, transfer references or expense descriptions. They are views, not tables. Each filters on the transaction setting `smartledger.shop_id` (unset means no rows) and exposes no `shop_id` column.
 - **ai_sql_reader**: a NOLOGIN group role created by the AI baseline. It has SELECT on the eight `ai_read` views and no grant on base tables. The login role behind `AI_SQL_READER_URL` is created outside the migration as a member of this role.
 - **agent_memories**: the Agent's long-term memory ([ADR-0002](adr/0002-agent-long-term-memory.md)), created by `20261014000000_agent_memories.sql` and extended by `20261015000000_agent_memory_visibility.sql`. Each row is one fact for a `shop_id` and `user_id` (both ON DELETE RESTRICT), with `memory_type` (`preference`, `semantic`, `procedural`, `episodic`), `content`, a `vector(384)` `embedding` under a cosine HNSW index, `importance` (0–1), `metadata`, optional `expires_at`, the recall fields `last_used_at` and `use_count`, and `superseded_by`, the correction link: when a fact is corrected, the older row stores the newer row's id there and search skips the older row (self-reference, ON DELETE SET NULL). `source_conversation_id` cascades, so deleting a conversation deletes the memories it produced. After a turn, at most three groups of live, not yet summarized memories (no `metadata.summarized_from`) of one conversation and one shop day whose `created_at` is older than 7 days (groups of two or more) are each replaced, one transaction per group, by one to five summary rows that keep the group's latest `created_at`, its `source_conversation_id`, last use and summed `use_count`, and carry `metadata.summarized_from` (the replaced ids); memories the group had superseded now point at the first summary row, and the replaced rows are deleted. Row-level security is on with no policy. The service writes it only when `AGENT_MEMORY_ENABLED` is on, which awaits PO approval.
 - **agent_memory_settings**: the owner's memory switch per `(shop_id, user_id)` primary key, `memory_enabled` default true; no row means on. Created by `20261015000000_agent_memory_visibility.sql`, with row-level security and no policy.
 - **vector extension**: the AI baseline runs `CREATE EXTENSION IF NOT EXISTS vector` ([ADR-0001](adr/0001-vector-store-pgvector.md)); `agent_memories.embedding` is the only column that uses it.
-- **ai_requests**: Planned table for AI request status, model/version, result, errors, and media object references; not yet created by any migration. Runtime traces go to HoneyHive, not to this table ([technical design §2](technical-design.md#2-components-and-ownership)).
-- **api_idempotency_keys**: Protects expense creation, debt repayment, sale void and product stock-in. Stock-in uses operation PRODUCT_STOCK_IN, resource PRODUCT and response_status 200; its hash includes product ID, canonical quantity and normalized reason. Confirmation replays by draft ID instead. Media uploads use the separate V14 table below; monetary idempotency retains its shop-scoped V7 schema. Default completed-key TTL is 30 days and no key cleanup job exists.
+
+- **api_idempotency_keys**: Protects expense creation, debt repayment, sale void, product stock-in and stock decrease adjustment. Stock-in uses operation PRODUCT_STOCK_IN, resource PRODUCT and response_status 200; its hash includes product ID, canonical quantity and normalized reason. Confirmation replays by draft ID instead. Media uploads use the separate V14 table below; monetary idempotency retains its shop-scoped V7 schema. Default completed-key TTL is 30 days and no key cleanup job exists.
 - **media_upload_keys**: V14 durable upload reservations with unique `(scope_key, operation, idempotency_key)`, user FK, request hash, internal public ID, UUID lease token, expiry and nullable JSONB replay snapshot. Product/logo use SHOP scope; avatar uses USER scope. Null response is PENDING; expired matching requests atomically acquire a new token. Final writes lock/recheck the token and lease; stale requests cannot complete or release another attempt. Avatar replay snapshots contain internal public ID, not signed URLs. There is no scheduled retention cleanup.
 - **media_cleanup_jobs**: V13 persistent outbox for deleting a replaced/deleted Cloudinary asset only after the Product/Shop/User database transaction commits. Stores internal provider public ID, asset type, PENDING/COMPLETED state, retry count/schedule/error, and completion time. No business FK is required after the owner reference is cleared. Workers use per-job SKIP LOCKED and per-asset advisory locks shared with media writers, check current entity references and active upload leases, and update retries only while PENDING. The cleanup transaction stays open during remote deletion; a COMPLETED job cannot be resurrected by a late retry.
 - **audit_logs**: V10 creates append-only history of successful OWNER/ADMIN writes; V11 extends the same table for ADMIN support reads; V13 permits the actor-scoped, shop-null `USER_AVATAR_UPDATED` event. Stores actor_user_id/actor_role, action/entity_type, optional entity_id/shop_id where the event permits, outcome SUCCESS, optional reason/idempotency_key, server request_id, safe metadata and created_at. UPDATE/DELETE/TRUNCATE are rejected by triggers. There is no admin_access_logs table; differing visibility is enforced by action/actor-scoped queries and explicit API projections, not by a second physical store.
@@ -120,7 +120,6 @@ Drafts do not affect revenue, stock, payments, or debts until confirmed.
 - A **notification event** can have multiple **notification recipients**.
 - A **chat conversation** belongs to one user and one shop and contains multiple **chat messages**; it can be the source of multiple **agent memories**, which are deleted with it.
 - An **agent memory** belongs to one user and one shop and can point to the newer memory that superseded it; a user has at most one **agent memory settings** row per shop.
-- A planned **AI request** can be linked to a sale draft created from AI voice input once that flow is implemented.
 - Every **audit log** references an actor **user** with an actor-role snapshot. A shop FK may be null for supported ADMIN read events that do not target a shop, and for the actor-scoped `USER_AVATAR_UPDATED` event added in V13. The avatar event requires `entity_type = USER`, `shop_id = null`, `entity_id = actor_user_id`, and null reason/idempotency_key; it can record either an OWNER or ADMIN updating their own avatar. Ledger business audit requires a shop and entity target. The polymorphic entity_id has no generic entity FK; entity_type/action/target checks constrain its meaning.
 
 ## 4. Main Data Flow
@@ -128,7 +127,7 @@ Drafts do not affect revenue, stock, payments, or debts until confirmed.
 ### Sale Draft Flow
 
 ```text
-Manual Input (implemented) / AI Voice (planned integration)
+Manual Input
         ↓
 sale_drafts
         ↓
@@ -182,21 +181,6 @@ Reports retain collection at payment.received_at, refunds at sale_refunds.refund
 Firebase token verification → active DB ADMIN profile → support projection query → audit insert → transaction commit → response. Each successful dashboard GET is audited, including empty searches; these transactions cannot be read-only. Audit persistence failure refuses protected output with 503 admin_audit_unavailable. Validation/permission/not-found failures do not create SUCCESS events; failure/security audit is a separate scope.
 
 OWNER audit queries exclude all ADMIN_* read actions. ADMIN access history selects only the authenticated actor and administrative action/target whitelist, with no raw business metadata. Shop status history selects only ADMIN SHOP_INACTIVATED/SHOP_REACTIVATED events; the existing status event serves both authorized views without duplication. Access-history reads select their page before recording the read itself. Query strings and contact data are not captured in read audit: metadata contains only queryPresent/resultCount. API details are in the [ADMIN contract](../contracts/api-contracts.md#7-admin-dashboard--implemented-in-core).
-
-### Planned AI Draft Flow (not yet implemented in Core)
-```text
-Text / Audio / Image Input
-        ↓
-ai_requests
-        ↓
-AI Processing
-        ↓
-sale_drafts + sale_draft_items
-        ↓
-User Review
-        ↓
-Confirmed Sale or Cancelled Draft
-```
 
 ## 5. Design Principles
 - PostgreSQL is the main database for persistent business data.

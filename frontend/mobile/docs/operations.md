@@ -89,7 +89,7 @@ The Đọc đơn screen recognizes speech on Android with a Vietnamese streaming
 
 ### Android APK size
 
-Release builds use these settings (measured on `arm64-v8a`, same commit: 95.2 MB → 40.3 MB; see [CI/CD](../../../docs/development/ci-cd.md#measured-and-not-yet-verified)):
+Release builds use these settings (measured on `arm64-v8a`, same commit: 95.2 MB → 40.3 MB; see [CI/CD](../../../docs/development/ci-cd.md#android-build)):
 
 - `expo-build-properties` in `app.json`: `useLegacyPackaging` compresses the `.so` files in the APK (previously stored uncompressed, taking 62 MB); `enableMinifyInReleaseBuilds` and `enableShrinkResourcesInReleaseBuilds` enable R8 and drop unused resources; `packagingOptions.exclude` drops the FFmpeg and libarchive `.so` files.
 - `extraProguardRules` keeps the `com.k2fsa.sherpa.onnx.**` and `com.sherpaonnx.**` classes intact: sherpa-onnx native code reads them by name and the library ships no R8 rules for them. If another native library crashes in release (but not in debug), suspect R8 first and add a `-keep` rule here.
@@ -162,26 +162,26 @@ Where the code lives: `src/lib/auth/` (the `AuthClient` interface; `mock.ts`, `f
 
 ### Connect to the real Core
 
-Flow: Firebase authenticates (email or Facebook) → FE sends the **Firebase ID token** (`Authorization: Bearer …`) to Core → Core verifies it with the Firebase Admin SDK, creates/finds the account and returns the session.
+Flow: Firebase authenticates through the exposed email/Google paths → FE sends the **Firebase ID token** (`Authorization: Bearer …`) to Core → Core verifies it with the Firebase Admin SDK, creates/finds the account and returns the session.
 
 1. First sign-in: `POST /api/v1/auth/session` with `{ displayName }`. Core **requires** `displayName` for a new account (missing → 400), so the app has the “Bạn tên gì?” screen (`app/(auth)/profile.tsx`). Later sign-ins do not send it.
 2. Reopening the app: Firebase restores the session → `GET /api/v1/me`. `404 auth_profile_not_found` (still signed in to Firebase but Core has no account) → the app returns to the name screen. `401` → sign out. `403 account_disabled` → sign out and report that the account is locked.
 3. `needsOnboarding = true` (no shop yet) → the shop creation screen, which calls the real `POST /shops` (Core stores `industry` as a string — the chosen industries are joined with ", ").
 
-The business APIs (catalog/products, customers, POS/checkout creating a draft then confirming, orders, debts, expenses, assistant) all need the `X-Shop-Id` header; the contract is in [API contracts](../../../docs/contracts/api-contracts.md). With the real Core, mobile uses the `src/lib/*Api.ts` clients for the connected flows; Home/Analytics do not call `/api/v1/reports/summary` yet (see [Home/Analytics metrics](#homeanalytics-metrics)). `SaleDraft.confirm` accepts any `initialPaidVnd` from 0 to the order total — when underpaid, Core (`SaleDraftServiceImpl.confirm`/`customerForConfirmation`) creates a `Debt` for the customer (it needs an existing `customerId` or a `customerName` so Core can create a new customer; with neither it fails with `customer_required_for_debt`); this matches the mobile credit payment screen. `EXPO_PUBLIC_USE_MOCK=true` enables a preview mode without the real Core — `src/lib/mockCore.ts` simulates those endpoints in memory.
+The business APIs (catalog/products, customers, POS/checkout creating a draft then confirming, orders, debts, expenses, assistant) all need the `X-Shop-Id` header; the contract is in [API contracts](../../../docs/contracts/api-contracts.md). With the real Core, mobile uses the `src/lib/*Api.ts` clients, including report endpoints for Home/Analytics totals (see [Home/Analytics metrics](#homeanalytics-metrics)). `SaleDraft.confirm` accepts any `initialPaidVnd` from 0 to the order total — when underpaid, Core (`SaleDraftServiceImpl.confirm`/`customerForConfirmation`) creates a `Debt` for the customer (it needs an existing `customerId` or a `customerName` so Core can create a new customer; with neither it fails with `customer_required_for_debt`); this matches the mobile credit payment screen. `EXPO_PUBLIC_USE_MOCK=true` enables a preview mode without the real Core — `src/lib/mockCore.ts` simulates those endpoints in memory.
 
-Mobile checkout currently requires a `productId` for every item. The “Món ngoài danh mục” flow quickly creates a Product with `tracked=false`, then adds it to the cart; it does not use a custom item with `productId=null` yet, although Core supports it.
+Checkout supports catalog items and temporary custom items. `src/lib/customLines.ts` sends a custom item's name, unit, quantity and price without `productId`; Core does not create a Product or deduct stock for that line. Saving a new item to the catalog is a separate choice.
 
-For a real integration test, point the app at the staging Core endpoint configured by the delivery workflow (see [CI/CD](../../../docs/development/ci-cd.md)), so a frontend-only machine need not run Core or Docker. Confirm the current endpoint and build before testing; the example below is not a live availability check. `.env`:
+For an authorized integration test, obtain the intended Core endpoint from the private operations knowledge base and check the delivery workflow (see [CI/CD](../../../docs/development/ci-cd.md)), so a frontend-only machine need not run Core or Docker. Confirm the current endpoint and build before testing; the example below is not a live availability check. `.env`:
 
 ```
 EXPO_PUBLIC_USE_MOCK=false
 EXPO_PUBLIC_MOCK_CORE=false
 EXPO_PUBLIC_MOCK_SHOPS=false
-EXPO_PUBLIC_API_ENDPOINT=https://staging.103-162-31-93.sslip.io
+EXPO_PUBLIC_API_ENDPOINT=https://<authorized-core-host>
 ```
 
-- Data created from the app lives in the staging database, shared with the whole team and the UAT environment.
+- Confirm the intended environment and data-handling approval before creating shared test data.
 - The app calls the Core merged into `staging`; unmerged APIs cannot be called yet.
 - The app's Firebase (`google-services.json`, the `EXPO_PUBLIC_FIREBASE_*` variables) must be the same project as the staging Core's `FIREBASE_PROJECT_ID`, otherwise Core returns `401`.
 
@@ -189,13 +189,11 @@ Run Core locally only when changing the backend (see [Local development](../../.
 
 ### Home/Analytics metrics
 
-Home and Analytics load the sale/product/debt/expense lists through [`useCoreData.ts`](../src/lib/useCoreData.ts), convert the data with [`coreAdapters.ts`](../src/lib/coreAdapters.ts), then compute metrics on the device with [`stats.ts`](../src/lib/stats.ts). This is not the Core summary response:
+Home uses [`useHomeOverview.ts`](../src/lib/useHomeOverview.ts) to request Core period totals, filtered sales totals, top products and products needing restock. Analytics uses [`useReportTotals.ts`](../src/lib/useReportTotals.ts) for Core period totals, estimated profit from sale-time cost snapshots and filtered sales totals; an estimated-profit failure is shown separately rather than replaced by a guessed cost.
 
-- Orders use `soldAt` as the sale time; orders currently `VOIDED` are excluded and periods are filtered by device time. Voiding an order from an earlier period can change that old period's figures, instead of creating an adjustment in the `voidedAt` period as Core does.
-- Revenue is the total of the remaining orders, without separating `grossRevenueVnd`, `voidedRevenueVnd`, `netRevenueVnd` or cash flow by `receivedAt`/`refundedAt`.
-- Gross profit is revenue minus the **estimated** cost of goods, before operating expenses. Cost comes from the current catalog; without `costPriceVnd` the adapter estimates 60% of the catalog selling price, and a line that matches no product uses 60% of the line unit price. This is not a historical cost snapshot or official profit.
+Analytics charts and best-seller rows still aggregate the invoices loaded by [`useCoreData.ts`](../src/lib/useCoreData.ts), and its debt balance aggregates the loaded debts. These list-derived displays are not the same projection as the Core report totals and require separate reconciliation, including pagination, period boundaries and voided sales. The legacy adapter's 60% cost fallback is not the source of the Core-backed profit total.
 
-The standard Core summary definition is in [API contract — Period overview](../../../docs/contracts/api-contracts.md#period-overview). Moving FE to the summary needs its own integration task and acceptance; editing this document does not prove that mobile reports match Core or meet `FR-006`/`AC-031`.
+The canonical event-time and money definitions are in [API contract — Period overview](../../../docs/contracts/api-contracts.md#period-overview). This source review does not establish integrated `FR-006`/`AC-031` acceptance.
 
 ### Email and password sign-in
 
@@ -208,28 +206,17 @@ The first screen is a card in the Runpod layout (`app/(auth)/welcome.tsx`): Goog
 
 ### Facebook sign-in
 
-The sign-in screen has dropped the Facebook button; the Facebook sign-in code and SDK are kept so it can be turned back on. With the button, the flow signs in through the Facebook SDK (`react-native-fbsdk-next`), then exchanges the access token for a Firebase account (`FacebookAuthProvider.credential` + `signInWithCredential`, in `src/lib/auth/firebase.ts`). After that the flow matches email: send the Firebase ID token to Core (`POST /auth/session`); a new account (Core requires `displayName`) goes through the "Bạn tên gì?" screen, then shop creation. Core stores only the Firebase UID, so it needs no change. The web uses Firebase's popup window; the mock build signs in as a sample user (`facebook.demo@example.com`).
+The current sign-in screen does not expose Facebook. Its native/web adapters and optional SDK configuration remain in source, but this is not a supported UI sign-in path or device-acceptance claim.
 
-One-time setup (done by the Facebook app and Firebase administrator):
-
-1. **Meta for Developers:** create an app and add the Facebook Login product. Take the **App ID** (App settings → Basic), the **App Secret** (same page) and the **Client Token** (App settings → Advanced → Security). Add the **Android** platform: package name `vn.teamhexa.songheloi`, class name `vn.teamhexa.songheloi.MainActivity`, and the signing key's **key hash** (Base64 of the SHA-1: EAS key `QU+neYI9yeNs0x2cI7KScGEbywI=`, debug key `Xo8WBi6jzSxKDVR4drqm84yr9iU=`; a Google Play build also needs the Google key's hash). While the app is in Development mode, only people with a role in the app can sign in; switch it to Live for others.
-2. **Firebase Console → Authentication → Sign-in method:** enable **Facebook** and paste the App ID and App Secret. Add the redirect address Firebase shows (`<project>.firebaseapp.com/__/auth/handler`) to Facebook Login → Valid OAuth Redirect URIs.
-3. **Build:** `app.config.js` adds the Facebook plugin only when `FACEBOOK_APP_ID` and `FACEBOOK_CLIENT_TOKEN` are present (set in `.env` when running `npx expo prebuild --platform android`, or as EAS environment variables). These two values are not committed to the public repo, and **the App Secret never goes into the app or `.env`**. The library has native code, so the dev client/APK must be rebuilt, and it **does not run in Expo Go**; without configuration, tapping the button shows a clear error instead of crashing. If the `android/` folder is already generated, rerun prebuild after changing the two variables.
-
-Limits: each sign-in method is a separate Firebase account, so the same person signing in another way becomes a different Core user unless the accounts are linked in Firebase (not done). If the Facebook email is already used by another sign-in method, Firebase can return `account-exists-with-different-credential` and the app tells the user to use the earlier method. Not checked: iOS, and real Facebook sign-in on a device.
+Different Firebase sign-in methods can create separate identities unless accounts are linked. A provider email already used by another method can produce `account-exists-with-different-credential`; Core does not merge users by name or email.
 
 ### Google sign-in
 
-The Google button on the first screen (`app/(auth)/welcome.tsx`) uses `@react-native-google-signin/google-signin` on phones: Google returns an ID token, the app exchanges it for a Firebase account (`GoogleAuthProvider.credential` + `signInWithCredential`, in `src/lib/auth/firebase.ts`), then continues like Facebook (Core `POST /auth/session`, new accounts go through the "Bạn tên gì?" screen). The web uses Firebase's Google popup (`signInWithPopup`); the mock build signs in as the sample user `google.demo@example.com`. Signing out also signs out of Google so the account picker shows again next time. Core needs no change.
+The Google button on the first screen (`app/(auth)/welcome.tsx`) uses `@react-native-google-signin/google-signin` on phones: Google returns an ID token, the app exchanges it for a Firebase account (`GoogleAuthProvider.credential` + `signInWithCredential`, in `src/lib/auth/firebase.ts`), then continues through the Firebase-to-Core session flow (Core `POST /auth/session`, new accounts go through the "Bạn tên gì?" screen). The web uses Firebase's Google popup (`signInWithPopup`); the mock build signs in as the sample user `google.demo@example.com`. Signing out also signs out of Google so the account picker shows again next time. Core needs no change.
 
-One-time setup, on **each** Firebase project (staging `smart-ledger-c2892` for `android-dev`/`android-staging`, production `smart-ledger-production` for `android-production`):
+Use the [private operations knowledge base](https://app.notion.com/p/M-i-tr-ng-v-domain-407f1ce5c3ac80249cd0c2a28c259436) for provider-project, signing-certificate and authorized-domain mappings. The build must target the intended Firebase project, whose Google provider and signing fingerprints must match; a mismatch can produce `DEVELOPER_ERROR`. Never authorize the repository's public debug key for production. Refresh the build's provider configuration after an authorized change and rebuild native code.
 
-1. **Authentication → Sign-in method:** enable **Google**.
-2. **Project settings → Your apps → Android `vn.teamhexa.songheloi` → Add fingerprint:** add the SHA-1 and SHA-256 of every signing key whose builds point at that project. Staging: the debug key (`android/app/debug.keystore`, SHA-1 `5E:8F:16:06:2E:A3:CD:2C:4A:0D:54:78:76:BA:A6:F3:8C:AB:F6:25`). Production: the release key (SHA-1 `F9:2B:40:76:E8:B8:01:BB:B9:D8:6E:78:8E:A5:3E:87:C2:54:A1:D5`; the workflow prints the certificate in the "Publish the APK to R2" step), and later the Google Play key. Do not add the debug key to production: it is public in the repo. A build signed with a key whose SHA is missing is rejected by Google (`DEVELOPER_ERROR`, the app shows "Cách đăng nhập này chưa dùng được").
-3. **Download `google-services.json` again** (it must have an `oauth_client` with `client_type` 1 carrying the SHA-1 above and one with `client_type` 3), then update the `ANDROID_GOOGLE_SERVICES_JSON` secret of the matching GitHub environment. `app.config.js` reads the Web client ID (`client_type` 3) from this file into `extra.googleWebClientId`, so there is no separate environment variable.
-4. **Web:** add the web build's domain to Authentication → Settings → Authorized domains.
-
-The library has native code, so the APK must be rebuilt. The `@react-native-google-signin/google-signin` plugin in `app.json` attaches the iOS client from `GoogleService-Info.plist` on iOS prebuild; on iOS the library uses that client by itself, so the Web client ID is not required there (it is on Android). Not checked: iOS. The account linking limit is the same as Facebook (see above).
+The library has native code, so the APK must be rebuilt. The `@react-native-google-signin/google-signin` plugin in `app.json` attaches the iOS client from `GoogleService-Info.plist` on iOS prebuild; on iOS the library uses that client by itself, so the Web client ID is not required there (it is on Android). Not checked: iOS. The account-linking limitation described above applies to Google as well.
 
 ## UI tests with Playwright
 
@@ -249,9 +236,9 @@ Add `-- --headed` to watch the browser, `-- --ui` to step through. The report is
   adb logcat -s ReactNativeJS
   ```
 - **The “Chẩn đoán kết nối” screen** (`/debug`, internal use in dev builds only): shows the mode (mock/real), `API_ENDPOINT`, Firebase status, a **Kiểm tra kết nối Core** button (calls `/v3/api-docs` without a token), **Xem token** (aud/iss/expiry; Core needs `FIREBASE_PROJECT_ID` to match `aud`), **Gọi GET /me**, and the recent log. This screen is not in the Quản lý tab.
-- **Run the web build for a quick try (no APK build needed):** `npm run web` and sign in with email. Core accepts only origins in `CORS_ALLOWED_ORIGINS` (see [CI/CD](../../../docs/development/ci-cd.md)), so the dev machine's `localhost` is blocked; run the dev proxy in another terminal and point the app at it:
+- **Run the web build for a quick try (no APK build needed):** `npm run web` and sign in with email. Core accepts only origins in `CORS_ALLOWED_ORIGINS` (see [CI/CD](../../../docs/development/ci-cd.md)), so an unlisted local origin is blocked; for authorized development, run the dev proxy in another terminal and point the app at it:
   ```bash
-  CORE_URL=https://staging.103-162-31-93.sslip.io node scripts/dev-cors-proxy.js
+  CORE_URL=https://<authorized-core-host> node scripts/dev-cors-proxy.js
   ```
   and set `EXPO_PUBLIC_API_ENDPOINT=http://127.0.0.1:8010` in `.env` (rerun `npm run web -- --clear` after the change). Without `CORE_URL` the proxy points at the local Core (`http://localhost:8000`). For Firebase alone without Core, set `EXPO_PUBLIC_MOCK_CORE=true` and skip the proxy. The web cannot test native adapters, phone sign-in on a real device or Android networking.
 - **Timeout:** every Core call stops after 15 seconds (`ApiError` code `timeout`) instead of spinning forever on a wrong IP or a blocking firewall.

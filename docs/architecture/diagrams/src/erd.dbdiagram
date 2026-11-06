@@ -80,12 +80,6 @@
         "y": 1632
       },
       {
-        "name": "ai_requests",
-        "schemaName": "public",
-        "x": 1096,
-        "y": 760
-      },
-      {
         "name": "api_idempotency_keys",
         "schemaName": "public",
         "x": 1096,
@@ -278,21 +272,6 @@
         "firstRelation": "1",
         "secondFieldNames": [
           "customer_id"
-        ],
-        "secondTableName": "sale_drafts",
-        "secondSchemaName": "public",
-        "secondRelation": "*",
-        "checkPoints": []
-      },
-      {
-        "firstFieldNames": [
-          "id"
-        ],
-        "firstTableName": "ai_requests",
-        "firstSchemaName": "public",
-        "firstRelation": "1",
-        "secondFieldNames": [
-          "source_ai_request_id"
         ],
         "secondTableName": "sale_drafts",
         "secondSchemaName": "public",
@@ -534,21 +513,6 @@
         "secondFieldNames": [
           "user_id"
         ],
-        "secondTableName": "ai_requests",
-        "secondSchemaName": "public",
-        "secondRelation": "*",
-        "checkPoints": []
-      },
-      {
-        "firstFieldNames": [
-          "id"
-        ],
-        "firstTableName": "users",
-        "firstSchemaName": "public",
-        "firstRelation": "1",
-        "secondFieldNames": [
-          "user_id"
-        ],
         "secondTableName": "api_idempotency_keys",
         "secondSchemaName": "public",
         "secondRelation": "*",
@@ -565,21 +529,6 @@
           "actor_user_id"
         ],
         "secondTableName": "audit_logs",
-        "secondSchemaName": "public",
-        "secondRelation": "*",
-        "checkPoints": []
-      },
-      {
-        "firstFieldNames": [
-          "id"
-        ],
-        "firstTableName": "ai_requests",
-        "firstSchemaName": "public",
-        "firstRelation": "1",
-        "secondFieldNames": [
-          "source_ai_request_id"
-        ],
-        "secondTableName": "expenses",
         "secondSchemaName": "public",
         "secondRelation": "*",
         "checkPoints": []
@@ -608,21 +557,6 @@
         "firstRelation": "1",
         "secondFieldNames": [
           "conversation_id"
-        ],
-        "secondTableName": "chat_messages",
-        "secondSchemaName": "public",
-        "secondRelation": "*",
-        "checkPoints": []
-      },
-      {
-        "firstFieldNames": [
-          "id"
-        ],
-        "firstTableName": "ai_requests",
-        "firstSchemaName": "public",
-        "firstRelation": "1",
-        "secondFieldNames": [
-          "ai_request_id"
         ],
         "secondTableName": "chat_messages",
         "secondSchemaName": "public",
@@ -760,21 +694,6 @@
           "shop_id"
         ],
         "secondTableName": "expenses",
-        "secondSchemaName": "public",
-        "secondRelation": "*",
-        "checkPoints": []
-      },
-      {
-        "firstFieldNames": [
-          "id"
-        ],
-        "firstTableName": "shops",
-        "firstSchemaName": "public",
-        "firstRelation": "1",
-        "secondFieldNames": [
-          "shop_id"
-        ],
-        "secondTableName": "ai_requests",
         "secondSchemaName": "public",
         "secondRelation": "*",
         "checkPoints": []

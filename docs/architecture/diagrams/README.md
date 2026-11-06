@@ -1,7 +1,7 @@
 ---
 type: Guide
 title: "Diagram guide"
-description: "How each architecture diagram is edited, exported and scoped, and what evidence each one carries."
+description: "How logical architecture diagrams are scoped, edited and checked without publishing private deployment details."
 owner: Technical owner
 status: stable
 author: miphu2804
@@ -9,74 +9,26 @@ stale_after: 2027-01-05T22:18:48+07:00
 ---
 # Diagram guide
 
-Sources live in [`src/`](src/), exports in [`images/`](images/). Reference: [`src/ci-cd.drawio`](src/ci-cd.drawio) → [`images/ci-cd.svg`](images/ci-cd.svg).
+Repository diagrams explain logical responsibilities, data relationships and code paths. Environment/domain mappings, deployment topology, infrastructure access and credential-flow diagrams belong to the [private operations knowledge base](https://app.notion.com/p/M-i-tr-ng-v-domain-407f1ce5c3ac80249cd0c2a28c259436); their source files and exports are not published here.
 
-## Reading scope — Core audit 2026-10-26
+## Reading scope
 
-The artifact classification below preserves dated diagram evidence. Its current schema boundary was checked against `staging` commit `a2766ee3a37e23c0f03fd43383b608c1b2fac898`; this documentation review did not rerender diagrams or inspect live deployment.
-
-| Artifact | What it represents | Implementation boundary |
-|---|---|---|
-| `architecture.mmd`, `architecture.drawio`, `architecture.svg/png` | Target architecture, including future services/infrastructure | Use [technical design §1](../technical-design.md#1-scope) for code status; the target image does not prove those services exist |
-| `ci-cd.drawio/svg` | Pipeline and runtime topology | Core runs on container port 8080; Compose exposes host port 8000 by default. ADMIN can use the real Core behind its build flag; PR checks/deploy readiness depend on actual runs |
-| `vps-network.drawio/svg` | Docker networks, DNS aliases and ports on the VPS | Drawn from `deploy/*/compose.yaml`, the Caddy sites the playbook writes, and `docker network inspect` on the VPS on 2026-10-29 |
-| `auth-request-flow.drawio/svg` | Firebase browser sign-in, CORS and project matching | The image is not the Zalo OAuth/App Link flow; see [Zalo contract](../../contracts/api-contracts.md#zalo-core-015) and the Core service map. A permitted origin does not grant an application role |
-| `service-walkthrough/README.md` and its 14 SVG exports | Core/AI reading notes with dated source reviews | The two Core overview figures include current modules; detailed transaction diagrams keep their stated review scope, not FE or staging acceptance |
-| `erd.dbml` | Logical Core/AI schema and explicitly planned tables | The current checked-in Core schema is V1–V20 with 25 tables, including the two V20 quota tables. V19/23-table references in dated review notes are historical snapshots. SQL owns actual RLS, checks, triggers and partial indexes that DBML cannot fully express; no shared-DB migration or production activation is implied |
-| `erd.dbdiagram` | dbdiagram editor layout only | It does not contain schema definitions; table positions must cover the DBML tables, including newer media/Zalo/refund tables |
-| `agent-memory.drawio/svg`, `apk-release.drawio/svg` | Related AI design and mobile release pipeline | Separate from Core API implementation; retain their ADR/release ownership and dated evidence |
-
-The [ERD description](../erd-description.md#1-overview) owns the V20/25 current-schema and V19/23 historical-snapshot distinction; this guide only classifies diagram evidence.
-
-Product images in [marketing](../../marketing/README.md) are dated mock captures;
-the [mobile reference image](../../design/mobile-ui-style-migration.md) is design
-input. Neither is evidence that Core or a provider integration has passed UAT.
-
-## Reading `ci-cd.svg`
-
-The image keeps labels short; this section explains them. Edge colors mark three flows, each numbered from 1: orange for a user request, green for a code delivery, purple for server setup. Grey dashed edges carry data and are not steps.
-
-| Area | Meaning |
+| Artifact | Meaning and boundary |
 |---|---|
-| Clients | The mobile app and the admin web on Vercel. Both call the API over HTTPS. |
-| VPS | One Ubuntu server, shown with its logo, that runs every container in Docker Compose. |
-| Edge | One Caddy shared by all environments. It alone opens ports 80 and 443, gets a TLS certificate per domain and forwards each domain to the Core of its environment over the Docker network `edge` ([`deploy/edge/`](../../../deploy/edge/)). |
-| Staging, Production | Two copies of the same application stack, Core, AI, Bifrost and Redis, each in its own Compose project and app directory ([`deploy/vps/compose.yaml`](../../../deploy/vps/compose.yaml)). AI is reachable only from Core inside its own stack. Bifrost is the model gateway that forwards AI calls to the LLM providers. Redis caches the chat history AI reads at the start of a turn. |
-| Secrets | Dopbase, the self-hosted secrets vault shared by every environment. Each deploy in GitHub Actions reads `core/<env>` and `ai/<env>` with a per-environment runner token and writes them to `core.env` and `ai.env` on the VPS. `scripts/infra/run.sh` exports the `bifrost`, `vps` and `monitor` groups for Ansible. Every night Dopbase encrypts its data with age and copies it to Cloudflare R2 with rclone. |
-| Monitoring | One shared stack ([`deploy/monitoring/`](../../../deploy/monitoring/)). Alloy collects host and container metrics, Caddy metrics, the AI `/metrics` endpoint, health probes of Core, AI and Bifrost, and every container's logs through the Docker socket. It remote-writes metrics to Prometheus and pushes logs to Loki. Grafana queries both with PromQL and LogQL and sends alerts to Discord and Telegram. |
-| External | Managed services outside the VPS: Firebase Auth for sign-in, one Supabase database per environment (Staging DB and Production DB) for Postgres with pgvector, HoneyHive for AI traces, the LLM providers that [`bifrost.json`](../../../deploy/vps/bifrost.json) configures (OpenAI and Inception for chat, Typesafe for the tier classifier), Cloudflare R2 for backups, and Discord and Telegram for alerts. |
-| CI/CD | A push to GitHub runs GitHub Actions on a self-hosted runner, which builds images, pushes them to GHCR and runs `deploy.sh` over SSH; the VPS then pulls the new images. An operator runs Ansible separately to set up the VPS itself. |
+| [Logical architecture](src/architecture.mmd) | Current component responsibilities, not network placement or deployment evidence |
+| [ERD source](src/erd.dbml) | Checked-in Core/AI table structure; SQL migrations own checks, policies, triggers and partial indexes |
+| [ERD layout](src/erd.dbdiagram) | Editor positions only, not a schema definition |
+| [Service walkthrough](../service-walkthrough/README.md) | Source-reading and transaction diagrams with their own verification boundaries |
+| [Memory decision diagram](src/agent-memory.drawio) | Supporting artifact for ADR-0002; the ADR's proposal/status remains authoritative |
 
-Request flow, in order: the shop owner uses the mobile app (1), which signs in with Firebase (2) and calls Caddy over HTTPS (3). Caddy forwards the request to Core (4), which verifies the Firebase ID token (5), calls AI with the internal token `X-Internal-Token` (6). AI calls a chat model, and the TypeSafe tier classifier when tiering is on, through Bifrost (7). Core reads or writes the Supabase database of its environment, and AI uses the same database directly: it reads and writes chat history and reads shop data through the read-only `ai_sql_reader` login. AI sends each chat turn with its tool calls to HoneyHive as a trace.
+The [technical design](../technical-design.md#1-scope) records source-level implementation; the [ERD description](../erd-description.md) records migration alignment. Neither a diagram nor a checked-in migration proves live deployment, runtime enablement or integrated acceptance.
 
-## System diagrams (draw.io)
+## Editing
 
-- Create and edit with the `drawio-skill` in [`.agents/skills/drawio-skill`](../../../.agents/skills/drawio-skill) and its `smartledger` preset. English labels only.
-- Layout: horizontal dashed bands (pipeline on top, clients left, runtime, infrastructure), brand icons with the label below, numbered steps on edges (one color per flow).
-- Let the icons tell the story; keep text short:
-  - Draw each tool or service as its own current logo, never a hand-drawn box: the vendor's official logo when it has one (DVC from dvc.org), else [simple-icons](https://simpleicons.org) recolored with its brand hex or [lobe-icons](https://lobehub.com/icons) in color. Draw a generic thing (a folder, a file, a key, a lock, a script) as a [Lucide](https://lucide.dev) outline icon. Embed every icon as a data URI so the SVG stands alone.
-  - Draw a person who starts a flow, such as a developer, as the Lucide `user` outline icon at the start of that flow.
-  - Label each node with a short name and each edge with its action: the plain step number, then the command or verb (`1. edit`, `3. dvc push`, `4. git push`), without circled digits. An edge that only carries data and is not a step is grey, with no number.
-  - Show a check that stops a flow as a small red Lucide `shield-alert` icon over the edge it guards, with two or three words such as `stale env/`.
-  - Keep every label on one line. Put a label above or beside its icon when an edge leaves from below, so no edge crosses text.
-- Every vertex sets an explicit font color; edge labels have a background. Connect every edge to a source and a target.
-- From the repository root, export the SVG with the embedded diagram source, then check it in a light and a dark viewer:
+- Keep labels in English and show ownership, trust boundaries and data direction rather than environment addresses or internal hosts.
+- Edit the source, not only an exported image. Keep source and export consistent when an export is maintained.
+- Use the repository's draw.io skill for editable draw.io changes; Mermaid remains appropriate for simple text diagrams.
+- Validate node/edge references, render the affected artifact when tooling is available, and inspect readability. Do not claim visual verification from a successful source edit alone.
+- Do not embed credentials, certificate-to-environment mappings or private network identifiers in diagram metadata or compressed exports.
 
-  ```bash
-  drawio -x -f svg -e --embed-svg-images --svg-theme light -b 1 -o docs/architecture/diagrams/images/<name>.svg docs/architecture/diagrams/src/<name>.drawio
-  ```
-
-- Commit the `.drawio` and its SVG together. Embed in docs as an SVG image.
-- `-b` is a border width in pixels, not a background colour. Set any required
-  background in the source diagram. The Core audit used draw.io Desktop 28.2.5
-  locally; it did not send diagram XML to an online export service.
-
-## Logic flows (Mermaid)
-
-- `flowchart LR` with the theme and palette from [`service-walkthrough/README.md`](../service-walkthrough/README.md).
-- Commit the rendered SVG beside its source and link the exported image from
-  reading docs. The Mermaid blocks in `service-walkthrough/README.md` are the
-  authoring source consumed by its `export.sh`, not a second API specification.
-- The 2026-10-26 Core overview exports use Mermaid CLI 11.12.0. Re-render changed
-  blocks and inspect SVGs in light/dark viewers; no application dependency change
-  is needed to use a renderer from an external tool cache.
+Product mock screenshots and design references have their own scope in [marketing](../../marketing/README.md) and [design](../../design/index.md). They are not provider, device or acceptance evidence.

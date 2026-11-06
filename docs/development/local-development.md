@@ -15,7 +15,7 @@ How to install, run and check each service on a developer machine, how the local
 
 JDK 21, Python 3.11+ with [uv](https://docs.astral.sh/uv/), Node.js 20+, and Docker for the Compose stack and the local database. Offline frontend demos can use mock data without a backend. Mobile requires explicit API endpoint and mock flags; configure them using the [Mobile guide](../../frontend/mobile/README.md) rather than assuming defaults.
 
-Get the team's credentials by following [`secrets/README.md`](../../secrets/README.md): it pulls them encrypted and writes `backend/core/.env`, `backend/ai/.env` and `frontend/mobile/.env`, with the staging database credentials. Without access, fill those files from their `.env.example` (the install commands below copy them when missing).
+Follow [`secrets/README.md`](../../secrets/README.md) for authorized credential access. The default `dev` source uses local database URLs; staging values are used only when deliberately selected. The scripts write local plaintext `.env` files and backups, protected by filesystem permissions, not application-level encryption. Without access, fill those files from their `.env.example` (the install commands below copy them when missing).
 
 ## Run each service
 
@@ -116,14 +116,14 @@ The Redis client tests run against it with `REDIS_TEST_URL=redis://127.0.0.1:637
 
 ## Database migrations
 
-Dev and staging share one database, so a migration that runs from a developer machine changes the schema for everyone. Core runs Flyway at startup when `FLYWAY_ENABLED=true` (the Core default); the commands above set it to `false`, and Core then only checks that the schema matches its entities.
+Development defaults to the local database. A deliberately selected shared database is a separate operational target; a migration there affects other users. Core runs Flyway at startup when `FLYWAY_ENABLED=true` (the Core default); the commands above set it to `false`, and Core then only checks that the schema matches its entities.
 
 - **Never migrate the shared database from a feature branch.** A migration applied there and later edited, or a second branch that uses the same version number, makes Flyway reject the checksum and stops Core for everyone. A column change that is not merged yet breaks the code running on `staging`.
 - **Never edit a migration that has run on staging**; add a new version instead. Production follows the same steps after the release is approved.
 
 ### Develop against the local database
 
-`scripts/local-db.sh` starts a local PostgreSQL with the Core and AI migrations applied; the second command points Core and AI at it. See [Secrets and env files](secrets-and-env.md#3-set-up-a-machine).
+`scripts/local-db.sh` starts a local PostgreSQL with the Core and AI migrations applied; the second command points Core and AI at it. See [Secrets and env files](secrets-and-env.md#local-development).
 
 ```bash
 scripts/local-db.sh
@@ -135,29 +135,8 @@ scripts/secrets/apply.sh dev dev --apply
 
 ### Develop a migration on a disposable database
 
-CI repeats this on every pull request. A branch whose entities need a migration that staging lacks cannot start against the shared database, because the schema check fails.
-
-1. Start a disposable PostgreSQL:
-
-   ```bash
-   docker run --rm -p 5432:5432 -e POSTGRES_DB=smartledger -e POSTGRES_USER=smartledger -e POSTGRES_PASSWORD=smartledger pgvector/pgvector:pg17
-   ```
-
-2. Point `DATABASE_URL=jdbc:postgresql://localhost:5432/smartledger` (and `POSTGRES_URL` for AI) at it.
-3. Run Core with `FLYWAY_ENABLED=true`.
+CI verifies fresh migrations on an isolated database. For local verification, create a disposable, loopback-only PostgreSQL instance through the approved local setup, point only test connections at it and run Core with Flyway enabled. Never use shared business data or deployment credentials for this check.
 
 ### Migrate staging after a merge
 
-After a pull request with a Core or AI migration merges, one person checks out `origin/staging`, runs both steps, and tells the team. This manual step stands in for the staging deploy until one exists.
-
-1. Run Core once with Flyway on:
-
-   ```bash
-   FLYWAY_ENABLED=true docker compose --env-file backend/core/.env --env-file backend/ai/.env up --build core
-   ```
-
-2. Push the AI migrations, as in the [AI README](../../backend/ai/docs/architecture.md#database-and-migrations):
-
-   ```bash
-   npx supabase@2.119.0 db push --db-url "$POSTGRES_URL"
-   ```
+Shared migrations require merged code, explicit owner authorization, a verified backup/recovery plan and the approved operational window. Check the actual target and migration history before applying anything; do not infer them from local defaults. The [private operations knowledge base](https://app.notion.com/p/M-i-tr-ng-v-domain-407f1ce5c3ac80249cd0c2a28c259436) owns access and execution procedures. Keep Core-before-AI ordering and never repair, baseline, delete migration history or edit an applied migration to bypass a failure.

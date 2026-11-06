@@ -43,7 +43,7 @@ Public contact details live in [`site.yaml`](site.yaml), not in environment vari
 
 ## Admin pages
 
-Runs only when `VITE_ADMIN_ENABLED=true` (off by default). During development, set it in `.env.local`. A deploy enables admin when the GitHub environment `landing-*` sets `VITE_ADMIN_ENABLED=true` together with `VITE_API_ENDPOINT` and `VITE_FIREBASE_API_KEY`: the admin pages live at `/admin` of the landing site itself and read real Core data (see [Landing page on Vercel](../../docs/development/ci-cd.md#landing-page-on-vercel)).
+Runs only when `VITE_ADMIN_ENABLED=true` (off by default). During development, set it in `.env.local`. A deploy enables admin when the GitHub environment `landing-*` sets `VITE_ADMIN_ENABLED=true` together with `VITE_API_ENDPOINT` and `VITE_FIREBASE_API_KEY`: the admin pages live at `/admin` of the landing site itself and read real Core data (see [Landing page on Vercel](../../docs/development/ci-cd.md#workflows)).
 
 **Two modes:**
 
@@ -79,12 +79,7 @@ Old URLs still work: `/admin/customers/:id` → shop drawer, `/admin/logs` → l
 
 **Responsive:** ≥1280 a 248px sidebar; 768–1279 a 72px sidebar with the side column moved below; <768 the sidebar becomes a drawer, KPIs scroll horizontally, tables become lists, and the Kanban scrolls horizontally with snap. Includes a skip link, clear focus, 40px hit areas, and respects `prefers-reduced-motion`.
 
-**Demo accounts** (mock mode only; the sign-in page has a "Điền" button):
-
-| Email | Password | Role | Result |
-| --- | --- | --- | --- |
-| `admin@songhloi.vn` | `admin123` | ADMIN | Opens the dashboard |
-| `owner@songhloi.vn` | `owner123` | OWNER | 403 page |
+**Mock access:** use the mock sign-in page's built-in sample-data action. Do not publish account/password or OTP pairs in documentation, and never use mock access as evidence of real authentication or authorization.
 
 ## Landing and legal pages
 
@@ -104,14 +99,7 @@ Recapture the images when the app UI changes: run a dev build on the simulator i
 
 **Legal pages** (`src/pages/legal/`) are public text. When a provider, the data collected or the deletion handling commitment (`DELETION_DAYS`) changes, update the content and `POLICY_UPDATED` in `legalConfig.ts`.
 
-**Deployment:** the `deploy-landing` job in [`cd.yml`](../../.github/workflows/cd.yml) (called by CI after the `landing` job passes) builds this web app and pushes it to a separate Vercel project named `landing`. Vercel Git does not deploy (`git.deploymentEnabled: false` in `vercel.json`). Pull requests do not deploy previews for now (the Vercel Hobby daily deploy limit). Environments, with details in [CI/CD](../../docs/development/ci-cd.md#landing-page-on-vercel):
-
-| Environment | Branch | Address |
-| --- | --- | --- |
-| Staging | `staging` | `LANDING_URL` of the `landing-staging` environment |
-| Production | `main` (needs approval) | `LANDING_URL` of the `landing-production` environment |
-
-One-time setup on Vercel: New Project → import this repo → Root Directory `frontend/web` (the Vite framework is detected). Take the project ID and set it as the `VERCEL_PROJECT_ID` secret in the three `landing-*` environments. Set `LANDING_URL` as a Variable of each environment.
+**Deployment:** the repository [delivery workflows](../../docs/development/ci-cd.md#workflows) build and deliver this application. Provider projects, domains, environment mappings and publication access are maintained in the [private operations knowledge base](https://app.notion.com/p/M-i-tr-ng-v-domain-407f1ce5c3ac80249cd0c2a28c259436), not this README. PR previews are disabled; deployment does not establish integrated acceptance.
 
 `rewrites` in `vercel.json` sends every path to `index.html` so `/privacy` and `/data-deletion` open directly.
 
@@ -128,7 +116,7 @@ Quick check (mock mode): add `?mock=slow`, `?mock=empty` or `?mock=error` to an 
 
 ## Mock data
 
-- `src/types.ts` describes an **assumed** API contract (`AdminOverviewView`, `AdminUserItem`, `AdminShopDetailView`, `SupportTask`, `AiMessage`…). The `AdminOverviewView` fields are assumptions and must be locked with the backend.
+- `src/types.ts` contains legacy mock-page types, not the real Core contract. Real ADMIN requests and DTOs live in `src/services/adminApi.ts` and follow the [implemented ADMIN contract](../../docs/contracts/api-contracts.md#7-admin-dashboard--implemented-in-core).
 - `src/mocks/accounts.ts` generates 48 OWNERs / 53 shops; `src/mocks/tasks.ts` generates 11 support tasks. Only support data exists. "Today" in the sample data is `MOCK_TODAY` (2026-09-16).
 - `src/services/mockStore.ts` is a "fake backend" stored in `localStorage` (`snl_mock_db`, `snl_mock_tasks`, `snl_mock_ai`, `snl_mock_audit`, `snl_mock_idem`). The **Khôi phục dữ liệu mẫu** button resets it. Personal preferences are stored in `snl_admin_prefs`.
 - AI Support in mock mode is a rule-based responder (`src/services/aiService.ts`) and calls no real model.
@@ -140,7 +128,7 @@ Quick check (mock mode): add `?mock=slow`, `?mock=empty` or `?mock=error` to an 
 src/
   App.tsx, main.tsx          routing
   config.ts                  USE_MOCK, API_ENDPOINT, plan limits
-  types.ts                   data types / assumed API contract
+  types.ts                   legacy mock-page data types
   mocks/                     sample data, sample tasks, simulated API scenarios
   services/                  api, auth, account, task, ai, preferences, mockStore
   components/admin/          ui (Panel, Pill, Avatar, DetailDrawer…), charts

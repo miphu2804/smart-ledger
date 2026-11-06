@@ -28,16 +28,7 @@ V18 adds channel/client/target/reference/expiry fields to the existing OAuth ses
 
 ## Deployment-specific configuration
 
-Keep the existing `ZALO_*` provider/Firebase settings. Each deployment explicitly configures one public Android client and fixed return target; client ID, package and certificate are not authentication credentials. The production column below is reference metadata, **not approval to activate production**.
-
-| Setting | Staging | Production |
-|---|---|---|
-| `ZALO_NATIVE_CLIENT_ID` | `android-staging` | `android-production` |
-| `ZALO_NATIVE_RETURN_TARGET_ID` | `core-staging` | `core-production` |
-| `ZALO_NATIVE_RETURN_URL` | `https://api-staging.songheloi.id.vn/mobile/auth/zalo/complete` | `https://api-production.songheloi.id.vn/mobile/auth/zalo/complete` |
-| `ZALO_NATIVE_PACKAGE_NAME` | `vn.teamhexa.songheloi` | `vn.teamhexa.songheloi` |
-| `ZALO_NATIVE_CERTIFICATE_SHA256` | `FA:C6:17:45:DC:09:03:78:6F:B9:ED:E6:2A:96:2B:39:9F:73:48:F0:BB:6F:89:9B:83:32:66:75:91:03:3B:9C` | `87:2C:CC:33:4C:2B:34:73:FF:63:15:A0:A7:AC:66:74:D1:92:79:9F:1E:4F:66:FC:55:5D:D3:FA:74:69:A8:48` |
-| `ZALO_NATIVE_HANDOFF_TTL_SECONDS` | `90` (15–90) | `90` (15–90) |
+Each deployment binds one Android client to an exact return target and signing certificate. Actual domain/client/package/certificate mappings and activation access belong to the [private operations knowledge base](https://app.notion.com/p/M-i-tr-ng-v-domain-407f1ce5c3ac80249cd0c2a28c259436), not this guide. Check source declarations for field names and defaults; a sample configuration is not approval or evidence of activation.
 
 The return URL must be exact HTTPS on the same origin as `ZALO_CALLBACK_URL`, with path `/mobile/auth/zalo/complete`, no query/fragment/userinfo. App Link association is served at `GET /.well-known/assetlinks.json` once explicit association configuration is valid, even while native login stays OFF; it does not query DB or call providers. Only configured certificates are published. Do not add the staging certificate to production automatically. The app must capture only the return path, not the Zalo provider callback or all Core routes. Android manifest/path enforcement and actual certificate/domain verification remain APK acceptance work.
 

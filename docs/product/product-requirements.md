@@ -21,7 +21,7 @@ stale_after: 2027-01-05T04:32:37+07:00
 - [Mô tả sản phẩm](project-overview.md): định vị sản phẩm.
 - [Thiết kế kỹ thuật](../architecture/technical-design.md): hiện thực và hiện trạng triển khai.
 - [Hợp đồng API](../contracts/api-contracts.md): FE ↔ Core và Core ↔ AI.
-- [Sơ đồ kiến trúc đích](../architecture/diagrams/src/architecture.mmd): Mobile, Core, Data, AI và AI infrastructure.
+- [Kiến trúc logic](../architecture/diagrams/src/architecture.mmd): ranh giới trách nhiệm giữa Mobile, Core, dữ liệu và AI; không mô tả hạ tầng triển khai.
 - Nguồn luồng Core/FE ban đầu: [orei1i/EXE201/frontend](https://github.com/orei1i/EXE201/tree/main/frontend), kiểm tra 2026-09-15. Hiện trạng triển khai được ghi trong [thiết kế kỹ thuật](../architecture/technical-design.md).
 
 ## 0. Tra nhanh shorthand

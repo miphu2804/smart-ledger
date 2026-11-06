@@ -4,7 +4,7 @@ Feature handoffs and operational verification guides for the Java Core service. 
 
 * [Admin dashboard: daily creation counts](admin-dashboard-growth.md) - Core handoff for the ADMIN daily creation API: verification steps and history.
 * [CORE-016 — Android Core integration and V18 rollout](zalo-android-preparation.md) - Core guide for Zalo Android sign-in: verification and staging activation after merge.
-* [CORE-015: Zalo authentication implementation plan](zalo-auth-implementation-plan.md) - Design and implementation plan for Zalo web sign-in in Core.
+* [CORE-015: Zalo authentication handoff](zalo-auth-implementation-plan.md) - Implemented Zalo web sign-in boundaries, consumer handoff and dated verification evidence.
 * [CORE-015 local verification evidence](zalo-auth.tdd.md) - Test-driven records and local verification evidence for Zalo web sign-in.
 * [Manual Zalo login against local Core](zalo-manual-login.md) - Opt-in local test kit for trying Zalo login against a local Core.
 * [SmartLedger Core — verification and regression guide](verification.md) - Disposable-database checks, feature regression commands and migration evidence boundaries for Core.

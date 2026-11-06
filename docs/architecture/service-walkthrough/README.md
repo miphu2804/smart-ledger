@@ -9,7 +9,9 @@ stale_after: 2027-01-05T22:18:48+07:00
 ---
 # Service walkthrough
 
-Core documentation audit, 2026-10-26, against `feat/admin-dashboard-growth` at
+Current source reconciliation: `staging` revision `a2766ee3a37e23c0f03fd43383b608c1b2fac898` for the request/service maps, idempotency coverage and AI provider wiring. No live environment or integrated acceptance was verified.
+
+Historical Core documentation audit, 2026-10-26, against `feat/admin-dashboard-growth` at
 `3e93dd1`: the request/service overview below now includes the implemented
 ADMIN, Zalo, media and notification boundaries. The detailed sale/money/report
 diagrams retain their dated review history. This is source-code alignment;
@@ -66,9 +68,9 @@ flowchart TB
         STATUS["ShopService.updateStatus<br/>DB ADMIN / ACTIVE"]
         SVC["Ledger / catalog / report services"]
         ADM["AdminDashboardService<br/>read + mandatory audit transaction"]
-        MEDIA["MediaService<br/>resource scope, lease, outbox"]
+        MEDIA["MediaService<br/>scoped upload idempotency<br/>lease and cleanup outbox"]
         OAUTH["ZaloAuthService / ZaloNativeAuthService<br/>browser binding, one-use proof/handoff<br/>LINK also requires verified recent OWNER"]
-        IDEM["IdempotencyService<br/>supported expense / repay / void / stock-in"]
+        IDEM["IdempotencyService<br/>expense / repay / void<br/>stock-in / stock adjustment"]
         AUDIT["Audit writers<br/>profile / ledger writes and ADMIN reads"]
         AGENT["AgentServiceImpl<br/>verified OWNER + shop scope"]
     end
@@ -159,10 +161,10 @@ flowchart TB
     end
     subgraph Shared["Shared transaction helpers"]
         SHOP["ShopService<br/>owned-shop access / profile / status"]
-        IDEM["IdempotencyService<br/>money and stock-in keys"]
+        IDEM["IdempotencyService<br/>money and stock change keys"]
         AUDIT["AuditLogService<br/>append-only event writes"]
         NOTIFY["NotificationEventService<br/>transactional events / stock episodes"]
-        OUTBOX["Media cleanup worker<br/>durable upload leases / cleanup jobs"]
+        OUTBOX["Media upload idempotency<br/>durable leases / cleanup jobs"]
     end
     Catalog --> SHOP
     Sales --> SHOP
@@ -621,7 +623,7 @@ flowchart LR
         SANDBOX["Monty sandbox<br/>run_code only, calls no tool"]
         RESTOCK["RestockService<br/>suggest(shop_id, period)"]
         MEM["AgentMemoryService<br/>with_memories() / remember()<br/>only when AGENT_MEMORY_ENABLED"]
-        EMB["Embedder<br/>sentence-transformers or Workers AI"]
+        EMB["Embedder<br/>local ONNX (default)<br/>sentence-transformers or Workers AI"]
     end
 
     subgraph SQL["SQL Space"]

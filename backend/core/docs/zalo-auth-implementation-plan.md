@@ -1,42 +1,37 @@
 ---
-type: Plan
-title: "CORE-015: Zalo authentication implementation plan"
-description: "Design and implementation plan for Zalo web sign-in in Core."
+type: Guide
+title: "CORE-015: Zalo authentication handoff"
+description: "Implemented Zalo web sign-in boundaries, consumer handoff and dated verification evidence."
 owner: Core owner
 status: stable
 author: miphu2804
 stale_after: 2026-12-15T20:00:02+07:00
 ---
-# CORE-015: Zalo authentication implementation plan
+# CORE-015: Zalo authentication handoff
 
-Status: design and V17/document preparation approved on 2026-10-16; Core implementation locally verified, not
-enabled or accepted on staging. The user confirmed real LOGIN through the local helper, not LINK/FE acceptance. This file is a consumer handoff, not a replacement for the canonical
-[API contract](../../../docs/contracts/api-contracts.md).
+Current source: WEB authentication and V17 are present in audited `staging` revision `a2766ee3a37e23c0f03fd43383b608c1b2fac898`. Runtime enablement, deployment and integrated acceptance were not audited. Historical evidence on 2026-10-16 confirmed local LOGIN through the helper, not LINK/FE acceptance. This consumer handoff does not replace the [API contract](../../../docs/contracts/api-contracts.md).
 
 Issue: [CORE-015 #238](https://github.com/miphu2804/smart-ledger/issues/238).
-Branch: `feat/zalo-login`.
+Historical implementation branch: `feat/zalo-login`.
 
-## Approved boundaries
+## Historical approval boundaries
 
 - Initial implementation was Core-only/no migration. The user subsequently approved
   preparing V17, canonical API/BRD/PRD/AC/design/ERD and an append-only progress entry.
 - Run migrations/tests on disposable PostgreSQL schemas only. Do not apply this
   feature branch to a business, staging or production DB; no deploy/runtime setting changes.
 - Support login and explicit, safe linking to an existing Firebase account.
-- Do not commit, push implementation changes, open a PR or deploy until asked.
 - Keep Firebase ID tokens as the only Bearer credential for Core APIs, with the
   existing database role/status/shop checks. Zalo OAuth does not create a Core
   profile or shop; the client still opens `/auth/session` after Firebase sign-in.
 
 Traceability is [BR-009 / BR-022](../../../docs/product/business-requirements.md) →
 [FR-010 / NFR-003 / AC-081–086](../../../docs/product/product-requirements.md).
-UI remains forthcoming until FE implements and accepts the canonical
-[Zalo contract](../../../docs/contracts/api-contracts.md#zalo-core-015). This plan does not claim staging/consumer acceptance.
+Consumer behavior follows the [Zalo contract](../../../docs/contracts/api-contracts.md#zalo-core-015). Current Mobile integration is separate from the historical Core-only slice; this source review does not establish consumer acceptance.
 
-## Local Core consumer contract (not deployed)
+## Core consumer contract
 
-Initial target: web popup flow. Native Android/iOS integration and deep links
-are not implied by passing a web test. No frontend implementation in this slice.
+This section describes the WEB popup flow. Native Android handoff has its [own guide](zalo-android-preparation.md); passing a web test does not establish device or deep-link acceptance.
 
 | Operation | Request | Result |
 | --- | --- | --- |

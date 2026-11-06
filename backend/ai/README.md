@@ -15,7 +15,8 @@ SmartLedger AI is the internal FastAPI service for the owner's Agent chat. Core 
 |---|---|
 | Request and response shapes | [API contracts §5–6](../../docs/contracts/api-contracts.md#5-ai-through-core) |
 | Implementation status | [Technical design §1](../../docs/architecture/technical-design.md#1-scope) |
-| AI architecture, settings and safety boundaries | [AI service architecture](docs/architecture.md) |
+| Responsibilities and trust boundaries | [AI service architecture](docs/architecture.md) |
+| Configuration and operational details | [AI runtime reference](docs/runtime-reference.md) |
 | Code walkthrough | [Service walkthrough §8](../../docs/architecture/service-walkthrough/README.md#8-ai-service) |
 | Vector and memory decisions | [ADR-0001](../../docs/architecture/adr/0001-vector-store-pgvector.md), [ADR-0002](../../docs/architecture/adr/0002-agent-long-term-memory.md) |
 
@@ -52,17 +53,17 @@ AI returns answers and proposals only; it does not create sales, payments, debts
 ## Chat turn
 
 1. Reject an oversized owner message.
-2. Redact secrets and personal data; store the redacted text.
+2. Redact supported secret and personal-data patterns; names and phone numbers can remain.
 3. Load the bounded recent history and, when enabled, recall long-term memory.
 4. Select a model and run within request, token, time and tool limits.
 5. Screen the answer, append approved screen actions, and save only an accepted turn.
 6. Extract memory facts in the background when long-term memory is enabled.
 
-Streaming performs all preflight checks before the first byte, emits `delta`/`reset`/`memory`/`done`/`error` events as applicable, and does not save an incomplete turn.
+Streaming checks input and history before the first byte and emits answer/progress events. Disconnect cancels the producer, but a database write already running may still commit. Event schemas and persistence semantics belong to the [stream contract](../../docs/contracts/api-contracts.md#chat-answer-stream).
 
 ## Run
 
-Settings are owned by the [AI service architecture guide](docs/architecture.md#configuration); do not copy volatile model, flag or limit values into other architecture pages.
+Settings are owned by the [AI runtime reference](docs/runtime-reference.md#configuration); do not copy volatile model, flag or limit values into other architecture pages.
 
 ```bash
 uv sync --group dev
@@ -70,4 +71,4 @@ cp .env.example .env
 uv run python -m src.main
 ```
 
-For local Compose, checks, migrations and evaluation commands, see [the service architecture guide](docs/architecture.md#run-and-check) and [Evaluation](evaluation/README.md).
+For local Compose, checks, migrations and evaluation commands, see [the runtime reference](docs/runtime-reference.md#run-and-check) and [Evaluation](evaluation/README.md).
