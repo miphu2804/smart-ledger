@@ -122,7 +122,7 @@ Luồng hỗ trợ: ADMIN đăng nhập dashboard web, tìm OWNER hoặc cơ s�
 | `FR-036` | `BO-003`, `BR-023` | Khi được bật sau migration, Core ghi tối đa một ngày hoạt động cho mỗi user ACTIVE có request API nghiệp vụ đã xác thực và phản hồi 2xx/3xx, gồm API đọc; ngày theo Asia/Ho_Chi_Minh tại lúc nhận request. Không tính public OAuth, health, OPTIONS hoặc 4xx/5xx. Lưu mã user/ngày trong 90 ngày gồm hôm nay; cache có giới hạn, lỗi ghi không đổi response nghiệp vụ và được thử lại. Grafana đọc DAU/MAU tách OWNER/ADMIN, bỏ email bắt đầu loadtest+; MAU là 30 ngày lịch gồm hôm nay. Không thêm API FE, không đo CCU hay hiệu quả câu trả lời AI. | CORE-018 #409; chủ sản phẩm duyệt ngày 2026-10-29; nhánh feat/core-daily-activity, chưa nghiệm thu staging |
 | `FR-037` | `BR-024` | Core giới hạn thao tác thành công theo tài khoản; dùng chung giữa các instance, giữ qua restart và miễn replay hợp lệ. Nhóm, cửa sổ, lease, lỗi và retry theo [contract](../contracts/api-contracts.md#core-019-operation-limits). | CORE-019 #430; đã duyệt ngày 2026-10-31, mặc định tắt, chưa nghiệm thu staging |
 | `FR-038` | `BO-002`, `BR-009`, `BR-016`, `BR-017`, `BR-025` | OWNER giảm tồn bằng lượng dương tối đa 12 chữ số nguyên và 3 thập phân, có lý do không rỗng tối đa 500 ký tự. Core khóa sản phẩm, không cho tồn âm, yêu cầu Idempotency-Key và ghi STOCK_ADJUSTED/source STOCK_ADJUSTMENT cùng cảnh báo tồn trong transaction; giữ nguyên các khoản tiền và giá vốn. | CORE-021 #457; triển khai trong nhánh, chưa nghiệm thu FE/staging |
-| `FR-039` | `BO-001`, `BO-003`, `BR-026` | App Android production hỏi một lần trên máy, ngay sau khi đăng nhập, có cho gửi số liệu sử dụng lên Google Analytics 4 không; đóng hộp thoại tính là không. Cài đặt có công tắc "Gửi số liệu sử dụng" để đổi ý. Khi đồng ý, app gửi màn đã mở và các sự kiện trong [`analyticsEvents.ts`](../../frontend/mobile/src/lib/analyticsEvents.ts) kèm ID tài khoản Core. Bản web không gửi và không hỏi. | Đề xuất, nhánh feat/mobile-ga4-analytics; [ADR-0010](../architecture/adr/0010-mobile-usage-analytics-ga4.md); chờ chủ sản phẩm duyệt |
+| `FR-039` | `BO-001`, `BO-003`, `BR-026` | App Android hỏi một lần trên máy, ngay sau khi đăng nhập, có cho gửi số liệu sử dụng lên Google Analytics 4 không; đóng hộp thoại tính là không. Cài đặt có công tắc "Gửi số liệu sử dụng" để đổi ý. Khi đồng ý, app gửi màn đã mở và các sự kiện trong [`analyticsEvents.ts`](../../frontend/mobile/src/lib/analyticsEvents.ts) kèm ID tài khoản Core. Bản web không gửi và không hỏi. | Đề xuất, nhánh feat/mobile-ga4-analytics; [ADR-0010](../architecture/adr/0010-mobile-usage-analytics-ga4.md); chờ chủ sản phẩm duyệt |
 
 `FR-001`–`FR-009` giữ nguyên mã. `FR-007` không bị tái sử dụng cho yêu cầu khác.
 
@@ -339,7 +339,7 @@ Các tiêu chí dưới đây kiểm chứng `FR-038`; triển khai Core trong n
 
 ### Số liệu sử dụng mobile — chờ duyệt
 
-Các tiêu chí dưới đây kiểm chứng `FR-039` và `NFR-011`; kiểm bằng DebugView của Firebase trên bản build Android production, không phải Expo Go hay bản web.
+Các tiêu chí dưới đây kiểm chứng `FR-039` và `NFR-011`; kiểm bằng DebugView của Firebase trên bản build `android-staging` (property GA4 staging), không phải Expo Go hay bản web.
 
 | ID | Tiêu chí | Truy vết |
 |---|---|---|

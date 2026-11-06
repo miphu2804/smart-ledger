@@ -44,11 +44,11 @@ Danh mục đầy đủ, kèm mỗi sự kiện đo gì, là `ANALYTICS_EVENTS` 
 
 ### 2.4. Việc làm trên Firebase và GA4 Console
 
-1. Chỉ đo bản Android production: project Firebase `smart-ledger-production` liên kết với property GA4 `smart-ledger-production`. Không liên kết GA4 cho project staging `smart-ledger-c2892`, để bản `android-dev` và `android-staging` không gửi số liệu; iOS chưa phát hành nên chưa đo.
+1. Mỗi môi trường gửi vào property GA4 riêng: project Firebase `smart-ledger-production` (bản `android-production`, APK/AAB phát hành) vào property `smart-ledger-production` (ID 562874077), còn project staging `smart-ledger-c2892` (bản `android-dev`, `android-staging`) vào property `smart-ledger-c2892` (ID 554910244). Chỉ số sản phẩm đọc ở property production; property staging dùng để kiểm sự kiện trước khi phát hành. iOS chưa phát hành nên chưa đo.
 2. Đặt lưu dữ liệu sự kiện và dữ liệu người dùng 14 tháng (mặc định 2 tháng làm mất báo cáo giữ chân dài).
 3. Tắt Google signals, không liên kết Google Ads, và tắt các chia sẻ dữ liệu với sản phẩm Google, để Google chỉ là bên xử lý.
 4. Bật xuất BigQuery khi cần truy vấn ngoài báo cáo có sẵn.
-5. Kiểm bằng DebugView: `adb shell setprop debug.firebase.analytics.app vn.teamhexa.songheloi` trên bản Android production.
+5. Kiểm bằng DebugView của property staging: `adb shell setprop debug.firebase.analytics.app vn.teamhexa.songheloi` trên bản `android-staging`.
 
 ## 3. Phương án đã loại
 

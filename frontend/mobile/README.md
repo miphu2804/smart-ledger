@@ -163,7 +163,7 @@ Where the code lives: `src/lib/auth/` (the `AuthClient` interface; `mock.ts`, `f
 
 ### Google Analytics
 
-`@react-native-firebase/analytics` sends usage events to GA4 only after the user agrees in the one-time prompt after sign-in or in Settings ([ADR-0010](../../docs/architecture/adr/0010-mobile-usage-analytics-ga4.md)). Only the Android production build (APK/AAB from `android-production`) is measured; the event catalogue is `src/lib/analyticsEvents.ts`.
+`@react-native-firebase/analytics` sends usage events to GA4 only after the user agrees in the one-time prompt after sign-in or in Settings ([ADR-0010](../../docs/architecture/adr/0010-mobile-usage-analytics-ga4.md)). Each Firebase project sends to its own GA4 property: `android-production` builds to the production property used for product metrics, `android-dev` and `android-staging` builds to the staging property used for testing; the event catalogue is `src/lib/analyticsEvents.ts`.
 
 ### Connect to the real Core
 
