@@ -3,7 +3,7 @@ type: Reference
 title: "User flows"
 description: "Technical map of the mobile screen flows, generated from Expo Router calls and linked to source files and product requirements."
 owner: Product owner
-author: miphu2804
+author: orei1i
 status: stable
 stale_after: 2027-01-03T18:40:27+07:00
 ---
@@ -28,3 +28,12 @@ The command writes a self-contained `index.html` here with the script, styles an
 ## Screenshots
 
 Files under `screens/` are illustrative captures attached to flow nodes. Their test data, viewport and capture environment are not a behavior contract. When a screen changes, retake the affected capture from the intended environment, record the capture context, replace the image and rebuild the page. A screenshot does not verify that the corresponding feature is deployed or accepted.
+
+Capture manifest for the current files (test accounts, environment addresses and test data stay in the private operations knowledge base):
+
+| Screens | Captured | Frame and export | Added in | App state |
+|---|---|---|---|---|
+| `welcome`, `email-login`, `invoices`, `chat-tro-ly-ai`, `chat-dat-cau-hoi`, `chat-tra-loi`, `ai-ask-sheet` | 2026-11-04, staging | 390 × 844 at 2× (`chat-tra-loi` about 1×), Pillow to 720 px WebP, quality 78 | `f446267b` | After #491, #499, #505, #513 and #514 |
+| All other files in `screens/` | 2026-11-02, staging | 390 × 844, `cwebp -q 78 -resize 720 0` | `fc2df5d8` (#472) | Staging on the capture date |
+
+Barcode scanning, email verification, shop setup and stock-in have no screenshot and stay as step nodes with a note.

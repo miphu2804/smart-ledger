@@ -79,7 +79,7 @@ Drafts do not affect revenue, stock, payments, or debts until confirmed.
 
 ### Expenses
 
-- **expenses**: Stores confirmed operating expenses of a shop.
+- **expenses**: Stores a shop's operating expenses, `ACTIVE` or `ARCHIVED`.
 
 ### AI and System Safety
 

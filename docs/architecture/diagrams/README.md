@@ -15,13 +15,40 @@ Repository diagrams explain logical responsibilities, data relationships and cod
 
 | Artifact | Meaning and boundary |
 |---|---|
-| [Logical architecture](src/architecture.mmd) | Current component responsibilities, not network placement or deployment evidence |
+| [Logical architecture](#logical-architecture) | Current component responsibilities, not network placement or deployment evidence |
 | [ERD source](src/erd.dbml) | Checked-in Core/AI table structure; SQL migrations own checks, policies, triggers and partial indexes |
 | [ERD layout](src/erd.dbdiagram) | Editor positions only, not a schema definition |
 | [Service walkthrough](../service-walkthrough/README.md) | Source-reading and transaction diagrams with their own verification boundaries |
 | [Memory decision diagram](src/agent-memory.drawio) | Supporting artifact for ADR-0002; the ADR's proposal/status remains authoritative |
 
 The [technical design](../technical-design.md#1-scope) records source-level implementation; the [ERD description](../erd-description.md) records migration alignment. Neither a diagram nor a checked-in migration proves live deployment, runtime enablement or integrated acceptance.
+
+## Logical architecture
+
+Component boundaries from checked-in source, rendered by GitHub and most Markdown viewers. It is not an environment, network, deployment or acceptance diagram; edit the Mermaid block here.
+
+```mermaid
+flowchart LR
+    mobile["Mobile · OWNER"]
+    admin["Web · ADMIN"]
+    core["Core · authentication and business authorization"]
+    ledger[("Business ledger")]
+    ai["AI · internal Agent chat"]
+    history[("Chat history and optional memory")]
+    reader["Guarded read-only shop views"]
+    models["Model provider or compatible gateway"]
+    traces["Optional external tracing"]
+
+    mobile --> core
+    admin --> core
+    core --> ledger
+    core -->|"Authorized user/shop context"| ai
+    ai --> history
+    ai --> reader
+    reader --> ledger
+    ai --> models
+    ai --> traces
+```
 
 ## Editing
 

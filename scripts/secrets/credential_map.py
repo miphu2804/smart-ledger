@@ -1,14 +1,15 @@
 """Builds one credential map page per environment from Dopbase key names and the code that reads them.
 
 The map answers "which variable, kept where, feeds which service and what breaks when it is wrong". Dopbase is
-asked only for key names (`dopbase secret list`), never values, so the generated pages are safe to commit.
+asked only for key names (`dopbase secret list`), never values, but a page still lists the live key inventory of an
+environment, so it belongs in the private operations knowledge base and must not be committed.
 Connections, kinds and symptoms come from credential-map.json beside this script; references come from a scan of
 the tracked files.
 
 Usage:
     python3 scripts/secrets/credential_map.py [staging|production ...]
 
-Writes docs/development/credential-map/<environment>.html. Needs a logged-in Dopbase CLI.
+Writes ~/.smartledger/credential-map/<environment>.html, outside the repository. Needs a logged-in Dopbase CLI.
 """
 
 import fnmatch
@@ -22,7 +23,7 @@ from pathlib import Path
 ROOT = Path(subprocess.run(["git", "rev-parse", "--show-toplevel"], capture_output=True, text=True,
                            check=True).stdout.strip())
 HERE = ROOT / "scripts/secrets"
-OUT = ROOT / "docs/development/credential-map"
+OUT = Path.home() / ".smartledger/credential-map"
 MAX_REFS = 8
 NAME = re.compile(r"\b[A-Z][A-Z0-9]*(?:_[A-Z0-9]+)+\b")
 WORKFLOW_REF = re.compile(r"\b(secrets|vars)\.([A-Z][A-Z0-9_]*)")
@@ -45,7 +46,7 @@ def main(environments):
         rows = build_rows(environment, data, dopbase, refs, workflow)
         page = render(environment, data, rows, branch)
         (OUT / f"{environment}.html").write_text(page)
-        print(f"{environment}: {len(rows)} keys -> {(OUT / f'{environment}.html').relative_to(ROOT)}")
+        print(f"{environment}: {len(rows)} keys -> {OUT / f'{environment}.html'}")
 
 
 def scan_code():

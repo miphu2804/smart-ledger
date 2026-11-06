@@ -4,7 +4,7 @@ title: "Mô tả sản phẩm"
 description: "Vị trí sản phẩm, người dùng và phạm vi MVP môn EXE201 của Sổ Nghe Lời."
 owner: Chủ sản phẩm
 status: stable
-author: miphu2804
+author: TranTho918
 stale_after: 2027-01-05T04:32:37+07:00
 ---
 # Mô tả sản phẩm
@@ -22,7 +22,7 @@ stale_after: 2027-01-05T04:32:37+07:00
 - [Yêu cầu sản phẩm](product-requirements.md): hành vi sản phẩm có thể quan sát và nghiệm thu.
 - [Demo và kiểm chứng MVP](mvp-demo-validation.md): kịch bản, dữ liệu thử, phản hồi và cách chọn việc còn lại cho EXE201.
 - [Thiết kế kỹ thuật](../architecture/technical-design.md): cách hệ thống hiện thực yêu cầu sản phẩm đã duyệt.
-- [Kiến trúc logic](../architecture/diagrams/src/architecture.mmd): ranh giới trách nhiệm giữa Mobile, Core, dữ liệu và AI; không mô tả hạ tầng triển khai.
+- [Kiến trúc logic](../architecture/diagrams/README.md#logical-architecture): ranh giới trách nhiệm giữa Mobile, Core, dữ liệu và AI; không mô tả hạ tầng triển khai.
 
 ## 0. Tra nhanh shorthand
 

@@ -17,7 +17,7 @@ stale_after: 2027-01-05T22:18:48+07:00
 ## Related documents
 
 - [BRD](../product/business-requirements.md) and [PRD](../product/product-requirements.md): source of `BO/BR → FR/NFR → AC`.
-- [Logical architecture](diagrams/src/architecture.mmd): component and trust boundaries, not deployment topology.
+- [Logical architecture](diagrams/README.md#logical-architecture): component and trust boundaries, not deployment topology.
 - [API contracts](../contracts/api-contracts.md): FE ↔ Core and Core ↔ AI.
 - Current sources of evidence: [`frontend/mobile`](../../frontend/mobile/README.md), [`frontend/web`](../../frontend/web/README.md), [`backend/core`](../../backend/core/src/main/java/com/smartledger/core/controller/AuthController.java) and [`backend/ai`](../../backend/ai/src/agent/router.py). The EXE201 FE is the historical source used when the initial scope was drafted.
 

@@ -1,3 +1,11 @@
+### 2026-11-07 — Re-review fixes for documentation boundaries (#555)
+
+| Area | Change |
+|---|---|
+| Docs and tooling | • The catalog `BIGINT` test now reads the AI draft reference instead of the API contract, which keeps only implemented endpoints<br>• `scripts/secrets/credential_map.py` writes to `~/.smartledger/credential-map/` outside Git and `.gitignore` blocks HTML snapshots in `docs/development/credential-map/`<br>• Restored original document authors, defined `author` as the writer, added a screenshot capture manifest, embedded the logical architecture Mermaid in the diagram guide and corrected AI logging, session ID, draft result and expense-status statements found by a source check |
+
+Check: AI `uv run pytest` 541 passed, 80 skipped; internal links and anchors in 48 changed Markdown files resolve; `git diff --check` passed. The Mermaid render and the credential-map script run against Dopbase were not verified. Commit: the commit that adds this entry.
+
 ### 2026-11-07 — Source-verified documentation and private operations boundary (#555)
 
 | Area | Change |
@@ -185,11 +193,3 @@ Check: `uv run pytest` (582 passed, 13 skipped) with `POSTGRES_TEST_URL` on a th
 | AI | • HoneyHive sessions carry `history_ms`, the time to read the conversation history before the session opens<br>• New `memory enabled` and `save turn` spans time the memory switch read and the exchange save, so the turn's untraced gap splits into named steps |
 
 Check: 475 unit tests and ruff pass; two real turns on `smartledger-local-db` recorded history 0 and 26 ms, memory enabled 81 and 3 ms, memory recall 1015 and 1753 ms, save turn 44 and 33 ms. Not verified: production timings, which need the deploy. Commit: the one that adds this entry.
-
-### 2026-11-04 — Tier classifier tokens reach HoneyHive
-
-| Area | Change |
-|---|---|
-| AI | • `BifrostTierClassifier` records each `/v1/decisions` call as a `tier classifier` span of type `model` with the model and the token counts Bifrost returns, so the session's Total Tokens and model events include the `jev-latest` call; `Observability.span` takes the event type |
-
-Check: `uv run ruff check`, `ruff format --check` and `uv run pytest tests/unit_tests` (474 passed); the SDK's `trace` and `enrich_span` signatures read from the installed package. Not verified: the span on a real HoneyHive session, since traces run only in production. Commit: the one that adds this entry.

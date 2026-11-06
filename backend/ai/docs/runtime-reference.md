@@ -35,7 +35,7 @@ This AI-owned reference contains implementation details and operational settings
 
 The code default is `chat` → `gpt-6-luna` over `openai_responses` with `effort: medium`. An alias without an effort uses `MODEL_REASONING_EFFORT` (default `low`). `MODEL_FALLBACKS` is a JSON list of `protocol:model`; each fallback is built with the global reasoning effort (`low` by default), not the primary alias's effort. Fallbacks are mainly for direct-provider environments; Bifrost routing and fallback rules remain in `deploy/vps/bifrost.json`.
 
-`session_settings` sends `x-bf-session-id` (`conversation-<id>` for each turn; one-off IDs for drafts/memory) and `x-bf-lh-shop-id` for log grouping. Alias `effort` and `service_tier` map to `openai_reasoning_effort` and `openai_service_tier`; supported efforts depend on the model, while service tiers are `auto`, `default`, `flex` or `priority`. An omitted tier leaves the provider default. Fallback attempts use the remaining turn timeout, so they mainly cover fast failures.
+`session_settings` sends `x-bf-session-id` (`conversation-<id>` for each turn of a saved conversation; a one-off ID for the first turn of a new conversation and for drafts/memory) and `x-bf-lh-shop-id` for log grouping. Alias `effort` and `service_tier` map to `openai_reasoning_effort` and `openai_service_tier`; supported efforts depend on the model, while service tiers are `auto`, `default`, `flex` or `priority`. An omitted tier leaves the provider default. Fallback attempts use the remaining turn timeout, so they mainly cover fast failures.
 
 `OPENAI_API_KEY` is the shared provider or Bifrost virtual key. `OPENAI_BASE_URL` selects the OpenAI-compatible API and defaults to `https://api.openai.com/v1` when blank. Provider clients also send the key as `x-bf-vk`; OpenAI ignores that header. Through Bifrost, model IDs have no provider prefix. `mercury-3` is served by Inception through `/chat/completions`, so its alias must use `openai_chat`.
 
@@ -122,8 +122,9 @@ Vectors from different models cannot be compared. An authorized environment chan
 
 ## Draft parser boundary
 
-`DraftService.parse(shop_id, mode, text)` in `src/drafts/service.py` turns owner text or an STT transcript into a `DraftView`. It writes nothing and is not exposed by any HTTP endpoint; it is not the Mobile rule-based order parser.
+`DraftService.parse(shop_id, mode, text)` in `src/drafts/service.py` turns owner text or an STT transcript into a `DraftResult`. It writes nothing and is not exposed by any HTTP endpoint; it is not the Mobile rule-based order parser.
 
+- Each line's `product_id` is the `BIGINT` of `products.id` from the Core catalog (`CatalogProduct.id` is an `int`), never a UUID, or `null` when no catalog product matches.
 - `SALE` matches lines against the shop's ACTIVE catalog; an unknown id, ambiguous line or `confidence` below 0.7 leaves the product empty with a Vietnamese warning, and a line with quantity 0 or less is dropped with one. Price always comes from the catalog.
 - `EXPENSE` makes one line per expense with the amount in `unit_price`.
 - Any model or catalog failure raises `DraftUnavailableError`; this helper has no HTTP error contract.
@@ -140,7 +141,7 @@ The [stream contract](../../../docs/contracts/api-contracts.md#chat-answer-strea
 
 ## Observability
 
-- **Logs:** stdout at `LOG_LEVEL`. At `INFO` and `WARNING`, `src/agent/tool_events.py` logs each tool call with its name, call id and the size of its arguments and result, and a rejected query, a turn without an answer or a failed memory step logs its code or error type, so these normal-level messages omit tool payloads; this is not a guarantee that every application, dependency or infrastructure log contains no shop data; the SQL, results and reasons, each cut to 1000 characters, and memory tracebacks log at `DEBUG` only. A tool retry logs at `WARNING`.
+- **Logs:** records at `LOG_LEVEL` below `ERROR` go to stdout and `ERROR` and above to stderr. At `INFO` and `WARNING`, `src/agent/tool_events.py` logs each tool call with its name, call id and the size of its arguments and result, and a rejected query, a turn without an answer or a failed memory step logs its code or error type, so these normal-level messages omit tool payloads; this is not a guarantee that every application, dependency or infrastructure log contains no shop data; tool arguments and results, each cut to 1000 characters, rejection reasons and memory tracebacks log at `DEBUG` only. A tool retry logs at `WARNING`.
 ### Trace activation and data exposure
 
 With `HH_API_KEY` set and `HH_SOURCE=production`, `src/observability.py` sends one [HoneyHive](https://docs.honeyhive.ai/v2) span per turn, model request, tool call and memory embedding, with timing, model, tokens, tool names, errors, `shop_id` and the content, grouped into one HoneyHive session per turn. The content is the prompts, the redacted question, tool arguments, tool results and the answer, so customer names and phone numbers the owner types reach HoneyHive (`NFR-008`); raw media does not, and `InputRedaction` removes keys, tokens, card numbers, IBANs and emails before the session opens. `tests/unit_tests/test_observability.py` checks both.
