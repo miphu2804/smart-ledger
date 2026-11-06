@@ -9,7 +9,7 @@ stale_after: 2027-01-05T22:18:48+07:00
 ---
 # CI/CD
 
-This guide explains repository-controlled delivery behavior. Environment addresses, domains, infrastructure topology, credential inventories and deployment access procedures belong to the [private operations knowledge base](https://app.notion.com/p/M-i-tr-ng-v-domain-407f1ce5c3ac80249cd0c2a28c259436), not this repository.
+This guide explains repository-controlled delivery behavior. Its diagrams show the topology drawn from the tracked `deploy/` and workflow files; environment addresses, domains, credential inventories and deployment access procedures belong to the [private operations knowledge base](https://app.notion.com/p/M-i-tr-ng-v-domain-407f1ce5c3ac80249cd0c2a28c259436), not this repository.
 
 Branch and review rules are in [CONTRIBUTING](../../CONTRIBUTING.md). Workflow definitions are implementation evidence, not proof of a successful deployment or product acceptance.
 
@@ -28,6 +28,20 @@ Branch and review rules are in [CONTRIBUTING](../../CONTRIBUTING.md). Workflow d
 | [`honeyhive-sync.yml`](../../.github/workflows/honeyhive-sync.yml), [`honeyhive-dashboards.yml`](../../.github/workflows/honeyhive-dashboards.yml) | Apply matching observability configuration changes on eligible pushes or manual dispatch |
 | [`release-policy.yml`](../../.github/workflows/release-policy.yml) | Checks the permitted production release source |
 
+## Delivery and runtime topology
+
+![CI/CD flow](../architecture/diagrams/images/ci-cd.svg)
+
+Green numbers are the deploy, purple the VPS setup with Ansible, from `infra.yml` or `scripts/infra/run.sh`, and orange the runtime requests. Gray dashed arrows are secrets: the deploy exports `core` and `ai` from Dopbase with runner tokens kept in the GitHub environment, and `scripts/infra/run.sh` exports the VPS files for Ansible. The app stack is drawn once and runs twice, as the separate staging and production Compose projects; the VPS network diagram below shows both. The diagram shows the target setup; [technical design §1](../architecture/technical-design.md#1-scope) records what is implemented. Edit [`ci-cd.drawio`](../architecture/diagrams/src/ci-cd.drawio) and re-export:
+
+```bash
+drawio -x -f svg -e --embed-svg-images --svg-theme light -b ffffff -o docs/architecture/diagrams/images/ci-cd.svg docs/architecture/diagrams/src/ci-cd.drawio
+```
+
+![VPS Docker networks and ports](../architecture/diagrams/images/vps-network.svg)
+
+Source: [`vps-network.drawio`](../architecture/diagrams/src/vps-network.drawio), drawn from `deploy/*/compose.yaml` and the Caddy sites the playbook writes. Each dashed region is one Docker network, so a container drawn inside two regions is on both. Each `name:port` is what another container dials inside that network. Only Caddy publishes public host ports (Dozzle binds a loopback port only); Core, Bifrost, Grafana, Alloy and Dopbase also join `edge`, and AI joins only its own project network, so only that environment's Core can call it.
+
 ## Steps
 
 1. Submit the change to `staging` through a pull request and required review.
@@ -44,6 +58,12 @@ Area checks are selected by paths in the workflows. Read the definitions when ch
 
 Code defaults and required variable names belong to each service's `.env.example` and service guide. Actual environment values, domain/origin allowlists, credential ownership and access grants are maintained only in the private operations knowledge base and the authorized secret store. Public-prefixed frontend variables are shipped in the application and must never contain secrets.
 
+### Dopbase and its backup
+
+![Dopbase secrets and nightly backup](../architecture/diagrams/images/dopbase-secrets-and-backup.svg)
+
+Source: [`dopbase-secrets-and-backup.drawio`](../architecture/diagrams/src/dopbase-secrets-and-backup.drawio). Green edges carry secrets, orange is the nightly backup and dashed edges are steps a person runs by hand. A maintainer sets secrets in Dopbase (1); `run.sh` reads the environment's groups for Ansible (2), which writes the backup settings to the VPS (3); the deploy reads `core/<environment>` and `ai/<environment>` with its own runner token (4). Each night `backup.sh` reads those settings (5), stops Dopbase and archives its volume (6), then encrypts the archive with `age` and uploads it to Cloudflare R2 (7). A restore happens by hand on the maintainer's machine, the only place that holds the age private key (8).
+
 ## Monitoring
 
 Monitoring definitions exist in the repository; their existence does not verify live provisioning, alert delivery or access controls. The private operations knowledge base owns endpoints, topology, retention/access configuration and incident procedures. AI data exposure and redaction limits remain documented in the [AI architecture](../../backend/ai/docs/architecture.md#observability).
@@ -51,6 +71,10 @@ Monitoring definitions exist in the repository; their existence does not verify 
 ## Mobile web on Vercel
 
 The delivery workflow builds environment-specific frontend artifacts. Public-prefixed values are build-time configuration, so changing them requires a new build. PR preview deployment is disabled; current workflow triggers, not historical preview instructions, define behavior. Deployment domains and authentication origin mappings are private operational information.
+
+![Sign-in and API request flow](../architecture/diagrams/images/auth-request-flow.svg)
+
+A browser request must pass Firebase Authorized domains and Core CORS, and Core accepts only tokens from its own Firebase project. Source: [`auth-request-flow.drawio`](../architecture/diagrams/src/auth-request-flow.drawio).
 
 ## Android build
 
@@ -62,7 +86,9 @@ Signing keys, backups, certificate-to-environment mappings and publication crede
 
 ### Publish the APK for the landing page
 
-Publication is a separate, explicit workflow option. Follow the private operations procedure for access, destination, validation and rollback; a merged pull request does not itself prove that a signed APK was published or accepted.
+![Android APK release and download](../architecture/diagrams/images/apk-release.svg)
+
+Source: [`apk-release.drawio`](../architecture/diagrams/src/apk-release.drawio). Publication is a separate, explicit workflow option. Follow the private operations procedure for access, destination, validation and rollback; a merged pull request does not itself prove that a signed APK was published or accepted.
 
 ## Eval regression
 
