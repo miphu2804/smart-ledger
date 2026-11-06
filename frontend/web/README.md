@@ -4,8 +4,8 @@ title: "Sổ Nghe Lời — Web (landing + admin)"
 description: "How to run and deploy the landing page and the admin pages, in mock and real mode."
 owner: FE owner
 status: stable
-generated: { by: human:miphu2804, at: 2026-11-06T22:18:48+07:00 }
-stale_after: 2027-01-05T22:18:48+07:00
+generated: { by: human:miphu2804, at: 2026-11-07T02:08:00+07:00 }
+stale_after: 2027-01-06T02:08:00+07:00
 ---
 # Sổ Nghe Lời — Web (landing + admin)
 
@@ -96,7 +96,7 @@ The look follows the new mobile app: brand purple `#482AAC`, cream background `#
 | --- | --- |
 | `screens/{home,voice,checkout,orders,pos,reports,products,debts}.webp` | Screenshots of the mobile app in mock mode (`EXPO_PUBLIC_USE_MOCK=true`), full screen on the iOS Simulator iPhone 17 Pro Max (440×956 pt), exported at 660×1434. The status bar (time, signal, battery, Dynamic Island) is removed. The data in the images is sample data; the floating mascot is hidden while capturing so it does not cover content. `debts.webp` alone is captured from the mock web build (`npm run web` in `../mobile`, a 440×956 frame, leaving 62 pt at the top for the status bar) |
 | `brand/logo.webp`, `favicon.png`, `apple-touch-icon.png` | `frontend/mobile/assets/brand-logo.png` (the app icon) |
-| `brand/robot.webp`, `brand/agent-*.webp` | `frontend/mobile/assets/bubblelogo.png`, `assets/voice/agent-*.png` |
+| `brand/bobi-*.webp`, `brand/agent-*.webp` | `frontend/mobile/assets/bubblelogo.png`, `assets/voice/agent-*.png` |
 | `brand/icons/*.webp` | 3D icons in `frontend/mobile/assets/tab1-overview` and `tab4-management` |
 | `brand/app-icon-1024.png` | 1024×1024 icon for the Meta app settings page (Facebook Login), built from `bubblelogo.png` |
 

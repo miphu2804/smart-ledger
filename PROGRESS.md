@@ -1,3 +1,15 @@
+### 2026-11-07 — Fix stale setup, CI and mobile docs against the code
+
+| Area | Change |
+|---|---|
+| CI | • Path-filter table and deploy notes match `changes.sh`, `upload-settings.sh`, `infra-run.yml` and `deploy-backend.yml`: settings come from Dopbase, `container-images` runs only for the `containers` area, and `VPS_*` and the runner token names are the ones the workflows read |
+| AI | • `MODEL_FALLBACKS` is documented as `protocol:model`, as in `app_config.py` |
+| Honeyhive | • The sync workflows load keys from Dopbase `ai/production`, not repository secrets |
+| Mobile | • Sample sign-in, test script, guide steps, Zen ring and Home/Analytics data source match the code |
+| Web | • Bobi brand image names match `frontend/web/public/brand` |
+
+Check: each changed claim was checked with grep, `ls` and a read of the cited code at `f2be945`; no build or script was run. Left alone: `backend/core/**` (Core is out of scope under AGENTS.md) and the `github.sh` step in ci-cd. Commit: the one that adds this entry.
+
 ### 2026-11-06 — Add shared documentation skills for agents
 
 | Area | Change |
@@ -178,28 +190,3 @@ Check: 475 unit tests and ruff pass; two real turns on `smartledger-local-db` re
 | AI | • `BifrostTierClassifier` records each `/v1/decisions` call as a `tier classifier` span of type `model` with the model and the token counts Bifrost returns, so the session's Total Tokens and model events include the `jev-latest` call; `Observability.span` takes the event type |
 
 Check: `uv run ruff check`, `ruff format --check` and `uv run pytest tests/unit_tests` (474 passed); the SDK's `trace` and `enrich_span` signatures read from the installed package. Not verified: the span on a real HoneyHive session, since traces run only in production. Commit: the one that adds this entry.
-
-### 2026-11-04 — HoneyHive session charts show data
-
-| Area | Change |
-|---|---|
-| AI | • The First words wait, Tool calls per turn and Unsupported figure rate charts in `.honeyhive/charts/` filter on `event_type` `session` instead of `event_name` `agent-chat`; with the old filter HoneyHive searched events other than sessions for these session metrics and drew nothing |
-
-Check: the live chart list shows HoneyHive's own session charts filter on `event_type` `session`. Not verified: the three charts drawing data, since `sync-dashboards.sh` applies them only on a merge into `main` or a manual run. Commit: the one that adds this entry.
-
-### 2026-11-04 — Bifrost prices mercury-3
-
-| Area | Change |
-|---|---|
-| CI | • `deploy/vps/bifrost.json` adds a `governance.pricing_overrides` entry for `mercury-3` on provider `inception` at the launch price from Inception's models page, because Bifrost's synced catalog prices it only under OpenRouter and logged its requests without cost |
-| Docs | • ADR-0009 §5 and the AI README say why HoneyHive shows no cost: its session Cost sums the `metadata.cost` the app sets on events, and Bifrost writes the cost it computes only to its own log, not to the response; embeddings on Cloudflare have no cost record |
-
-Check: `bifrost.json` passes `check-jsonschema` against the `transports/v2.4.0` config schema; the override-only path for a model missing from the catalog read in `cost.go` of that tag. Not verified: a non-zero cost in a live Bifrost log, since the override applies only after deploy. Commit: the one that adds this entry.
-
-### 2026-11-04 — Admin account menu moves to the sidebar
-
-| Area | Change |
-|---|---|
-| Web | • Admin header: no subtitle under the page title and no line under the header<br>• Khách hàng and Nhật ký truy cập: the faded "dữ liệu hỗ trợ tối thiểu" and log notices are gone<br>• The avatar moves from the header to the bottom of the sidebar, under Hệ thống, as a row with name and role; clicking it opens the menu above it (email, Hồ sơ, Phiên & quyền truy cập, Đăng xuất); when the sidebar is collapsed only the avatar shows and the menu opens 240 px wide<br>• Admin labels say "chủ tiệm" instead of OWNER or "chủ cơ sở" (the role value stays `OWNER`)<br>• On desktop (1280 px and up) the sidebar column stays 72 px and the open sidebar slides over the content, which is centered up to 1200 px wide, so opening or closing it never moves the content; it starts collapsed |
-
-Check: `npm run typecheck`, `oxlint` and `npm run build` pass; on the mock admin at 1440 × 900, 1024 × 768 and 375 × 812 the menu opens above the avatar and is not cut off. Not verified: real Core mode in a browser. Commit: the one that adds this entry.
