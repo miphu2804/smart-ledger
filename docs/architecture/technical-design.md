@@ -5,7 +5,7 @@
 | Trạng thái | đích MVP; Core hiện có được phân biệt với phần chưa tích hợp |
 | Chủ sở hữu | Chủ kỹ thuật |
 | Người rà soát | Chủ Core, AI và FE |
-| Cập nhật lần cuối | 2026-10-31 (CORE-019) |
+| Cập nhật lần cuối | 2026-11-06 (ưu tiên EXE201; không thay mốc/trạng thái triển khai các module) |
 
 ## Tài liệu liên quan
 
@@ -15,6 +15,9 @@
 - Nguồn đối chiếu hiện tại: [`frontend/mobile`](../../frontend/mobile/README.md), [`frontend/web`](../../frontend/web/README.md), [`backend/core`](../../backend/core/src/main/java/com/smartledger/core/controller/AuthController.java) và [`backend/ai`](../../backend/ai/src/agent/router.py). FE EXE201 là nguồn lịch sử khi soạn phạm vi ban đầu.
 
 ## 1. Phạm vi
+
+**Ưu tiên EXE201 — 2026-11-06:** kiến trúc và cơ chế đã triển khai dưới đây được giữ nguyên để nhóm vận hành/khắc phục lỗi; không phải danh sách phải mở rộng trước khi hoàn thành môn học. Chọn luồng mobile → Core → dữ liệu và Core → AI chat hiện có để [demo đầu-cuối](../product/mvp-demo-validation.md). Không thêm phân hệ, tối ưu tải lớn hoặc bật memory/telemetry/quota chỉ để hoàn thiện sơ đồ; phần còn thiếu ưu tiên theo [BRD](../product/business-requirements.md#3-phạm-vi-kinh-doanh). Đoạn này điều chỉnh ưu tiên, không thay trạng thái API, migration hoặc runtime của các mục bên dưới.
+
 
 ### CORE-019 — quota thao tác thành công
 
