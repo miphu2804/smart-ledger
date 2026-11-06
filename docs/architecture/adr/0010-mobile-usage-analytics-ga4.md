@@ -44,11 +44,11 @@ Danh mục đầy đủ, kèm mỗi sự kiện đo gì, là `ANALYTICS_EVENTS` 
 
 ### 2.4. Việc làm trên Firebase và GA4 Console
 
-1. Liên kết property GA4 với project Firebase của từng môi trường, giữ staging và production tách nhau.
-2. Đặt lưu dữ liệu mức người dùng 14 tháng (mặc định 2 tháng làm mất báo cáo giữ chân dài).
+1. Chỉ đo bản Android production: project Firebase `smart-ledger-production` liên kết với property GA4 `smart-ledger-production`. Không liên kết GA4 cho project staging `smart-ledger-c2892`, để bản `android-dev` và `android-staging` không gửi số liệu; iOS chưa phát hành nên chưa đo.
+2. Đặt lưu dữ liệu sự kiện và dữ liệu người dùng 14 tháng (mặc định 2 tháng làm mất báo cáo giữ chân dài).
 3. Tắt Google signals, không liên kết Google Ads, và tắt các chia sẻ dữ liệu với sản phẩm Google, để Google chỉ là bên xử lý.
 4. Bật xuất BigQuery khi cần truy vấn ngoài báo cáo có sẵn.
-5. Kiểm bằng DebugView: `adb shell setprop debug.firebase.analytics.app vn.teamhexa.songheloi` trên Android, `-FIRDebugEnabled` trong scheme trên iOS.
+5. Kiểm bằng DebugView: `adb shell setprop debug.firebase.analytics.app vn.teamhexa.songheloi` trên bản Android production.
 
 ## 3. Phương án đã loại
 
