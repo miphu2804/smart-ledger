@@ -69,6 +69,10 @@ The native files are not committed. EAS receives file secrets through its enviro
 
 For local Core development, use the address reachable from the device (`http://10.0.2.2:8000` for the Android emulator when Core listens on the host). For a browser against a remote Core, use `scripts/dev-cors-proxy.js` and point `EXPO_PUBLIC_API_ENDPOINT` at the local proxy. Never put service-account keys or other secrets in `EXPO_PUBLIC_*` variables because they are bundled into the client.
 
+### Google Analytics
+
+`@react-native-firebase/analytics` sends usage events to GA4 only after the user agrees in the one-time prompt after sign-in or in Settings ([ADR-0010](../../docs/architecture/adr/0010-mobile-usage-analytics-ga4.md)). Each Firebase project sends to its own GA4 property: `android-production` builds to the production property used for product metrics, `android-dev` and `android-staging` builds to the staging property used for testing; the event catalogue is `src/lib/analyticsEvents.ts`.
+
 ## Android speech recognition
 
 The `/voice` screen accepts typed input everywhere and uses the browser Web Speech API where available. Android native recording uses the streaming Vietnamese transducer model through `react-native-sherpa-onnx` in `src/lib/speech/`. An older development client without the native module reports an unsupported capability instead of importing the module at screen load.

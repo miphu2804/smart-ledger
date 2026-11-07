@@ -4,6 +4,7 @@ import { Pressable, StyleSheet, View } from 'react-native';
 import { useToast } from '../src/components/brand';
 import { Button, Field, Header, Screen, T } from '../src/components/ui';
 import { industryList } from '../src/data/mock';
+import { track } from '../src/lib/analytics';
 import { errorMessage } from '../src/lib/errors';
 import { PROFILE_MAX, shopNameError } from '../src/lib/profileValidation';
 import { useApp } from '../src/store/AppStore';
@@ -25,6 +26,7 @@ export default function ShopNew() {
     setErr('');
     try {
       await finishOnboarding(name, picked);
+      track('shop_created', { via: 'new_shop' });
       toast(`Đã tạo ${name.trim()}`);
       if (router.canGoBack()) router.back();
       else router.replace('/(tabs)');

@@ -16,6 +16,7 @@ import type {
   Staff,
 } from '../data/types';
 import { ApiError, setActiveShop, setUnauthorizedHandler } from '../lib/api';
+import { setAnalyticsConsent, setAnalyticsUser } from '../lib/analytics';
 import { DEFAULT_APP_SETTINGS, type AppSettings } from '../lib/appSettings';
 import { loadAppSettings, saveAppSettings } from '../lib/appSettingsStorage';
 import { authClient, AuthError } from '../lib/auth';
@@ -180,12 +181,15 @@ function useStoreValue() {
   // Chỉ ghi xuống máy sau khi đã đọc xong bản đã lưu, để giá trị mặc định lúc mở app không đè lên lựa chọn cũ.
   const [settings, setSettings] = useState<AppSettings>(DEFAULT_APP_SETTINGS);
   const settingsLoaded = useRef(false);
+  // Hộp thoại hỏi đồng ý gửi số liệu (`AnalyticsConsentPrompt`) đợi cờ này, để không hỏi lại người đã trả lời ở lần mở trước.
+  const [settingsReady, setSettingsReady] = useState(false);
   useEffect(() => {
     let alive = true;
     void loadAppSettings().then((saved) => {
       if (!alive) return;
       settingsLoaded.current = true;
       setSettings(saved);
+      setSettingsReady(true);
     });
     return () => {
       alive = false;
@@ -193,8 +197,12 @@ function useStoreValue() {
   }, []);
   useEffect(() => {
     setFeedbackEnabled(settings.haptics);
+    setAnalyticsConsent(settings.analytics);
     if (settingsLoaded.current) void saveAppSettings(settings);
   }, [settings]);
+  useEffect(() => {
+    setAnalyticsUser(s.userId);
+  }, [s.userId]);
   const setSetting = useCallback(
     <K extends keyof AppSettings>(key: K, value: AppSettings[K]) => setSettings((prev) => ({ ...prev, [key]: value })),
     [],
@@ -551,7 +559,7 @@ function useStoreValue() {
     };
   }, [actions, patch]);
 
-  return { ...s, ...actions, settings, setSetting };
+  return { ...s, ...actions, settings, settingsReady, setSetting };
 }
 
 type Store = ReturnType<typeof useStoreValue>;

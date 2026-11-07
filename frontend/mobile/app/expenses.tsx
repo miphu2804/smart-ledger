@@ -21,6 +21,7 @@ import {
 } from '../src/components/ui';
 import { expenseCategoryMeta } from '../src/data/mock';
 import type { Expense, ExpenseCategory, ExpenseView, SaleView } from '../src/data/types';
+import { track } from '../src/lib/analytics';
 import { errorMessage } from '../src/lib/errors';
 import { triggerFeedback } from '../src/lib/feedback';
 import { capMoney, compact, ddmm, hhmm, vnd } from '../src/lib/format';
@@ -352,6 +353,7 @@ function AddExpenseSheet({
         paymentMethod: undefined,
         expenseAt: undefined,
       });
+      track('expense_created', { via: 'expenses' });
       triggerFeedback('success');
       toast(`Đã ghi chi phí ${vnd(amt)}`);
       onSaved();
