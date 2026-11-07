@@ -132,10 +132,7 @@ The app already follows the [session contract](../../../docs/contracts/api-contr
    - **Android** (package `vn.teamhexa.songheloi`) → download `google-services.json`; add the **SHA-1 and SHA-256** of the build keystore (`npx eas-cli credentials -p android`).
    - **iOS** (bundle `vn.teamhexa.songheloi`) → download `GoogleService-Info.plist`. APNs/SMS-provider setup is separate from this app's email flow; do not infer phone sign-in support.
    - Put both files in `frontend/mobile/`.
-3. **Install the native packages** (in `frontend/mobile`; the Firebase JS SDK for web is already in dependencies):
-   ```bash
-   npx expo install @react-native-firebase/app @react-native-firebase/auth expo-build-properties
-   ```
+3. **Install dependencies** with `npm install` in `frontend/mobile`: `package.json` already lists the Firebase JS SDK, `@react-native-firebase/app`, `@react-native-firebase/auth` and `expo-build-properties`. Use `npx expo install <package>` only when adding or updating a native package, so Expo picks a compatible version.
 4. **`app.json`** already configures `googleServicesFile` for `android`/`ios` and the plugins:
    ```json
    ["@react-native-firebase/app", { "ios": { "disableSPM": true } }],

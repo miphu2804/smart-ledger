@@ -97,6 +97,8 @@ The look follows the new mobile app: brand purple `#482AAC`, cream background `#
 
 Recapture the images when the app UI changes: run a dev build on the simulator in mock mode (`npx expo start --dev-client` in `../mobile` with the three variables `EXPO_PUBLIC_USE_MOCK`, `EXPO_PUBLIC_MOCK_CORE`, `EXPO_PUBLIC_MOCK_SHOPS` set to `true`), capture with `xcrun simctl io booted screenshot`, cover the top 186 px (the status bar at @3x) with the pixel row just below it, then `cwebp -q 82 -resize 660 0`. Keep the 440:956 ratio so the images fit the phone frame in `landing.css`.
 
+**Feedback form:** The `/#gop-y` section is a preview built on request: full name, phone number, feedback type and content. Required fields use browser validation; the Send button only shows a preview notice, calls no API, stores nothing in localStorage and never reports a successful send. There is no receiving service yet; Core business scope and the requirement for real feedback intake are unchanged.
+
 **Legal pages** (`src/pages/legal/`) are public text. When a provider, the data collected or the deletion handling commitment (`DELETION_DAYS`) changes, update the content and `POLICY_UPDATED` in `legalConfig.ts`.
 
 **Deployment:** the repository [delivery workflows](../../docs/development/ci-cd.md#workflows) build and deliver this application. Provider projects, domains, environment mappings and publication access are maintained in the private operations knowledge base, not this README. PR previews are disabled; deployment does not establish integrated acceptance.
@@ -145,7 +147,3 @@ src/
 ## Mobile app
 
 The Expo app lives in the sibling folder `../mobile`; see `../mobile/README.md`.
-
-### Landing feedback form
-
-The `/#gop-y` section is a preview built on request: full name, phone number, feedback type and content. Required fields use browser validation; the Send button only shows a preview notice, calls no API, stores nothing in localStorage and never reports a successful send. There is no receiving service yet; Core business scope and the requirement for real feedback intake are unchanged.

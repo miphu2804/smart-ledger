@@ -20,7 +20,7 @@ function load(): Loaded {
   try {
     m = require('@react-native-firebase/auth');
   } catch {
-    throw new AuthError('not-configured', 'Chưa cài @react-native-firebase/auth (xem README, mục “Gắn Firebase”)');
+    throw new AuthError('not-configured', 'Chưa cài @react-native-firebase/auth (xem docs/operations.md, mục “Set up Firebase”)');
   }
   try {
     return { m, auth: typeof m.getAuth === 'function' ? m.getAuth() : m.default() };
@@ -40,13 +40,13 @@ function loadFacebook(): any {
   if (!(Constants.expoConfig?.extra as { facebookConfigured?: boolean } | undefined)?.facebookConfigured) {
     throw new AuthError(
       'not-configured',
-      'Bản build này chưa cấu hình đăng nhập Facebook: cần FACEBOOK_APP_ID và FACEBOOK_CLIENT_TOKEN lúc build (xem README, mục “Đăng nhập Facebook”)',
+      'Bản build này chưa cấu hình đăng nhập Facebook: cần FACEBOOK_APP_ID và FACEBOOK_CLIENT_TOKEN lúc build (xem docs/operations.md, mục “Facebook sign-in”)',
     );
   }
   try {
     return require('react-native-fbsdk-next');
   } catch {
-    throw new AuthError('not-configured', 'Bản build này chưa có Facebook SDK: cần build lại development build (xem README, mục “Đăng nhập Facebook”)');
+    throw new AuthError('not-configured', 'Bản build này chưa có Facebook SDK: cần build lại development build (xem docs/operations.md, mục “Facebook sign-in”)');
   }
 }
 

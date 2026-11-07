@@ -22,6 +22,7 @@ npm install
 npx expo start
 npm run web
 npm run typecheck
+npm run export:web
 npm test
 npm run test:e2e
 ```
