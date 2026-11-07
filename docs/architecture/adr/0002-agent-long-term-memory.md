@@ -14,7 +14,7 @@ author: miphu2804
 
 ![Agent long-term memory: Tencent reference and proposed SmartLedger flow](../diagrams/images/agent-memory.svg)
 
-Diagram source: [`agent-memory.drawio`](../diagrams/src/agent-memory.drawio), exported like the [CI/CD diagram](../../development/ci-cd.md). The top band is the Tencent reference; the lower part is the proposed flow for SmartLedger. Orange numbers are one chat turn (reading memory), green numbers are writing memory after the turn; dashed boxes and edges only run when the `AGENT_MEMORY_ENABLED` flag is on (off by default, waiting for PO approval).
+Diagram source: [`agent-memory.drawio`](../diagrams/src/agent-memory.drawio), exported like the [CI/CD diagram](../../development/ci-cd.md). The top band is the Tencent reference; the lower part is the proposed flow for SmartLedger. Numbers give the order: orange is one chat turn (reading memory) and green is writing after the answer; dashed boxes and edges only run when the `AGENT_MEMORY_ENABLED` flag is on (off by default, waiting for PO approval).
 
 ## Context
 

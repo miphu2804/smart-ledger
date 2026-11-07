@@ -40,7 +40,7 @@ drawio -x -f svg -e --embed-svg-images --svg-theme light -b ffffff -o docs/archi
 
 ![VPS Docker networks and ports](../architecture/diagrams/images/vps-network.svg)
 
-Source: [`vps-network.drawio`](../architecture/diagrams/src/vps-network.drawio), drawn from `deploy/*/compose.yaml` and the Caddy sites the playbook writes. Each dashed region is one Docker network, so a container drawn inside two regions is on both. Each `name:port` is what another container dials inside that network. Only Caddy publishes public host ports (Dozzle binds a loopback port only); Core, Bifrost, Grafana, Alloy and Dopbase also join `edge`, and AI joins only its own project network, so only that environment's Core can call it.
+Source: [`vps-network.drawio`](../architecture/diagrams/src/vps-network.drawio), drawn from `deploy/*/compose.yaml` and the Caddy sites the playbook writes. Each dashed region is one Docker network and each container is drawn in its main network; a card that says `on edge as <alias>` or `also on edge` also joins `edge`. Each `name:port` is what another container dials inside that network. Only Caddy publishes public host ports (Dozzle binds a loopback port only); Core, Bifrost, Grafana, Alloy and Dopbase also join `edge`, and AI joins only its own project network, so only that environment's Core can call it.
 
 ## Steps
 
