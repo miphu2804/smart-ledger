@@ -77,6 +77,10 @@ jobs:
           DOPBASE_TOKEN: ${{ secrets.DOPBASE_TOKEN_AI }}
           SYNC: ${{ inputs.sync }}
         run: scripts/ci/write-eval-settings.sh
+      # The eval seeds agent memory, which stays off without its embedding model; the model is not tracked in git.
+      - name: Fetch the embedding model
+        working-directory: .
+        run: scripts/ai/fetch-embedding-model.sh
       - name: Run the eval
         env:
           SYNC: ${{ inputs.sync }}
