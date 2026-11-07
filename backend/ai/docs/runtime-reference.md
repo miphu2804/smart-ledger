@@ -218,7 +218,7 @@ From `backend/ai`:
 
 ```bash
 uv sync --group dev
-cp .env.example .env
+cp -n .env.example .env   # keeps an existing .env
 uv run python -m src.main
 uv run ruff check
 uv run ruff format --check

@@ -67,7 +67,7 @@ Settings are owned by the [AI runtime reference](docs/runtime-reference.md#confi
 
 ```bash
 uv sync --group dev
-cp .env.example .env
+cp -n .env.example .env   # keeps an existing .env
 uv run python -m src.main
 ```
 

@@ -19,7 +19,7 @@ Follow [`secrets/README.md`](../../secrets/README.md) for authorized credential 
 
 ## Run each service
 
-Each service has three steps: install once, run, and check before a pull request (the same checks CI runs).
+Each service has three steps: install once, run, and a quick check. The quick check skips the PostgreSQL suites, and a skipped suite is not a pass, so run the [full check](#full-check-before-pushing) before pushing.
 
 ### AI (Python, :8001)
 
@@ -92,15 +92,33 @@ Core is published on :8000 and AI on :8001. Neither command changes the database
 docker compose --env-file backend/core/.env --env-file backend/ai/.env up --build
 ```
 
+## Full check before pushing
+
+CI runs the AI tests and Core `verify` against a disposable PostgreSQL and then requires the Core PostgreSQL suites to have run. Do the same on your machine; never point a test URL at Supabase or the local development database. Start a throwaway database, run the AI suite against it, then remove it:
+
+```bash
+docker run -d --rm --name smartledger-test-db -p 127.0.0.1:55433:5432 -e POSTGRES_DB=smartledger_test -e POSTGRES_USER=smartledger -e POSTGRES_PASSWORD=smartledger pgvector/pgvector:pg17
+```
+
+```bash
+cd backend/ai && POSTGRES_TEST_URL=postgresql://smartledger:smartledger@127.0.0.1:55433/smartledger_test uv run pytest
+```
+
+```bash
+docker rm -f smartledger-test-db
+```
+
+For Core, set `CORE_TEST_POSTGRES_URL`, `CORE_TEST_POSTGRES_USERNAME` and `CORE_TEST_POSTGRES_PASSWORD`, run `./mvnw clean verify` and then the report gate, as the [Core test guide](../../backend/core/README.md#run-tests) shows.
+
 ## Local Compose
 
-Dev and staging share the staging Supabase project; production uses a separate Supabase project. The default Compose stack has no PostgreSQL service; use the opt-in [local database script](#develop-against-the-local-database) for a separate disposable development database. Credentials live in each service's Git-ignored env file: `backend/core/.env` defines `DATABASE_URL` (JDBC), `DATABASE_USERNAME`, `DATABASE_PASSWORD`, and `backend/ai/.env` defines `POSTGRES_URL` and the optional `AI_SQL_READER_URL` for the shop-data tool. Production values are in `secrets/production/env/`. Service settings stay in each service's own file: `backend/core/.env` supplies `FIREBASE_PROJECT_ID` and `GOOGLE_APPLICATION_CREDENTIALS` (absolute host path of the service-account key, mounted read-only into the container), and Compose loads `backend/ai/.env` for model and API keys. Core calls AI at `AI_BASE_URL` (Compose sets `http://ai:8001`) with the shared `INTERNAL_API_TOKEN`: put the same value in `backend/ai/.env` and `backend/core/.env`; a missing or mismatched value makes every Agent call fail (`401` from AI, `503 ai_unavailable` from Core). Default stack is Core and AI. AI sends HoneyHive traces, with the redacted chat content, only when `HH_API_KEY` is set and `HH_SOURCE` is `production`; the local default sends none.
+Compose uses the database that each service's env file names. The default `dev` source points at the [local database](#develop-against-the-local-database); staging values are a deliberate choice, not the default, and production uses a separate Supabase project. The default Compose stack has no PostgreSQL service; use the opt-in [local database script](#develop-against-the-local-database) for a separate disposable development database. Credentials live in each service's Git-ignored env file: `backend/core/.env` defines `DATABASE_URL` (JDBC), `DATABASE_USERNAME`, `DATABASE_PASSWORD`, and `backend/ai/.env` defines `POSTGRES_URL` and the optional `AI_SQL_READER_URL` for the shop-data tool. Production values are in `secrets/production/env/`. Service settings stay in each service's own file: `backend/core/.env` supplies `FIREBASE_PROJECT_ID` and `GOOGLE_APPLICATION_CREDENTIALS` (absolute host path of the service-account key, mounted read-only into the container), and Compose loads `backend/ai/.env` for model and API keys. Core calls AI at `AI_BASE_URL` (Compose sets `http://ai:8001`) with the shared `INTERNAL_API_TOKEN`: put the same value in `backend/ai/.env` and `backend/core/.env`; a missing or mismatched value makes every Agent call fail (`401` from AI, `503 ai_unavailable` from Core). Default stack is Core and AI. AI sends HoneyHive traces, with the redacted chat content, only when `HH_API_KEY` is set and `HH_SOURCE` is `production`; the local default sends none.
 
 ```bash
 docker compose --env-file backend/core/.env --env-file backend/ai/.env up --build
 ```
 
-Do not run the app with the production bootstrap credentials; production values belong in the `production` environment's secret store. Automated tests use a disposable PostgreSQL started with Docker, never Supabase: AI integration tests read `POSTGRES_TEST_URL`, Core PostgreSQL tests read `CORE_TEST_POSTGRES_URL` (see [Core README](../../backend/core/README.md#run-tests)).
+Do not run the app with the production bootstrap credentials; production values belong in the `production` environment's secret store. Automated tests use a disposable PostgreSQL, never Supabase; see [Full check before pushing](#full-check-before-pushing).
 
 ## Chat-history cache
 
