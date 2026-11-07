@@ -11,7 +11,7 @@ PR #368's approved ADMIN growth implementation is merged; its historical excepti
 ## Before changing anything
 
 1. Check the working tree with `git status --short`.
-2. Read [`docs/index.md`](docs/index.md) to pick the documents for the task, and [`docs/README.md`](docs/README.md) for reading paths and source-of-truth rules. Before editing code, read the affected service's README and the guides it links for that task; the [repository service map](README.md#system-boundaries) locates them.
+2. Read [`docs/README.md`](docs/README.md) for reading paths and source-of-truth rules, and the [`.okf/docs/index.md`](.okf/docs/index.md) metadata index to pick the documents for the task. Before editing code, read the affected service's README and the guides it links for that task; the [repository service map](README.md#system-boundaries) locates them.
 3. Read the relevant documents in [`docs/product/`](docs/product/) before changing scope or requirements.
 4. Read scoped `AGENTS.md` files on the path to affected files, including [`frontend/mobile/AGENTS.md`](frontend/mobile/AGENTS.md) before Mobile work. Root policy applies everywhere; scoped instructions add relevant rules and must not override it. If a harness does not auto-load nested instructions, read them explicitly. AI has no scoped instruction file and uses this root policy plus the service guide.
 5. Audit the actual tracked structure and the exact `staging` revision before moving documentation; do not infer DDD from Java packages or Next.js from Expo Router routes.
@@ -23,9 +23,9 @@ PR #368's approved ADMIN growth implementation is merged; its historical excepti
 - For agent instructions or skill changes, read [writing-for-agents](.agents/skills/writing-for-agents/SKILL.md). The `technical-writing` skill remains user-invoked through `/technical-writing`.
 - When changing a flow covered by the [AI statecharts](docs/architecture/statecharts/README.md), update its model and chart using that guide. Report model checks and rendering separately from runtime tests; TLC checks the model, not the implementation.
 - Keep docs in sync with code in the same change: when a change alters behavior, a contract, the schema, setup or a decision, update the document that owns it (see [Which document to update](docs/README.md#which-document-to-update)) in the same pull request, never in a later one.
-- English is the default for technical/operational docs, READMEs, indexes, architecture, contracts, ADRs, agent instructions and comments. Vietnamese is for actual business/product requirements, scope, acceptance and related product decisions/audits. Apply this by purpose: [`docs/product/userflow/README.md`](docs/product/userflow/README.md) is an English technical guide. Preserve quoted Vietnamese UI/legal copy, examples and code identifiers.
-- Follow [OKF v0.2](https://github.com/GoogleCloudPlatform/open-knowledge-format/blob/main/SPEC.md) and [project conventions](docs/README.md#conventions). Concept frontmatter requires `type`; retain useful title, description, owner and status. Use plain `author: <GitHub login>` for the document's writer, not its latest editor, normally omitting optional `generated`; retain genuine provenance and standard `human:<id>` actor notation if `generated.by` is needed. Do not mass-edit untouched metadata. A `README.md` outside `docs/` is a GitHub front page and carries no frontmatter.
-- Keep useful local indexes in the same change. Each lists immediate documents and immediate subdirectory entry points only, as `* [Title](relative/path) - description`, matching document frontmatter. `docs/index.md` is the thin bundle router, not a catalog of repository leaves. Indexes are optional, have no frontmatter except optional root `okf_version: "0.2"`, and should not be created solely for ceremony. READMEs explain purpose/use; service READMEs keep setup/test essentials and link feature runbooks rather than duplicating them.
+- Write each document in the language set by [Language](#language).
+- Human documents carry no frontmatter: their [OKF v0.2](https://github.com/GoogleCloudPlatform/open-knowledge-format/blob/main/SPEC.md) metadata and the indexes live in the `.okf/` bundle, described in [project conventions](docs/README.md#conventions). After adding, renaming or retitling a document, run `python3 scripts/docs/okf_sync.py`, replace any `description: TODO`, and run `python3 scripts/docs/okf_sync.py --check` before pushing. Do not edit `.okf/**/index.md` by hand, and do not mass-edit untouched metadata.
+- Keep human navigation in `docs/README.md` and the section READMEs; `.okf/` indexes are generated. READMEs explain purpose/use; service READMEs keep setup/test essentials and link feature runbooks rather than duplicating them.
 - Check factual claims against the exact `staging` revision even when dates appear current. Expired `stale_after` triggers review, not automatic deprecation. Do not refresh freshness dates for formatting/navigation alone; retain dated snapshots and record reviewed revision/evidence separately. For a factually reviewed living guide, a new review horizon may be 60 days later with `+07:00` timestamps. Do not start a new document for a topic that already has a canonical owner.
 - Organize documentation by business capabilities and ownership, without forcing a DDD code refactor or mirroring every package. Contracts own API semantics; technical design owns implementation evidence; service guides own configuration, feature verification and rollout; development docs own cross-service operations. Link canonical model aliases, effort/provider settings and rollout evidence rather than copying volatile values across overview pages. Never infer runtime flags, production migration or acceptance from checked-in code.
 - Preserve product-layer traceability: `BO/BR → FR/NFR → AC`.
@@ -35,6 +35,15 @@ PR #368's approved ADMIN growth implementation is merged; its historical excepti
 - Write `PROGRESS.md` entries in the format of [CONTRIBUTING.md](CONTRIBUTING.md#progress-log) and keep the file at 200 lines or fewer; it is a progress log, not the source of truth for scope.
 - Write complete sentences on one line and let the viewer wrap them. Break a line by hand only where the format needs it (a list item, a table row, a code block, a tree drawing), not to shorten a sentence that still fits; the same applies to diagram labels.
 - In a diagram shape, put the name or `name:port` on its own line and each explanation on the next line, breaking only between whole phrases; widen the shape or shorten the wording instead of letting a phrase wrap, and render the diagram to check that no phrase wraps.
+
+## Language
+
+- Vietnamese is used only for business and product documents in [`docs/product/`](docs/product/): business and product requirements, scope, acceptance criteria, product audits and the related product decisions. [`docs/product/userflow/README.md`](docs/product/userflow/README.md) is a technical guide and stays English.
+- Everything else is English: technical and operational docs, READMEs, architecture, contracts, ADRs, agent instructions, code, code comments and identifiers. Every file and directory name is English, including those under `docs/product/`.
+- Keep quoted Vietnamese UI copy, legal text and user examples verbatim in any document.
+- Images may show Vietnamese text when the owner of the document that uses them allows it; their file names stay English.
+- Write pull request description content, code review summaries, review comments and pull request or issue discussion comments in Vietnamese by default. Keep technical terms, code identifiers, file paths, API names, commands and the template headings in English.
+- Commit messages, branch names and pull request titles stay English and follow the naming convention in [`CONTRIBUTING.md`](CONTRIBUTING.md).
 
 ## Working and Git practices
 
@@ -48,7 +57,7 @@ PR #368's approved ADMIN growth implementation is merged; its historical excepti
 
 ## Code review
 
-- Write code review summaries and pull request review comments in Vietnamese so every team member can follow them; keep code identifiers, file paths, and API names in their original form.
+- Write review summaries and comments in the language set by [Language](#language) so every team member can follow them.
 - State each finding directly: the problem, a concrete scenario, and the fix or the decision needed. Do not add verified or inferred markers to review comments.
 
 This root `AGENTS.md` is the canonical repository policy; [`CLAUDE.md`](CLAUDE.md) imports it with `@AGENTS.md` and must not contain a second copy. Scoped `AGENTS.md` files are additive extensions discovered/read before work in their subtree; currently Mobile has one at [`frontend/mobile/AGENTS.md`](frontend/mobile/AGENTS.md). Root policy, documentation ownership and safety boundaries remain in force in every scope.

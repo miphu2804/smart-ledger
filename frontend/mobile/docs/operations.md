@@ -1,11 +1,3 @@
----
-type: Runbook
-title: "Mobile integration and native operations"
-description: "Detailed Mobile setup, provider configuration, speech packaging, report limitations and diagnostics."
-owner: FE owner
-author: miphu2804
-status: stable
----
 # Mobile integration and native operations
 
 The [Mobile README](../README.md) is the setup entry point. This FE-owned runbook preserves detailed commands, native-library constraints, provider setup and integration caveats moved off that landing page. Paths and commands below are relative to `frontend/mobile` unless stated otherwise.

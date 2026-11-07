@@ -1,12 +1,3 @@
----
-type: Reference
-title: "Product screenshots for marketing"
-description: "Phone-ratio screenshots for each product flow, for marketing use; demo data, not a source of behavior."
-owner: not assigned
-status: draft
-generated: { by: human:miphu2804, at: 2026-11-06T22:18:48+07:00 }
-stale_after: 2027-01-06T00:00:00+07:00
----
 # Product screenshots for marketing
 
 Phone-ratio screenshots of the Sổ Nghe Lời app, arranged by product flow so the marketing team can use them as assets. This folder does not define product behavior; behavior lives in the [PRD](../product/product-requirements.md). This first set is an internal asset and is not yet approved for public posting.

@@ -1,12 +1,3 @@
----
-type: Guide
-title: "SmartLedger AI service architecture"
-description: "AI responsibilities, request lifecycle, trust boundaries, persistence and external data exposure."
-owner: AI owner
-author: miphu2804
-status: stable
-stale_after: 2027-01-05T22:18:48+07:00
----
 # SmartLedger AI service architecture
 
 The AI service answers internal Agent chat requests from Core. It can read scoped shop data and produce answers, but it cannot write the business ledger. This overview describes checked-in source at `staging` revision `a2766ee3a37e23c0f03fd43383b608c1b2fac898`, not live deployment, enablement or product acceptance.

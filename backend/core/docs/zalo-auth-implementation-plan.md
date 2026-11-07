@@ -1,12 +1,3 @@
----
-type: Guide
-title: "CORE-015: Zalo authentication handoff"
-description: "Implemented Zalo web sign-in boundaries, consumer handoff and dated verification evidence."
-owner: Core owner
-status: stable
-author: thaonguyen1909
-stale_after: 2026-12-15T20:00:02+07:00
----
 # CORE-015: Zalo authentication handoff
 
 Current source: WEB authentication and V17 are present in audited `staging` revision `a2766ee3a37e23c0f03fd43383b608c1b2fac898`. Runtime enablement, deployment and integrated acceptance were not audited. Historical evidence on 2026-10-16 confirmed local LOGIN through the helper, not LINK/FE acceptance. This consumer handoff does not replace the [API contract](../../../docs/contracts/api-contracts.md).

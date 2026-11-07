@@ -1,12 +1,3 @@
----
-type: Design Proposal
-title: "Mobile wording review"
-description: "Proposed UI wording, icon and feedback mapping pending product approval."
-owner: Product owner
-status: draft
-generated: { by: human:miphu2804, at: 2026-11-06T22:18:48+07:00 }
-stale_after: 2027-01-05T22:18:48+07:00
----
 # Mobile wording review
 
 **Status:** proposal; no Product Owner approval has been recorded. Checked against `frontend/mobile` on `staging` on 2026-10-04: 40 of the 46 proposed strings are already in the code; the fourth tab uses `Quản lý` instead of `Tiện ích`. The code is the source for the current wording; the table below is kept as a record of the proposal. The changes below only shorten the interface language; they do not change `BO/BR → FR/NFR → AC`, data, or business logic.

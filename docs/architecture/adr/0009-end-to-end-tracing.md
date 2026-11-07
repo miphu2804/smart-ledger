@@ -1,11 +1,3 @@
----
-type: Architecture Decision
-title: "ADR-0009: Trace every Agent chat turn to HoneyHive, redacting sensitive data first"
-description: "Accepted for AI: HoneyHive traces each Agent chat turn with redacted content; Core correlation still needs owner approval."
-owner: project owner
-status: stable
-author: miphu2804
----
 # ADR-0009: Trace every Agent chat turn to HoneyHive, redacting sensitive data first
 
 - **Status:** Accepted for the AI part; the code was merged into `staging` through PR #467. The Core correlation part in section 4 is still Proposed and needs a separate owner approval under [AGENTS.md](../../../AGENTS.md#scope).

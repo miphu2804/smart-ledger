@@ -1,12 +1,3 @@
----
-type: Reference
-title: "Credential map"
-description: "Private ownership boundary for environment-specific credential inventories."
-owner: Technical owner
-status: stable
-author: miphu2804
-stale_after: 2026-12-29T00:43:53+07:00
----
 # Credential map
 
 Environment-specific credential inventories and connection maps belong to the private operations knowledge base. Generated staging/production snapshots are not published in this repository.

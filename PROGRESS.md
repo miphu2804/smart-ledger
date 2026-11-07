@@ -6,6 +6,22 @@
 | Mobile and Web | • Renamed the Vietnamese-named overview icons in `assets/tab1-overview` and `public/brand/icons` to English and updated their references |
 
 Check: Web lint, typecheck and build passed; Mobile typecheck passed and `npm test` 196 passed; every renamed image reference resolves to a file; the recaptured images were inspected. The landing page and the app were not opened after the icon rename. Commit: the commit that adds this entry.
+### 2026-11-07 — Unquote Dopbase values in CI
+
+| Area | Change |
+|---|---|
+| CI | • `load-dopbase.sh` strips the double quotes and escapes that `dopbase export --format dotenv` puts around every value, so `VPS_SSH_KEY` decodes and `VPS_KNOWN_HOSTS` is a valid known-hosts line again; staging backend deploys had failed since #553<br>• A multi-line value now fails with a clear error |
+
+Check: a fake `dopbase` printing quoted values loads the exact bytes, a multi-line value is refused, `shellcheck --severity=warning` passed; the stored staging key decodes to an OpenSSH private key once unquoted. CD rerun pending.
+
+### 2026-11-07 — Move document metadata into the .okf bundle
+
+| Area | Change |
+|---|---|
+| Docs | • Human documents carry no frontmatter; their OKF metadata (46 concepts and generated indexes) lives in `.okf/` at mirrored paths and each concept's `resource` points to its document<br>• `scripts/docs/okf_sync.py` sets titles from the first heading, adds stub concepts, regenerates the indexes and, with `--check`, reports drift, frontmatter in a human document and broken relative links<br>• Links to the removed `index.md` files now point to `backend/core/README.md` or the `.okf/` indexes; `AGENTS.md` and the docs conventions describe the new model |
+| CI | • New `docs` area in `scripts/ci/changes.sh` and a `docs` job in `ci.yml` that runs `okf_sync.py --check`, listed in the result summary |
+
+Check: `okf_sync.py --check` passes and a second write run changes nothing; frontmatter, a missing concept and a wrong title are each reported; `bash -n`, `shellcheck` and `actionlint` pass.
 
 ### 2026-11-07 — Move HoneyHive sync scripts and trim redundant script branches
 
@@ -175,20 +191,3 @@ Check: `uv run pytest tests/unit_tests -q` (495 passed, 1 skipped), `ruff check`
 | Mobile | • The thinking line drops the check mark and the seconds counter and rotates through 10 plain phrases, in both assistant chat and quick transaction chat<br>• The three Bobi chat header buttons fold into one menu button that opens a floating menu; the title and the button borders are gone |
 
 Check: `uv run pytest tests/unit_tests -q` (493 passed, 1 skipped), `ruff check`, `ruff format --check`; mobile `npm run typecheck` and `npm test` (187 passed, 2 failing before this change: `parseOrder`, `quickNav`); header checked in the Expo web preview. Not verified: a real device and a live chat turn with the lower effort; the effort of the deployed aliases lives in Dopbase. Commit: the one that adds this entry.
-
-### 2026-11-05 — Keep the shop time out of chat answers
-
-| Area | Change |
-|---|---|
-| AI | • Rule 5 of the shop agent prompt and the current-time line now say the time is for working out dates only and is never written in an answer unless the owner asks what time or day it is, because low-effort tiers (`chat-simple`, mercury-3 low) appended "Giờ tại tiệm: …" to answers |
-| AI eval | • Metric `no_time_echo` (gated at 1.0) flags a clock time in an answer<br>• Option `--limit N` asks only the first N `agent_chat` questions |
-
-Check: `uv run pytest tests/unit_tests -q` (493 passed, 1 skipped), `ruff check` and `ruff format --check`; `agent_chat --repeats 1 --limit 15` with model tiering on through a local Bifrost with staging's aliases: `no_time_echo` 0.87 with the old prompt (`orders_last_month`, `revenue_today` echoed the time) and 1.00 in two runs with the new one. Not verified: the other 8 cases and 3 repeats. Commit: the one that adds this entry.
-
-### 2026-11-05 — Read the chat hot path without a transaction
-
-| Area | Change |
-|---|---|
-| AI | • `PostgreDBClient.read_session()` opens a session on an autocommit connection, so a read sends no `BEGIN` or `COMMIT` and costs the pool pre-ping and the query instead of four round trips<br>• `recall_ready`, `search` and the database branch of `recent_messages` use it; writes, `lock=True` callers and every other read stay on `session()` |
-
-Check: `uv run pytest -q` (595 passed, 13 skipped) with `POSTGRES_TEST_URL` on a throwaway `pgvector/pgvector:pg17` container and `REDIS_TEST_URL` on a `redis:7-alpine`, both removed afterwards, `ruff check` and `ruff format --check`; a new integration test shows `read_session()` is autocommit and a later `session()` on the same pooled connection is not. A `select 1` through `PostgreDBClient` from Vietnam to the staging Supabase pooler took 167 ms p50 in `session()` and 83 ms in `read_session()`, and `session()` stayed at 164 ms afterwards. Not verified: the production gain on `memory ready`, `memory recall` and history misses. Commit: the one that adds this entry.

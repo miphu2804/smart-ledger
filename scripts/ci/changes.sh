@@ -16,6 +16,7 @@ area_patterns() {
     landing) echo "$common .github/workflows/deploy-landing.yml frontend/web/*" ;;
     containers) echo "$common compose.yaml backend/ai/* backend/core/*" ;;
     shell) echo ".shellcheckrc .github/workflows/* *.sh" ;;
+    docs) echo "$common *.md .okf/* scripts/docs/*" ;;
   esac
 }
 
@@ -30,7 +31,7 @@ echo "Changed files in $range:" >&2
 echo "$files" >&2
 
 set -f # the patterns are for `case`, not for the file system
-for area in ai core mobile landing containers shell; do
+for area in ai core mobile landing containers shell docs; do
   patterns="$(area_patterns "$area")"
   changed=false
   while IFS= read -r file; do
