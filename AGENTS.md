@@ -32,6 +32,7 @@ PR #368's approved ADMIN growth implementation is merged; its historical excepti
 - Legal or tax assumptions require a current official source, a named owner, and explicit approval before becoming requirements.
 - Write `PROGRESS.md` entries in the format of [CONTRIBUTING.md](CONTRIBUTING.md#progress-log) and keep the file at 200 lines or fewer; it is a progress log, not the source of truth for scope.
 - Write complete sentences on one line and let the viewer wrap them. Break a line by hand only where the format needs it (a list item, a table row, a code block, a tree drawing), not to shorten a sentence that still fits; the same applies to diagram labels.
+- In a diagram shape, put the name or `name:port` on its own line and each explanation on the next line, breaking only between whole phrases; widen the shape or shorten the wording instead of letting a phrase wrap, and render the diagram to check that no phrase wraps.
 
 ## Working and Git practices
 
