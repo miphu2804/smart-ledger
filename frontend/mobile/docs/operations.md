@@ -32,7 +32,7 @@ The two local build scripts check the environment before building. When a new ma
 
 - Tap **Tạo tài khoản** at the bottom of the sign-in card and enter any email and password (6 characters or more); on the email verification screen just tap **Tôi đã xác minh**. Dev builds have a **Vào app** button under the card that goes straight to the sample user.
 - Every email is a new user: after verification it goes through shop creation (name and industry). Only the **Vào app** button (dev builds) goes straight to the sample shop “Tiệm tạp hoá cô Thỏ”.
-- The first time an account opens Tổng quan on a device, the app runs the overlay guide `src/components/GuideTour.tsx` (steps in `src/lib/guideSteps.ts`): it greets the owner, then highlights the Tạo đơn tab, the Đơn hàng tab, the Bobi tab, the notification bell, the quick-switch menu and the Quản lý tab. Finishing or skipping is remembered on the device and the guide does not reopen by itself; replay it from Quản lý → Xem lại hướng dẫn.
+- The first time an account opens Tổng quan on a device, the app runs an overlay guide: it greets the owner, then highlights the Tạo đơn tab, the Đơn hàng tab, the Bobi tab, the notification bell, the quick-switch menu and the Quản lý tab. Finishing or skipping is remembered on the device and the guide does not reopen by itself; replay it from Quản lý → Xem lại hướng dẫn.
 - Reload the app to reset the in-memory data to its initial state.
 
 ## Screens
@@ -54,10 +54,10 @@ The two local build scripts check the environment before building. When a new ma
 | `/products` | Goods and stock, add/edit/delete, product photo upload |
 | `/debts` | Debt book: partial / full repayment, history, call / remind |
 | `/bestsellers` | Best-seller ranking, slow-seller suggestions |
-| `/profile` | Edit shop details (name, address, industry), saved to Core through `PATCH /api/v1/shops/{shopId}`; full name, email, Facebook and bank account are stored only on the device |
+| `/profile` | Edit shop details (name, address, industry), saved to Core; full name, email, Facebook and bank account are stored only on the device |
 | `/settings` | Vibration; sound, read-back, auto-print and auto-backup are shown as coming soon |
 | `/notifications` | In-app notifications |
-| `/ai` | Q&A with the assistant through `src/lib/agentApi.ts` → Core `/api/v1/agent/*`; conversation history. Assistant answers go through `components/ChatText.tsx` and are read by `lib/chatMarkdown.ts` for both streaming text and stored answers: `**bold**`, `` `code` ``, headings, `-`/`1.` lists, tables, ```chart blocks (bar/line charts) and ```actions blocks (`splitActions` separates them from the text; buttons that open screens per `SCREEN_LINKS` show in a separate card under the bubble, only once the answer is complete); other markup shows as plain text. With mocks on, `mockCore` answers with fake data; ask with the word "biểu đồ" or "bảng" to see tables and charts, and ask "sắp hết hàng" to see the screen button card under the bubble |
+| `/ai` | Q&A with the assistant through Core; conversation history. Streaming and stored answers render the same subset of Markdown: `**bold**`, `` `code` ``, headings, `-`/`1.` lists, tables, ```chart blocks (bar/line charts) and ```actions blocks (buttons that open app screens, shown in a separate card under the bubble once the answer is complete); other markup shows as plain text. With mocks on, the app answers with fake data; ask with the word "biểu đồ" or "bảng" to see tables and charts, and ask "sắp hết hàng" to see the screen button card under the bubble |
 | `/printer` | K80/K58 printer settings screen; no device connection yet |
 | `/debug` | Connection diagnostics, dev builds only (see [Debug](#debug)) |
 
@@ -65,7 +65,7 @@ The two local build scripts check the environment before building. When a new ma
 
 ## Try order recognition
 
-The “Nhập tên hàng + giá” field on the `/voice` screen runs the rule-based recognizer in `src/lib/parseOrder.ts`. Examples:
+The “Nhập tên hàng + giá” field on the `/voice` screen runs a rule-based recognizer. Examples:
 
 - `2 ly cà phê sữa 50 nghìn, thêm 1 trà đá`
 - `bán 3 bánh mì 45k, 2 coca`
@@ -73,11 +73,11 @@ The “Nhập tên hàng + giá” field on the `/voice` screen runs the rule-ba
 - `bán 1 hộp sữa chua nếp cẩm 12k` → the item does not exist yet, so the app asks whether to add it to the catalog
 - `bánh mì 20k cà phê 20k` or saying “bánh mì hai mươi nghìn cà phê hai mươi nghìn” → two items, each with its own price
 
-Text from the mic (or typed) goes through `parseOrder()` (`src/lib/parseOrder.ts`); the app does not call AI to recognize orders yet. The speech model outputs one run-on sentence with no punctuation and numbers spoken as words, so `parseOrder` reads amounts written as digits (`20k`, `20.000đ`, `1,5tr`) as well as words (`hai mươi nghìn`, `hai lăm ca`) and splits items in three ways: (1) punctuation and connecting words (`và`, `với`, `thêm`, `kèm`, `cùng`, `rồi`, `nha`, `nhé`); (2) each spoken price ends an item (“bánh mì 20k cà phê 20k” → two priced items; an item not in stock prompts to add it to the catalog with the price prefilled); (3) a run-on sentence with several items in stock is cut before each item name, stepping back over the quantity and unit right before it (“hai cà phê sữa một bánh mì thịt”). Limits: several items not in stock, with no price and no connecting word, are still merged into one; a price spoken before the item name and a price without a currency unit (“bánh mì hai mươi”) are not recognized; an item in stock always takes the stock price, and a spoken price is only used to split items. “Chi”, “mua”, “trả”, “nộp”… open an expense only at the start of a clause, after a price or after an item in stock (so “trà sữa 30k”, “chị lấy bánh mì 20k”, “bánh mì ba chỉ 20k” are items, not expenses). `src/sst/` is an old skeleton that never ran a real model and no screen uses it; the working speech recognition is in `src/lib/speech/`.
+Text from the mic (or typed) goes through the same rule-based recognizer; the app does not call AI to recognize orders yet. The speech model outputs one run-on sentence with no punctuation and numbers spoken as words, so the recognizer reads amounts written as digits (`20k`, `20.000đ`, `1,5tr`) as well as words (`hai mươi nghìn`, `hai lăm ca`) and splits items in three ways: (1) punctuation and connecting words (`và`, `với`, `thêm`, `kèm`, `cùng`, `rồi`, `nha`, `nhé`); (2) each spoken price ends an item (“bánh mì 20k cà phê 20k” → two priced items; an item not in stock prompts to add it to the catalog with the price prefilled); (3) a run-on sentence with several items in stock is cut before each item name, stepping back over the quantity and unit right before it (“hai cà phê sữa một bánh mì thịt”). Limits: several items not in stock, with no price and no connecting word, are still merged into one; a price spoken before the item name and a price without a currency unit (“bánh mì hai mươi”) are not recognized; an item in stock always takes the stock price, and a spoken price is only used to split items. “Chi”, “mua”, “trả”, “nộp”… open an expense only at the start of a clause, after a price or after an item in stock (so “trà sữa 30k”, “chị lấy bánh mì 20k”, “bánh mì ba chỉ 20k” are items, not expenses).
 
 ### Speech recognition on Android
 
-The Đọc đơn screen recognizes speech on Android with a Vietnamese streaming Zipformer model that runs on the device (the `react-native-sherpa-onnx` library, with native mic capture). The code is in `src/lib/speech/` (`sherpaEngine.ts`; the pure, testable part in `core.ts`).
+The Đọc đơn screen recognizes speech on Android with a Vietnamese streaming Zipformer model that runs on the device (the `react-native-sherpa-onnx` library, with native mic capture).
 
 - **Needs a new dev client:** the library has a native module, so the dev client must be rebuilt (`npx eas-cli build --profile dev-client --platform android`) after installing it. An older build without the module shows “chưa hỗ trợ ghi âm giọng nói” on the Đọc đơn screen instead of crashing.
 - **The model is not in git** (49 MB). The files go in `assets/models/` (see `assets/models/README.md`); the app downloads them into app storage from `EXPO_PUBLIC_STT_MODEL_URL` the first time the Đọc đơn screen opens. During development, run `node scripts/serve-stt-model.js` to serve that folder, then set `EXPO_PUBLIC_STT_MODEL_URL=http://10.0.2.2:8090/` (emulator) or `http://<computer IP>:8090/` (a real phone; port 8090 must be open in the firewall).
@@ -122,7 +122,7 @@ src/
 
 ## Set up Firebase (email, Facebook and Google sign-in)
 
-The code is already wired per `docs/contracts/api-contracts.md`: Firebase authenticates (email and password, Facebook or Google) → the app sends the Firebase ID token (`Authorization: Bearer …`) to `POST /api/v1/auth/session` → receives a `SessionView` (role, shops, `needsOnboarding`). With `EXPO_PUBLIC_USE_MOCK=true` the app runs simulated (no Firebase calls); real Firebase/Core integration requires all three mock flags to be explicitly `false`. You only need to install packages and fill in configuration:
+The app already follows the [session contract](../../../docs/contracts/api-contracts.md#1-auth-and-shop): Firebase signs the owner in, the app opens a Core session with the Firebase ID token and receives the role, the shops and whether shop setup is still needed. With `EXPO_PUBLIC_USE_MOCK=true` the app runs simulated (no Firebase calls); real Firebase/Core integration requires all three mock flags to be explicitly `false`. You only need to install packages and fill in configuration:
 
 1. **Firebase Console** → Authentication → Sign-in method → enable **Email/Password** (and **Facebook**, **Google** if used; see the sections below). The app no longer signs in with a phone number.
    - Templates → *Email address verification* and *Password reset*: set the sender name and subject; set *Reply-to* to the project's support email (Firebase sends from `noreply@…firebaseapp.com`; sending from your own address needs custom SMTP).
@@ -158,19 +158,19 @@ Profiles in `eas.json`:
 
 `google-services.json` is gitignored, so EAS builds cannot see it. `app.config.js` reads the path from the file-type environment variable `GOOGLE_SERVICES_JSON` (`eas env:create --type file`, currently set in the `preview` environment); local machines still use `./google-services.json`. `.env` does not reach EAS either, so each profile must set its own `EXPO_PUBLIC_*` variables. Every build keystore needs its SHA-1/SHA-256 added to Firebase before sign-in works.
 
-Where the code lives: `src/lib/auth/` (the `AuthClient` interface; `mock.ts`, `firebase.ts` for native, `firebase.web.ts` for web), `src/lib/api.ts` (Bearer + `X-Shop-Id` + `{code,message,traceId}` errors, 401 → sign out), `src/lib/sessionApi.ts` (`/auth/session`, `/me`, `/shops`), and the sign-in flow in `src/store/AppStore.tsx` (`signIn`, `logout`, startup waits for Firebase to restore the session).
+Sign-in has a mock, a native and a web Firebase client behind one interface. Every Core call carries the Firebase token and the current shop; a `401` signs the owner out, and startup waits for Firebase to restore the session.
 
 ### Connect to the real Core
 
 Flow: Firebase authenticates through the exposed email/Google paths → FE sends the **Firebase ID token** (`Authorization: Bearer …`) to Core → Core verifies it with the Firebase Admin SDK, creates/finds the account and returns the session.
 
-1. First sign-in: `POST /api/v1/auth/session` with `{ displayName }`. Core **requires** `displayName` for a new account (missing → 400), so the app has the “Bạn tên gì?” screen (`app/(auth)/profile.tsx`). Later sign-ins do not send it.
-2. Reopening the app: Firebase restores the session → `GET /api/v1/me`. `404 auth_profile_not_found` (still signed in to Firebase but Core has no account) → the app returns to the name screen. `401` → sign out. `403 account_disabled` → sign out and report that the account is locked.
-3. `needsOnboarding = true` (no shop yet) → the shop creation screen, which calls the real `POST /shops` (Core stores `industry` as a string — the chosen industries are joined with ", ").
+1. First sign-in: Core requires a display name for a new account, so the app asks “Bạn tên gì?” before opening the session. Later sign-ins skip it.
+2. Reopening the app: Firebase restores the session and the app reloads the Core profile. Signed in to Firebase without a Core account returns to the name screen; an invalid token signs out; a locked account signs out with a message.
+3. No shop yet: the shop creation screen creates the shop in Core; several chosen industries are saved as one comma-separated text.
 
 The business APIs (catalog/products, customers, POS/checkout creating a draft then confirming, orders, debts, expenses, assistant) all need the `X-Shop-Id` header; the contract is in [API contracts](../../../docs/contracts/api-contracts.md). With the real Core, mobile uses the `src/lib/*Api.ts` clients, including report endpoints for Home/Analytics totals (see [Home/Analytics metrics](#homeanalytics-metrics)). `SaleDraft.confirm` accepts any `initialPaidVnd` from 0 to the order total — when underpaid, Core (`SaleDraftServiceImpl.confirm`/`customerForConfirmation`) creates a `Debt` for the customer (it needs an existing `customerId` or a `customerName` so Core can create a new customer; with neither it fails with `customer_required_for_debt`); this matches the mobile credit payment screen. `EXPO_PUBLIC_USE_MOCK=true` enables a preview mode without the real Core — `src/lib/mockCore.ts` simulates those endpoints in memory.
 
-Checkout supports catalog items and temporary custom items. `src/lib/customLines.ts` sends a custom item's name, unit, quantity and price without `productId`; Core does not create a Product or deduct stock for that line. Saving a new item to the catalog is a separate choice.
+Checkout supports catalog items and temporary custom items. A custom item is sent with its name, unit, quantity and price but no product; Core does not create a Product or deduct stock for that line. Saving a new item to the catalog is a separate choice.
 
 For an authorized integration test, obtain the intended Core endpoint from the private operations knowledge base and check the delivery workflow (see [CI/CD](../../../docs/development/ci-cd.md)), so a frontend-only machine need not run Core or Docker. Confirm the current endpoint and build before testing; the example below is not a live availability check. `.env`:
 
@@ -189,17 +189,17 @@ Run Core locally only when changing the backend (see [Local development](../../.
 
 ### Home/Analytics metrics
 
-Home uses [`useHomeOverview.ts`](../src/lib/useHomeOverview.ts) to request Core period totals, filtered sales totals, top products and products needing restock. Analytics uses [`useReportTotals.ts`](../src/lib/useReportTotals.ts) for Core period totals, estimated profit from sale-time cost snapshots and filtered sales totals; an estimated-profit failure is shown separately rather than replaced by a guessed cost.
+Home requests Core period totals, filtered sales totals, top products and products needing restock. Analytics requests Core period totals, estimated profit from sale-time cost snapshots and filtered sales totals; an estimated-profit failure is shown separately rather than replaced by a guessed cost.
 
-Analytics charts and best-seller rows still aggregate the invoices loaded by [`useCoreData.ts`](../src/lib/useCoreData.ts), and its debt balance aggregates the loaded debts. These list-derived displays are not the same projection as the Core report totals and require separate reconciliation, including pagination, period boundaries and voided sales. The legacy adapter's 60% cost fallback is not the source of the Core-backed profit total.
+Analytics charts and best-seller rows still aggregate the orders the app has loaded, and its debt balance aggregates the loaded debts. These list-derived displays are not the same projection as the Core report totals and require separate reconciliation, including pagination, period boundaries and voided sales. The Core profit total never uses a guessed cost.
 
 The canonical event-time and money definitions are in [API contract — Period overview](../../../docs/contracts/api-contracts.md#period-overview). This source review does not establish integrated `FR-006`/`AC-031` acceptance.
 
 ### Email and password sign-in
 
-The first screen is a card in the Runpod layout (`app/(auth)/welcome.tsx`): Google and Zalo buttons, an **Địa chỉ email** field with a **Tiếp tục** button to `app/(auth)/email.tsx` (email prefilled), **Quên mật khẩu?** and the card footer **Chưa có tài khoản? Tạo tài khoản**; the most recent successful sign-in method on the device has a **Lần trước dùng** label (`src/lib/lastSignInStorage.ts`). There is no Facebook button any more; Zalo is clickable when the build has Zalo configuration (Android: `EXPO_PUBLIC_ZALO_NATIVE_CLIENT_ID`, web: `EXPO_PUBLIC_ZALO_LOGIN=true`), otherwise it shows the “Sắp có” label; the app no longer signs in with a phone number.
+The first screen is a sign-in card: Google and Zalo buttons, an **Địa chỉ email** field with a **Tiếp tục** button to the email screen (email prefilled), **Quên mật khẩu?** and the card footer **Chưa có tài khoản? Tạo tài khoản**; the most recent successful sign-in method on the device has a **Lần trước dùng** label. There is no Facebook button any more; Zalo is clickable when the build has Zalo configuration (Android: `EXPO_PUBLIC_ZALO_NATIVE_CLIENT_ID`, web: `EXPO_PUBLIC_ZALO_LOGIN=true`), otherwise it shows the “Sắp có” label; the app no longer signs in with a phone number.
 
-- **Tạo tài khoản** self-registers through Firebase (`createUserWithEmailAndPassword`, nobody needs to add the user in the Console), sends a verification email (`sendEmailVerification`), then moves to `app/(auth)/verify-email.tsx`. Only when the user taps **Tôi đã xác minh** and Firebase reports `emailVerified` does the app send the Firebase ID token to Core (`POST /auth/session`). Reopening the app before verification returns to this screen. This is an app-side block; Core does not check `email_verified` yet.
+- **Tạo tài khoản** self-registers through Firebase (nobody needs to add the user in the Console), sends a verification email, then moves to the verification screen. Only when the user taps **Tôi đã xác minh** and Firebase reports the email verified does the app open the Core session. Reopening the app before verification returns to this screen. This is an app-side block; Core does not check `email_verified` yet.
 - **Signing in** with an unverified email also goes through the verification screen (it does not resend the email by itself; tap **Gửi lại thư xác minh**, with 60 seconds between sends). A wrong email or password shows a “tạo tài khoản” or “đặt lại mật khẩu” suggestion instead of an error.
 - **Forgot password** sends a reset email (`sendPasswordResetEmail`); an unregistered email also reports that it was sent, so it does not reveal which emails have accounts.
 - Email/Password must be enabled in Firebase Console → Authentication → Sign-in method; set *Reply-to* of both email templates under Templates. The optional variable `EXPO_PUBLIC_SUPPORT_EMAIL` shows the “Cần hỗ trợ?” line on the verification screen.
@@ -212,7 +212,7 @@ Different Firebase sign-in methods can create separate identities unless account
 
 ### Google sign-in
 
-The Google button on the first screen (`app/(auth)/welcome.tsx`) uses `@react-native-google-signin/google-signin` on phones: Google returns an ID token, the app exchanges it for a Firebase account (`GoogleAuthProvider.credential` + `signInWithCredential`, in `src/lib/auth/firebase.ts`), then continues through the Firebase-to-Core session flow (Core `POST /auth/session`, new accounts go through the "Bạn tên gì?" screen). The web uses Firebase's Google popup (`signInWithPopup`); the mock build signs in as the sample user `google.demo@example.com`. Signing out also signs out of Google so the account picker shows again next time. Core needs no change.
+The Google button uses `@react-native-google-signin/google-signin` on phones: Google returns an ID token, the app exchanges it for a Firebase account, then continues through the same Core session flow (new accounts go through the "Bạn tên gì?" screen). The web uses Firebase's Google popup; the mock build signs in as the sample user `google.demo@example.com`. Signing out also signs out of Google so the account picker shows again next time. Core needs no change.
 
 Use the private operations knowledge base for provider-project, signing-certificate and authorized-domain mappings. The build must target the intended Firebase project, whose Google provider and signing fingerprints must match; a mismatch can produce `DEVELOPER_ERROR`. Never authorize the repository's public debug key for production. Refresh the build's provider configuration after an authorized change and rebuild native code.
 
