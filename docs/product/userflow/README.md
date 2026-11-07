@@ -33,7 +33,7 @@ Capture manifest for the current files (test accounts, environment addresses and
 
 | Screens | Captured | Frame and export | Added in | App state |
 |---|---|---|---|---|
-| `welcome`, `email-login`, `invoices`, `chat-tro-ly-ai`, `chat-dat-cau-hoi`, `chat-tra-loi`, `ai-ask-sheet` | 2026-11-04, staging | 390 × 844 at 2× (`chat-tra-loi` about 1×), Pillow to 720 px WebP, quality 78 | `f446267b` | After #491, #499, #505, #513 and #514 |
+| `welcome`, `email-login`, `invoices`, `chat-ai-assistant`, `chat-ask-question`, `chat-answer`, `ai-ask-sheet` | 2026-11-04, staging | 390 × 844 at 2× (`chat-answer` about 1×), Pillow to 720 px WebP, quality 78 | `f446267b` | After #491, #499, #505, #513 and #514 |
 | All other files in `screens/` | 2026-11-02, staging | 390 × 844, `cwebp -q 78 -resize 720 0` | `fc2df5d8` (#472) | Staging on the capture date |
 
 Barcode scanning, email verification, shop setup and stock-in have no screenshot and stay as step nodes with a note.

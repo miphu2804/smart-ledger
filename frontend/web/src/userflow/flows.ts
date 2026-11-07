@@ -134,7 +134,7 @@ export const FLOWS: Flow[] = [
         notes: ['Chưa có ảnh: tài khoản thử trên staging đã có tiệm. Tạo thêm tiệm sau này đi qua màn Tạo cửa hàng mới (luồng Menu nhanh).'],
       },
       {
-        kind: 'screen', id: 'home', x: 2580, y: 309, title: 'Tổng quan', caption: 'Lần đầu có hướng dẫn lớp phủ', image: 'dashboard-tong-quan',
+        kind: 'screen', id: 'home', x: 2580, y: 309, title: 'Tổng quan', caption: 'Lần đầu có hướng dẫn lớp phủ', image: 'dashboard-overview',
         file: 'app/(tabs)/index.tsx', refs: ['FR-006', 'FR-025'],
         notes: [
           'Hướng dẫn có 7 thẻ (src/lib/guideSteps.ts): lời chào, Tạo đơn, Đơn hàng, Trợ lý Bobi, chuông thông báo, menu nhanh, tab Quản lý.',
@@ -171,21 +171,21 @@ export const FLOWS: Flow[] = [
     title: 'Lên đơn và thanh toán',
     summary: 'Ba cách lên đơn (đọc đơn, chọn món, quét mã) cùng về màn Thanh toán; chỉ bước chốt mới tạo bản ghi bán hàng.',
     nodes: [
-      { kind: 'screen', id: 'home', x: 0, y: 620, title: 'Tổng quan', caption: 'Tab Tạo đơn giữa thanh tab', image: 'dashboard-tong-quan', file: 'app/(tabs)/index.tsx', refs: ['FR-006'] },
+      { kind: 'screen', id: 'home', x: 0, y: 620, title: 'Tổng quan', caption: 'Tab Tạo đơn giữa thanh tab', image: 'dashboard-overview', file: 'app/(tabs)/index.tsx', refs: ['FR-006'] },
       {
-        kind: 'screen', id: 'create', x: 300, y: 620, title: 'Tạo đơn', caption: 'Đọc đơn, Quét mã, lưới hàng', image: 'dashboard-ban-hang', file: 'app/pos.tsx', refs: ['FR-013'],
+        kind: 'screen', id: 'create', x: 300, y: 620, title: 'Tạo đơn', caption: 'Đọc đơn, Quét mã, lưới hàng', image: 'dashboard-create-order', file: 'app/pos.tsx', refs: ['FR-013'],
         notes: ['Tab Tạo đơn (app/(tabs)/sales.tsx) hiển thị chính màn này.'],
       },
       { kind: 'decision', id: 'd-input', x: 580, y: 831, title: 'Lên đơn bằng cách nào?' },
       {
-        kind: 'screen', id: 'voice', x: 860, y: 0, title: 'Đọc đơn', caption: 'Nói, hoặc bấm Nhập tay', image: 'voice-doc-don', file: 'app/voice.tsx', refs: ['FR-008'],
+        kind: 'screen', id: 'voice', x: 860, y: 0, title: 'Đọc đơn', caption: 'Nói, hoặc bấm Nhập tay', image: 'voice-read-order', file: 'app/voice.tsx', refs: ['FR-008'],
         notes: ['Ảnh chụp bằng Nhập tay thay cho giọng nói; phần tách món chạy như khi nói.'],
       },
-      { kind: 'screen', id: 'voice-heard', x: 1160, y: 0, title: 'Nghe và ghi đơn', caption: 'Tách món, số lượng, giá', image: 'voice-nghe-va-ghi-don', file: 'app/voice.tsx', refs: ['FR-002', 'FR-008'] },
+      { kind: 'screen', id: 'voice-heard', x: 1160, y: 0, title: 'Nghe và ghi đơn', caption: 'Tách món, số lượng, giá', image: 'voice-listen-and-record-order', file: 'app/voice.tsx', refs: ['FR-002', 'FR-008'] },
       { kind: 'decision', id: 'd-voice', x: 1440, y: 211, title: 'Có món chưa trong danh mục?' },
-      { kind: 'screen', id: 'voice-new', x: 1700, y: 0, title: 'Món mới', caption: 'Nhập giá, số lượng, đơn vị', image: 'voice-mon-moi-nhap-so-luong', file: 'app/voice.tsx', refs: ['FR-002', 'FR-009'] },
-      { kind: 'screen', id: 'voice-done', x: 2040, y: 0, title: 'Đơn đã ghi', caption: 'Kiểm tra trước khi thanh toán', image: 'voice-don-da-ghi', file: 'app/voice.tsx', refs: ['FR-003'] },
-      { kind: 'screen', id: 'cart', x: 860, y: 620, title: 'Chọn món', caption: 'Tăng giảm trên thẻ, thanh giỏ', image: 'dashboard-ban-hang-co-gio-hang', file: 'app/pos.tsx', refs: ['FR-003', 'FR-013'] },
+      { kind: 'screen', id: 'voice-new', x: 1700, y: 0, title: 'Món mới', caption: 'Nhập giá, số lượng, đơn vị', image: 'voice-new-item-enter-quantity', file: 'app/voice.tsx', refs: ['FR-002', 'FR-009'] },
+      { kind: 'screen', id: 'voice-done', x: 2040, y: 0, title: 'Đơn đã ghi', caption: 'Kiểm tra trước khi thanh toán', image: 'voice-order-recorded', file: 'app/voice.tsx', refs: ['FR-003'] },
+      { kind: 'screen', id: 'cart', x: 860, y: 620, title: 'Chọn món', caption: 'Tăng giảm trên thẻ, thanh giỏ', image: 'dashboard-create-order-with-cart', file: 'app/pos.tsx', refs: ['FR-003', 'FR-013'] },
       {
         kind: 'step', id: 'scan', x: 860, y: 1463, title: 'Quét mã', caption: 'Khung ngắm camera', file: 'app/pos.tsx', refs: ['FR-034'],
         notes: ['Các bước quét mã chưa có ảnh: cần camera thật, trình duyệt dùng để chụp staging không có.'],
@@ -248,7 +248,7 @@ export const FLOWS: Flow[] = [
     title: 'Đơn hàng, báo cáo và thông báo',
     summary: 'Từ Tổng quan: tab Đơn hàng tới chi tiết và huỷ đơn, gợi ý hỏi Bobi về doanh thu, thẻ doanh thu tới Báo cáo, danh sách bán chạy, chuông thông báo.',
     nodes: [
-      { kind: 'screen', id: 'home', x: 0, y: 930, title: 'Tổng quan', caption: 'Thẻ doanh thu, bán chạy, chuông', image: 'dashboard-tong-quan-uu-tien-va-ban-chay', file: 'app/(tabs)/index.tsx', refs: ['FR-006'] },
+      { kind: 'screen', id: 'home', x: 0, y: 930, title: 'Tổng quan', caption: 'Thẻ doanh thu, bán chạy, chuông', image: 'dashboard-overview-priorities-and-bestsellers', file: 'app/(tabs)/index.tsx', refs: ['FR-006'] },
       {
         kind: 'screen', id: 'invoices', x: 500, y: 0, title: 'Đơn hàng', caption: 'Tìm, lọc, gợi ý hỏi Bobi', image: 'invoices', file: 'app/(tabs)/invoices.tsx', refs: ['FR-005', 'FR-020'],
         notes: [
@@ -275,10 +275,10 @@ export const FLOWS: Flow[] = [
         notes: ['Phải chọn lý do trước khi bấm Xác nhận huỷ đơn; có thể trả hàng về kho và chọn cách hoàn tiền.'],
       },
       {
-        kind: 'screen', id: 'analytics', x: 500, y: 620, title: 'Báo cáo', caption: 'Doanh thu, thu chi, lãi gộp', image: 'dashboard-bao-cao-doanh-thu', file: 'app/analytics.tsx', refs: ['FR-006'],
+        kind: 'screen', id: 'analytics', x: 500, y: 620, title: 'Báo cáo', caption: 'Doanh thu, thu chi, lãi gộp', image: 'dashboard-revenue-report', file: 'app/analytics.tsx', refs: ['FR-006'],
         notes: ['Báo cáo còn dẫn sang Hàng hoá (luồng Quản lý tiệm).'],
       },
-      { kind: 'screen', id: 'debts', x: 800, y: 620, title: 'Công nợ', caption: 'Tổng còn nợ, từng khách', image: 'dashboard-cong-no', file: 'app/debts.tsx', refs: ['FR-016'] },
+      { kind: 'screen', id: 'debts', x: 800, y: 620, title: 'Công nợ', caption: 'Tổng còn nợ, từng khách', image: 'dashboard-debts', file: 'app/debts.tsx', refs: ['FR-016'] },
       { kind: 'screen', id: 'bestsellers', x: 500, y: 1240, title: 'Bán chạy', caption: 'Theo số lượng hoặc doanh thu', image: 'bestsellers', file: 'app/bestsellers.tsx', refs: ['FR-006'] },
       { kind: 'screen', id: 'notifications', x: 500, y: 1860, title: 'Thông báo', caption: 'Đơn hàng, công nợ, kho hàng', image: 'notifications', file: 'app/notifications.tsx' },
       {
@@ -305,9 +305,9 @@ export const FLOWS: Flow[] = [
     title: 'Trợ lý Bobi',
     summary: 'Tab Trợ lý Bobi mở màn chat: gõ hoặc chạm câu gợi ý, xem lịch sử, chỉnh ghi nhớ; câu trả lời dẫn sang màn có dữ liệu.',
     nodes: [
-      { kind: 'screen', id: 'home', x: 0, y: 620, title: 'Tổng quan', caption: 'Tab Trợ lý Bobi ở thanh tab', image: 'dashboard-tong-quan', file: 'app/(tabs)/_layout.tsx', refs: ['FR-006'] },
+      { kind: 'screen', id: 'home', x: 0, y: 620, title: 'Tổng quan', caption: 'Tab Trợ lý Bobi ở thanh tab', image: 'dashboard-overview', file: 'app/(tabs)/_layout.tsx', refs: ['FR-006'] },
       {
-        kind: 'screen', id: 'chat', x: 300, y: 620, title: 'Trợ lý Bobi', caption: 'Lời chào, chip gợi ý trên ô nhập', image: 'chat-tro-ly-ai', file: 'app/ai.tsx', refs: ['FR-020', 'FR-027'],
+        kind: 'screen', id: 'chat', x: 300, y: 620, title: 'Trợ lý Bobi', caption: 'Lời chào, chip gợi ý trên ô nhập', image: 'chat-ai-assistant', file: 'app/ai.tsx', refs: ['FR-020', 'FR-027'],
         notes: [
           'Tab Trợ lý Bobi chuyển thẳng sang màn này bằng router.replace.',
           'Đầu màn có Cuộc trò chuyện mới, Lịch sử trò chuyện và Cài đặt trợ lý; ô nhập (src/components/ChatComposer.tsx, dùng chung với bảng hỏi Bobi ở Đơn hàng) có nút nói và nút gửi.',
@@ -322,7 +322,7 @@ export const FLOWS: Flow[] = [
         kind: 'screen', id: 'ai-settings', x: 300, y: 1240, title: 'Cài đặt trợ lý', caption: 'Ghi nhớ dài hạn', image: 'ai-settings', file: 'app/ai.tsx',
         notes: ['Bật tắt Ghi nhớ dài hạn và xem những gì trợ lý đã nhớ.'],
       },
-      { kind: 'screen', id: 'chat-ask', x: 600, y: 620, title: 'Đặt câu hỏi', caption: 'Gõ câu hỏi về tiệm', image: 'chat-dat-cau-hoi', file: 'app/ai.tsx', refs: ['FR-020'] },
+      { kind: 'screen', id: 'chat-ask', x: 600, y: 620, title: 'Đặt câu hỏi', caption: 'Gõ câu hỏi về tiệm', image: 'chat-ask-question', file: 'app/ai.tsx', refs: ['FR-020'] },
       {
         kind: 'step', id: 'agent', x: 900, y: 843, title: 'Agent trả lời', caption: 'POST /agent/chat/stream', refs: ['FR-018', 'FR-019', 'FR-020'],
         notes: [
@@ -331,11 +331,11 @@ export const FLOWS: Flow[] = [
         ],
       },
       {
-        kind: 'screen', id: 'chat-answer', x: 1200, y: 620, title: 'Câu trả lời', caption: 'Kèm kỳ và phạm vi dữ liệu', image: 'chat-tra-loi', file: 'app/ai.tsx', refs: ['FR-020'],
+        kind: 'screen', id: 'chat-answer', x: 1200, y: 620, title: 'Câu trả lời', caption: 'Kèm kỳ và phạm vi dữ liệu', image: 'chat-answer', file: 'app/ai.tsx', refs: ['FR-020'],
         notes: ['Câu trả lời trong ảnh là câu trả lời thật của Agent trên staging, dựa trên đơn của tiệm thử.'],
       },
-      { kind: 'screen', id: 'products', x: 1520, y: 0, title: 'Hàng hoá', caption: 'Món sắp hết, nhập hàng', image: 'dashboard-hang-hoa', file: 'app/products.tsx', refs: ['FR-009', 'FR-030'] },
-      { kind: 'screen', id: 'analytics', x: 1520, y: 1240, title: 'Báo cáo', caption: 'Doanh thu, thu chi, lãi gộp', image: 'dashboard-bao-cao-doanh-thu', file: 'app/analytics.tsx', refs: ['FR-006'] },
+      { kind: 'screen', id: 'products', x: 1520, y: 0, title: 'Hàng hoá', caption: 'Món sắp hết, nhập hàng', image: 'dashboard-products', file: 'app/products.tsx', refs: ['FR-009', 'FR-030'] },
+      { kind: 'screen', id: 'analytics', x: 1520, y: 1240, title: 'Báo cáo', caption: 'Doanh thu, thu chi, lãi gộp', image: 'dashboard-revenue-report', file: 'app/analytics.tsx', refs: ['FR-006'] },
     ],
     edges: [
       { from: 'home', to: 'chat', label: 'Trợ lý Bobi' },
@@ -355,20 +355,20 @@ export const FLOWS: Flow[] = [
     title: 'Quản lý tiệm',
     summary: 'Tab Quản lý mở thông tin tiệm, báo cáo, hàng hoá, công nợ, chi phí, cài đặt và các mục tài khoản; đăng xuất về màn Đăng nhập.',
     nodes: [
-      { kind: 'screen', id: 'home', x: 0, y: 0, title: 'Tổng quan', caption: 'Thanh tab dưới cùng', image: 'dashboard-tong-quan', file: 'app/(tabs)/index.tsx', refs: ['FR-006'] },
+      { kind: 'screen', id: 'home', x: 0, y: 0, title: 'Tổng quan', caption: 'Thanh tab dưới cùng', image: 'dashboard-overview', file: 'app/(tabs)/index.tsx', refs: ['FR-006'] },
       {
         kind: 'screen', id: 'manage', x: 300, y: 0, title: 'Quản lý', caption: 'Kinh doanh, tài khoản và ứng dụng', image: 'manage', file: 'app/(tabs)/more.tsx', refs: ['FR-035'],
         notes: ['Cuộn xuống là nhóm Tài khoản và ứng dụng.'],
       },
       { kind: 'screen', id: 'profile', x: 600, y: 620, title: 'Thông tin tiệm', caption: 'Hồ sơ chủ tiệm và tiệm', image: 'profile', file: 'app/profile.tsx', refs: ['FR-011'] },
-      { kind: 'screen', id: 'analytics', x: 900, y: 620, title: 'Báo cáo', caption: 'Doanh thu, chi phí, bán chạy', image: 'dashboard-bao-cao-doanh-thu', file: 'app/analytics.tsx', refs: ['FR-006'] },
-      { kind: 'screen', id: 'products', x: 1200, y: 620, title: 'Hàng hoá', caption: 'Giá trị tồn, món sắp hết', image: 'dashboard-hang-hoa', file: 'app/products.tsx', refs: ['FR-009', 'FR-030', 'FR-032'] },
+      { kind: 'screen', id: 'analytics', x: 900, y: 620, title: 'Báo cáo', caption: 'Doanh thu, chi phí, bán chạy', image: 'dashboard-revenue-report', file: 'app/analytics.tsx', refs: ['FR-006'] },
+      { kind: 'screen', id: 'products', x: 1200, y: 620, title: 'Hàng hoá', caption: 'Giá trị tồn, món sắp hết', image: 'dashboard-products', file: 'app/products.tsx', refs: ['FR-009', 'FR-030', 'FR-032'] },
       { kind: 'screen', id: 'product-add', x: 1200, y: 1240, title: 'Thêm mặt hàng', caption: 'Tên, mã vạch, giá, nhóm hàng', image: 'product-add', file: 'app/products.tsx', refs: ['FR-009'] },
       {
         kind: 'step', id: 'stock-in', x: 1200, y: 2083, title: 'Nhập hàng', caption: 'Số lượng nhập, lý do', file: 'app/products.tsx', refs: ['FR-030'],
         notes: ['Nút Nhập hàng chỉ hiện ở mặt hàng có theo dõi tồn kho; tiệm thử trên staging chưa có mặt hàng nào như vậy nên chưa có ảnh.'],
       },
-      { kind: 'screen', id: 'debts', x: 1500, y: 620, title: 'Công nợ', caption: 'Tổng còn nợ, từng khách', image: 'dashboard-cong-no', file: 'app/debts.tsx', refs: ['FR-016'] },
+      { kind: 'screen', id: 'debts', x: 1500, y: 620, title: 'Công nợ', caption: 'Tổng còn nợ, từng khách', image: 'dashboard-debts', file: 'app/debts.tsx', refs: ['FR-016'] },
       { kind: 'screen', id: 'debt-detail', x: 1500, y: 1240, title: 'Khoản nợ', caption: 'Trả một phần hoặc trả đủ', image: 'debt-detail', file: 'app/debts.tsx', refs: ['FR-016'] },
       { kind: 'screen', id: 'invoice', x: 1500, y: 1860, title: 'Chi tiết đơn nợ', caption: 'Món, cách thu, huỷ đơn', image: 'invoice', file: 'app/invoice/[id].tsx', refs: ['FR-005', 'FR-016'] },
       { kind: 'screen', id: 'expenses', x: 1800, y: 620, title: 'Chi phí', caption: 'Khoản chi theo tháng', image: 'expenses', file: 'app/expenses.tsx', refs: ['FR-015'] },
@@ -410,7 +410,7 @@ export const FLOWS: Flow[] = [
     title: 'Menu nhanh và đổi cửa hàng',
     summary: 'Nút menu ở đầu các tab mở ngăn chuyển nhanh: đổi hoặc tạo cửa hàng, và lối tắt tới mọi mục chính.',
     nodes: [
-      { kind: 'screen', id: 'home', x: 0, y: 620, title: 'Tổng quan', caption: 'Nút menu góc trên trái', image: 'dashboard-tong-quan', file: 'app/(tabs)/index.tsx' },
+      { kind: 'screen', id: 'home', x: 0, y: 620, title: 'Tổng quan', caption: 'Nút menu góc trên trái', image: 'dashboard-overview', file: 'app/(tabs)/index.tsx' },
       {
         kind: 'screen', id: 'quicknav', x: 300, y: 620, title: 'Menu nhanh', caption: 'Bán hàng, Quản lý, Khác', image: 'quicknav', file: 'src/components/QuickNav.tsx',
         notes: ['Danh sách mục nằm ở src/lib/quickNav.ts.'],
