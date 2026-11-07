@@ -1,8 +1,14 @@
 # SmartLedger
 
-SmartLedger (Sổ Nghe Lời) is a bookkeeping app for small shops in Vietnam. Shop owners record sales, payments, debts and expenses by voice or by tap, and ask Bobi, the AI assistant, about their business. It runs in production on Android and the web.
+SmartLedger (Sổ Nghe Lời) is a voice-first bookkeeping app for small shops in Vietnam: street stalls, family eateries, bakeries and corner stores that keep their sales in their head, in a paper notebook or as a single end-of-day total.
 
-Voice orders use the platform speech-to-text and the rule-based `parseOrder()` parser, and the owner reviews each order before checkout. Bobi chat is served by the AI service through Core.
+It answers the questions a notebook cannot:
+
+- How much did the shop really sell today?
+- Which items sell best?
+- Who still owes the shop money, and how much has it spent?
+
+Owners record sales, payments, debts and expenses by speaking or with a few taps, and ask Bobi, the AI assistant, about their business. Nothing reaches the ledger until the owner confirms it. SmartLedger runs in production on Android and the web; the [product overview](docs/product/project-overview.md) describes its users and scope.
 
 ## Tech stack
 
