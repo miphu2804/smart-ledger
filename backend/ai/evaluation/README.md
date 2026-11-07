@@ -59,6 +59,10 @@ Everything stays on your machine unless you pass `--sync`, which needs `HH_API_K
 
 ## How a run works
 
+![AI evaluation and HoneyHive](../../../docs/architecture/diagrams/images/ai-evaluation.svg)
+
+The top band is this folder; the bottom band is the online side in [`.honeyhive/`](../../../.honeyhive/README.md), which scores real traffic without a model call.
+
 1. `run.py` builds the evaluation, for example `MemoryEval()`, which has a list of cases, a target and a list of evaluators.
 2. For each case, the target runs the real service and returns an `Output`.
 3. Each evaluator reads the case and the output and returns scores (`MetricResult`).
