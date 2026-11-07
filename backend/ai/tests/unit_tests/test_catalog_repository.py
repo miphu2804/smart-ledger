@@ -6,8 +6,8 @@ from sqlalchemy.dialects import postgresql
 from tests.support import CORE_MIGRATIONS
 
 from src.drafts.catalog import CatalogProduct, Product, ProductCatalogRepository
-from src.drafts.matching import DraftItem
 from src.drafts.errors import CatalogUnavailableError
+from src.drafts.matching import DraftItem
 from src.infra.postgre_db_client import PostgreDBClient
 
 
