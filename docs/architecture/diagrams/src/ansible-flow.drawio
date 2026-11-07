@@ -9,7 +9,7 @@
           <mxGeometry x="0" y="0" width="1800" height="1180" as="geometry" />
         </mxCell>
         <mxCell id="b_gha" value="Infra workflow — infra.yml" style="rounded=1;arcSize=4;html=1;dashed=1;dashPattern=8 6;fillColor=none;strokeColor=#3c9d74;strokeWidth=1.5;fontColor=#1f2d3d;fontSize=17;fontStyle=1;verticalAlign=top;align=left;spacingLeft=22;spacingRight=22;spacingTop=12;spacingBottom=14;pointerEvents=0;" vertex="1" parent="1">
-          <mxGeometry x="40" y="50" width="1720" height="210" as="geometry" />
+          <mxGeometry x="40" y="20" width="1720" height="240" as="geometry" />
         </mxCell>
         <mxCell id="trigger" value="&lt;b&gt;Trigger&lt;/b&gt;&lt;br&gt;push to staging or main&lt;br&gt;or run by hand" style="rounded=1;arcSize=12;html=1;whiteSpace=wrap;align=left;spacingLeft=56;spacingRight=10;fillColor=#e3f5ee;strokeColor=#3c9d74;fontColor=#1e5b45;fontSize=16;" vertex="1" parent="1">
           <mxGeometry x="80" y="130" width="250" height="90" as="geometry" />
@@ -66,10 +66,18 @@
           <mxGeometry x="1410" y="155" width="40" height="40" as="geometry" />
         </mxCell>
         <mxCell id="skip" value="staging skips approval" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=open;endSize=9;strokeColor=#8a94a6;strokeWidth=1.8;dashed=1;fontColor=#8a94a6;fontSize=15;fontStyle=1;labelBackgroundColor=#ffffff;exitX=0.5;exitY=0;exitDx=0;exitDy=0;entryX=0.5;entryY=0;entryDx=0;entryDy=0;" edge="1" parent="1" source="plan" target="apply">
-          <mxGeometry relative="1" as="geometry">
+          <mxGeometry relative="1" as="geometry" x="0.45">
             <Array as="points">
-              <mxPoint x="905" y="105" />
-              <mxPoint x="1605" y="105" />
+              <mxPoint x="905" y="108" />
+              <mxPoint x="1605" y="108" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="manual" value="manual apply runs no plan" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=open;endSize=9;strokeColor=#8a94a6;strokeWidth=1.8;dashed=1;fontColor=#8a94a6;fontSize=15;fontStyle=1;labelBackgroundColor=#ffffff;exitX=0.5;exitY=0;exitDx=0;exitDy=0;entryX=0.5;entryY=0;entryDx=0;entryDy=0;" edge="1" parent="1" source="lint" target="approve">
+          <mxGeometry relative="1" as="geometry" x="-0.3">
+            <Array as="points">
+              <mxPoint x="555" y="76" />
+              <mxPoint x="1255" y="76" />
             </Array>
           </mxGeometry>
         </mxCell>

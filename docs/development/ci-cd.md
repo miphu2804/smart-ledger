@@ -46,7 +46,7 @@ Source: [`vps-network.drawio`](../architecture/diagrams/src/vps-network.drawio),
 
 ![VPS setup with Ansible](../architecture/diagrams/images/ansible-flow.svg)
 
-Source: [`ansible-flow.drawio`](../architecture/diagrams/src/ansible-flow.drawio), drawn from [`infra.yml`](../../.github/workflows/infra.yml), [`scripts/infra/run.sh`](../../scripts/infra/run.sh) and [`deploy/ansible`](../../deploy/ansible/vps.yml). A pull request gets lint only; a push to `staging` plans then applies staging in scope `app`, and a push to `main` plans then applies production in scope `all` after a reviewer approves the plan (1–5). `run.sh` runs in the image of `deploy/ansible/Dockerfile`, exports the environment's Dopbase groups to a private temporary directory and starts `ansible-playbook` (6). Scope `all` runs every role in order and sets up the shared host, so it runs for production only; scope `app` runs only the `app` role for one environment (7). The roles prepare the host and write the stack files; the handlers that a changed file notifies then start the stack, Dopbase, monitoring and the edge, in that order (8). The apply shares the `vps-<environment>` lock with the backend deploy. Edit the source and re-export:
+Source: [`ansible-flow.drawio`](../architecture/diagrams/src/ansible-flow.drawio), drawn from [`infra.yml`](../../.github/workflows/infra.yml), [`scripts/infra/run.sh`](../../scripts/infra/run.sh) and [`deploy/ansible`](../../deploy/ansible/vps.yml). A pull request gets lint only; a push to `staging` plans then applies staging in scope `app`, and a push to `main` plans then applies production in scope `all` after a reviewer approves the plan (1–5). A manual run does either a plan or an apply, never both: a manual apply runs no plan first, and a production apply still waits for approval. `run.sh` runs in the image of `deploy/ansible/Dockerfile`, exports the environment's Dopbase groups to a private temporary directory and starts `ansible-playbook` (6). Scope `all` runs every role in order and sets up the shared host, so it runs for production only; scope `app` runs only the `app` role for one environment (7). The roles prepare the host and write the stack files; the handlers that a changed file notifies then start the stack, Dopbase, monitoring and the edge, in that order (8). The apply shares the `vps-<environment>` lock with the backend deploy. Edit the source and re-export:
 
 ```bash
 drawio -x -f svg -e --embed-svg-images --svg-theme light -b ffffff -o docs/architecture/diagrams/images/ansible-flow.svg docs/architecture/diagrams/src/ansible-flow.drawio
@@ -59,6 +59,20 @@ drawio -x -f svg -e --embed-svg-images --svg-theme light -b ffffff -o docs/archi
 3. For a delivery, use the workflow result and resulting artifact/build identity as evidence.
 4. Record [Bruno smoke-check](../../scripts/bruno/README.md) and UAT results separately; a deployment does not establish `AC-*` acceptance.
 5. Use the private operations knowledge base for environment access, migration windows, rollout and recovery. Production approval is not bypassed by these instructions.
+
+## CI runners
+
+[`select-runner.yml`](../../.github/workflows/select-runner.yml) runs first in every workflow and gives the later jobs their `runs-on`, so one setting moves a whole run. CI reads the input `runner`, else the repository variable `CI_RUNNER`; CD and Infra read the input, else `CD_RUNNER`, else `CI_RUNNER`. Unset means `github-hosted`.
+
+| Value | Runs on |
+|---|---|
+| `github-hosted` | `ubuntu-24.04` |
+| `self-hosted` | Any machine labelled `self-hosted`; it needs Docker with buildx, Node, Python 3 and a JDK |
+| `auto` | A free self-hosted machine, else `ubuntu-24.04`; it needs the secret `RUNNERS_READ_TOKEN`, without which it always picks GitHub-hosted |
+
+- While GitHub-hosted runners cannot start, set `CI_RUNNER=self-hosted` and clear `CD_RUNNER`. `auto` cannot help, because its own pick runs on GitHub-hosted.
+- Pull requests from forks always run on `ubuntu-24.04`, so a fork never runs code on a self-hosted machine.
+- Tests start PostgreSQL with `docker run` on a free port, so jobs on one machine do not collide.
 
 ## Path filtering
 
@@ -86,6 +100,10 @@ The delivery workflow builds environment-specific frontend artifacts. Public-pre
 
 A browser request must pass Firebase Authorized domains and Core CORS, and Core accepts only tokens from its own Firebase project. Source: [`auth-request-flow.drawio`](../architecture/diagrams/src/auth-request-flow.drawio).
 
+## Landing page on Vercel
+
+[`deploy-landing.yml`](../../.github/workflows/deploy-landing.yml) builds `frontend/web` and deploys it to its own Vercel project; CD calls it for a commit whose `landing` check passed. A push to `staging` uses the GitHub environment `landing-staging` and a push to `main` uses `landing-production`, each followed by a smoke test of the environment's `LANDING_URL`. Vercel's Git deployments are off, so only this workflow deploys the landing. The admin dashboard is built only when the environment sets `VITE_ADMIN_ENABLED=true` with `VITE_API_ENDPOINT` and `VITE_FIREBASE_API_KEY`; the step `Check the admin in the build` fails on admin code in a build with the flag off.
+
 ## Android build
 
 Use the manually triggered Android workflow for a configured build. Local development and native verification are in the [Mobile guide](../../frontend/mobile/README.md) and [operations guide](../../frontend/mobile/docs/operations.md). A successful build does not verify sign-in, recognition or install/update behavior on a device.
@@ -99,6 +117,15 @@ Signing keys, backups, certificate-to-environment mappings and publication crede
 ![Android APK release and download](../architecture/diagrams/images/apk-release.svg)
 
 Source: [`apk-release.drawio`](../architecture/diagrams/src/apk-release.drawio). Publication is a separate, explicit workflow option. Follow the private operations procedure for access, destination, validation and rollback; a merged pull request does not itself prove that a signed APK was published or accepted.
+
+## Ownership and dependency updates
+
+The repository is public and its jobs can run on self-hosted machines, so what a workflow executes is pinned and a change to it is reviewed.
+
+- **Pinned actions.** Every third-party action is pinned to a full commit SHA with its release as a comment (`actions/checkout@<sha> # v7.0.1`), so a moved or compromised tag cannot change what runs. Local actions and reusable workflows (`./.github/...`) run from the same commit and need no pin.
+- **Dependabot.** [`dependabot.yml`](../../.github/dependabot.yml) opens one grouped pull request a week against `staging` for GitHub Actions, for the Dockerfiles of `backend/ai`, `deploy/ansible` and `deploy/dopbase`, and for the Compose stacks. Application packages (uv, npm, Maven) and `backend/core` are left out: Core changes need the owner's approval and app upgrades are planned per feature.
+- **Code owners.** [`CODEOWNERS`](../../.github/CODEOWNERS) requests the project owner's review on `.github/`, `deploy/`, `scripts/`, `secrets/`, the HoneyHive config, `docs/development/` and `backend/core/`. It blocks a merge only where a branch ruleset requires code-owner review.
+- **Vulnerability reports** go through GitHub's private reporting, as [`SECURITY.md`](../../SECURITY.md) describes.
 
 ## Eval regression
 

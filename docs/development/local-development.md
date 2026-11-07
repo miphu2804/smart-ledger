@@ -94,21 +94,27 @@ docker compose --env-file backend/core/.env --env-file backend/ai/.env up --buil
 
 ## Full check before pushing
 
-CI runs the AI tests and Core `verify` against a disposable PostgreSQL and then requires the Core PostgreSQL suites to have run. Do the same on your machine; never point a test URL at Supabase or the local development database. Start a throwaway database, run the AI suite against it, then remove it:
+CI runs the AI tests and Core `verify` against a disposable PostgreSQL and then requires the Core PostgreSQL suites to have run. Do the same on your machine with one throwaway container that holds a database for each service; never point a test URL at Supabase or the local development database. Run the four blocks in order from the repository root; the test blocks run in a subshell, so the shell stays at the root.
 
 ```bash
 docker run -d --rm --name smartledger-test-db -p 127.0.0.1:55433:5432 -e POSTGRES_DB=smartledger_test -e POSTGRES_USER=smartledger -e POSTGRES_PASSWORD=smartledger pgvector/pgvector:pg17
+until docker exec smartledger-test-db pg_isready -h 127.0.0.1 -U smartledger -d smartledger_test >/dev/null 2>&1; do sleep 1; done
+docker exec smartledger-test-db createdb -U smartledger core_test
 ```
 
 ```bash
-cd backend/ai && POSTGRES_TEST_URL=postgresql://smartledger:smartledger@127.0.0.1:55433/smartledger_test uv run pytest
+(cd backend/ai && POSTGRES_TEST_URL=postgresql://smartledger:smartledger@127.0.0.1:55433/smartledger_test uv run pytest)
+```
+
+```bash
+(cd backend/core && CORE_TEST_POSTGRES_URL=jdbc:postgresql://127.0.0.1:55433/core_test CORE_TEST_POSTGRES_USERNAME=smartledger CORE_TEST_POSTGRES_PASSWORD=smartledger bash ./mvnw clean verify && python3 scripts/verify_postgres_tests.py target/surefire-reports)
 ```
 
 ```bash
 docker rm -f smartledger-test-db
 ```
 
-For Core, set `CORE_TEST_POSTGRES_URL`, `CORE_TEST_POSTGRES_USERNAME` and `CORE_TEST_POSTGRES_PASSWORD`, run `./mvnw clean verify` and then the report gate, as the [Core test guide](../../backend/core/README.md#run-tests) shows.
+The last Core command is the report gate: it fails when the PostgreSQL suites were skipped. The [Core test guide](../../backend/core/README.md#run-tests) explains the variables and focused runs.
 
 ## Local Compose
 
