@@ -3,7 +3,7 @@
 # .honeyhive/projects.yaml: charts are created or updated by name, alerts only
 # created when missing, because the CLI has no alert update.
 # Follows https://docs.honeyhive.ai/v2/cli-reference/config-as-code-charts-alerts
-# Usage, from the repo root: HH_DATA_PLANE_API_KEY=... HH_CONTROL_PLANE_API_KEY=... bash sync-dashboards.sh
+# Usage, from the repo root: HH_DATA_PLANE_API_KEY=... HH_CONTROL_PLANE_API_KEY=... bash scripts/honeyhive/sync-dashboards.sh
 set -euo pipefail
 shopt -s nullglob  # Skip an empty charts/ or alerts/ folder.
 

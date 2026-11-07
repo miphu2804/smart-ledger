@@ -26,8 +26,6 @@ while [ $# -gt 0 ]; do
   case "$1" in
     --apply) apply=1 ;;
     --no-backup) backup= ;;
-    --backup) backup=1 ;;
-    --keep-all) ;;
     --use-staging) use_staging="$use_staging$2 "; shift ;;
     *) echo "$usage" >&2; exit 1 ;;
   esac
