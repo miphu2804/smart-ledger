@@ -1,3 +1,11 @@
+### 2026-11-07 — Refuse debug-signed production Android builds
+
+| Area | Change |
+|---|---|
+| CI | • `write-release-keystore.sh` fails an `android-production` build when `ANDROID_KEYSTORE_BASE64` is empty instead of signing with the public debug keystore; `mobile-release.yml` passes it the environment<br>• Found when the release AAB from run 42350017899 built green but was signed `CN=Android Debug`, because the Dopbase `release/production` value was empty |
+
+Check: the script exits 1 for android-production without a keystore, 0 for android-staging and with a keystore; `shellcheck --severity=warning` and `actionlint` passed.
+
 ### 2026-11-07 — English file names for product images and icons
 
 | Area | Change |
