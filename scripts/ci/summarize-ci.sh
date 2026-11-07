@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Writes ci-summary.md, one table of the results and test counts of the CI jobs, and adds it to the run summary.
-# Reads AI_RESULT, AI_TESTS, AI_FAILURES, AI_ERRORS, AI_SKIPPED, the same CORE_* and MOBILE_RESULT, LANDING_RESULT and
-# CONTAINER_RESULT; a count that is empty shows as n/a.
+# Reads AI_RESULT, AI_TESTS, AI_FAILURES, AI_ERRORS, AI_SKIPPED, the same CORE_* and MOBILE_RESULT, LANDING_RESULT,
+# CONTAINER_RESULT and DOCS_RESULT; a count that is empty shows as n/a.
 set -euo pipefail
 . "$(dirname "$0")/lib.sh"
 
@@ -17,5 +17,6 @@ set -euo pipefail
   printf '| Mobile web | %s | n/a | n/a | n/a | n/a |\n' "$MOBILE_RESULT"
   printf '| Landing (web) | %s | n/a | n/a | n/a | n/a |\n' "$LANDING_RESULT"
   printf '| Container images | %s | n/a | n/a | n/a | n/a |\n' "$CONTAINER_RESULT"
+  printf '| Docs (OKF bundle) | %s | n/a | n/a | n/a | n/a |\n' "$DOCS_RESULT"
 } > ci-summary.md
 ci_summary < ci-summary.md
