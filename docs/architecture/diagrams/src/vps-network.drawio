@@ -185,7 +185,7 @@
           </mxGeometry>
         </mxCell>
         <mxCell id="m_caddy" value="scrape" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=open;endSize=9;strokeColor=#7c6fd6;strokeWidth=1.8;fontColor=#7c6fd6;fontSize=15;fontStyle=1;labelBackgroundColor=#ffffff;exitX=1;exitY=0.2;exitDx=0;exitDy=0;entryX=0.221;entryY=1;entryDx=0;entryDy=0;" edge="1" parent="1" source="alloy" target="caddy">
-          <mxGeometry relative="1" as="geometry" x="-0.1">
+          <mxGeometry relative="1" as="geometry" x="-0.79">
             <Array as="points">
               <mxPoint x="655" y="818" />
               <mxPoint x="655" y="380" />
