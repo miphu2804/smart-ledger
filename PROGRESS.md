@@ -37,6 +37,8 @@ Check: 72 Markdown documents and 715 internal links passed path/anchor/index/fro
 | Docs | • Audited the actual tracked tree at staging `a2766ee`; separated production operation from EXE201 delivery scope and implementation/enablement/deployment/acceptance<br>• Made landing pages domain-oriented, kept local indexes, moved service detail into owned Core/AI/Mobile guides, and preserved technical safeguards, dated decisions and rollout evidence<br>• Aligned root/Mobile instructions, English technical prose and lean OKF/plain authors; reconciled source facts and resolved obsolete merge/assignment blockers without claiming live acceptance |
 
 Check: internal paths/anchors, immediate-child index/frontmatter consistency and root navigation reachability passed; BRD/PRD stayed byte-identical, API contract body changed only link targets, all nine ADR decision statuses stayed intact, `config.ts` matched the baseline after removing comments, and `git diff --check` passed. Mobile typecheck passed; `npm test` had 192 pass/2 fail, reproduced with the same failures on baseline `a2766ee`. Source inventory and verification evidence are in the PR. Live deployment, provider/device UAT and acceptance were not verified. Commit: the commit that adds this entry.
+
+
 ### 2026-11-07 — Fix stale setup, CI and mobile docs against the code
 
 | Area | Change |
