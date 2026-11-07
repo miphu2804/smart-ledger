@@ -9,10 +9,7 @@ stale_after: 2027-01-05T04:32:37+07:00
 ---
 # Yêu cầu kinh doanh
 
-| Siêu dữ liệu | Giá trị |
-|---|---|
-| Trạng thái | MVP môn EXE201 — ưu tiên demo đầu-cuối và kiểm chứng người dùng; chưa chứng nhận nghiệm thu tích hợp |
-| Người phê duyệt | Chủ sản phẩm; chủ thuế/pháp lý cho `BR-INV-*` và nghĩa vụ tuân thủ |
+Chủ sản phẩm phê duyệt tài liệu này; chủ thuế/pháp lý duyệt `BR-INV-*` và các nghĩa vụ tuân thủ. Tài liệu không chứng nhận nghiệm thu tích hợp.
 
 ## Tài liệu liên quan
 

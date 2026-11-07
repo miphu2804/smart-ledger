@@ -2,7 +2,7 @@
 
 | Area | Change |
 |---|---|
-| Docs | • READMEs outside `docs/` no longer carry frontmatter, so GitHub opens them on the title instead of a metadata table; `AGENTS.md` and the docs conventions record the rule<br>• The root README reads as a production overview again: the course-scope paragraph is gone, the boundaries table regains a Runs on column, and the repository layout is a directory tree checked against `staging`<br>• Eighteen documents move from the old `generated: { by: human:… }` field to `author:`, and the marketing README folds its one-row status table into the intro |
+| Docs | • READMEs outside `docs/` no longer carry frontmatter, so GitHub opens them on the title instead of a metadata table; `AGENTS.md` and the docs conventions record the rule<br>• The root README reads as a production overview again: the course-scope paragraph is gone, the boundaries table regains a Runs on column, and the repository layout is a directory tree checked against `staging`<br>• Eighteen documents move from the old `generated: { by: human:… }` field to `author:`, and seven documents (the product set, technical design, API contracts and marketing) fold their metadata table under the title into one intro sentence; BRD, PRD and the product overview no longer label themselves as the EXE201 MVP |
 
 Check: every directory in the layout tree exists on `staging` `a1245a1`; relative links in the edited front pages resolve; no `generated:` field remains in tracked Markdown; `git diff --check` passed. Rendering on GitHub was not checked.
 

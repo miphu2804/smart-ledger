@@ -9,10 +9,7 @@ stale_after: 2027-01-05T04:32:37+07:00
 ---
 # Yêu cầu sản phẩm
 
-| Siêu dữ liệu | Giá trị |
-|---|---|
-| Trạng thái | MVP EXE201 — ưu tiên luồng cốt lõi; danh mục yêu cầu và trạng thái tích hợp được giữ để tra cứu |
-| Người phê duyệt | Chủ sản phẩm; người rà soát kỹ thuật |
+Chủ sản phẩm phê duyệt tài liệu này, có người rà soát kỹ thuật. Danh mục yêu cầu và trạng thái tích hợp được giữ để tra cứu.
 
 ## Tài liệu liên quan
 

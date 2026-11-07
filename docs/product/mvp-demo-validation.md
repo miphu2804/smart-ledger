@@ -9,9 +9,7 @@ stale_after: 2027-01-05T04:32:37+07:00
 ---
 # Demo và kiểm chứng MVP EXE201
 
-| Siêu dữ liệu | Giá trị |
-|---|---|
-| Trạng thái | Kế hoạch ưu tiên và mẫu ghi kết quả; chưa thực hiện demo/kiểm chứng trong đợt sửa docs này |
+Tài liệu này là kế hoạch ưu tiên và mẫu ghi kết quả; buổi demo và kiểm chứng chưa được thực hiện.
 
 ## 1. Mục tiêu hoàn thành
 
