@@ -37,6 +37,18 @@ Check: 72 Markdown documents and 715 internal links passed path/anchor/index/fro
 | Docs | • Audited the actual tracked tree at staging `a2766ee`; separated production operation from EXE201 delivery scope and implementation/enablement/deployment/acceptance<br>• Made landing pages domain-oriented, kept local indexes, moved service detail into owned Core/AI/Mobile guides, and preserved technical safeguards, dated decisions and rollout evidence<br>• Aligned root/Mobile instructions, English technical prose and lean OKF/plain authors; reconciled source facts and resolved obsolete merge/assignment blockers without claiming live acceptance |
 
 Check: internal paths/anchors, immediate-child index/frontmatter consistency and root navigation reachability passed; BRD/PRD stayed byte-identical, API contract body changed only link targets, all nine ADR decision statuses stayed intact, `config.ts` matched the baseline after removing comments, and `git diff --check` passed. Mobile typecheck passed; `npm test` had 192 pass/2 fail, reproduced with the same failures on baseline `a2766ee`. Source inventory and verification evidence are in the PR. Live deployment, provider/device UAT and acceptance were not verified. Commit: the commit that adds this entry.
+### 2026-11-07 — Fix stale setup, CI and mobile docs against the code
+
+| Area | Change |
+|---|---|
+| CI | • Path-filter table and deploy notes match `changes.sh`, `upload-settings.sh`, `infra-run.yml` and `deploy-backend.yml`: settings come from Dopbase, `container-images` runs only for the `containers` area, and `VPS_*` and the runner token names are the ones the workflows read |
+| AI | • `MODEL_FALLBACKS` is documented as `protocol:model`, as in `app_config.py` |
+| Honeyhive | • The sync workflows load keys from Dopbase `ai/production`, not repository secrets |
+| Mobile | • Sample sign-in, test script, guide steps, Zen ring and Home/Analytics data source match the code |
+| Web | • Bobi brand image names match `frontend/web/public/brand` |
+
+Check: each changed claim was checked with grep, `ls` and a read of the cited code at `f2be945`; no build or script was run. Left alone: `backend/core/**` (Core is out of scope under AGENTS.md) and the `github.sh` step in ci-cd. Commit: the one that adds this entry.
+
 ### 2026-11-07 — Align quick-navigation test labels with the app
 
 | Area | Change |
@@ -182,12 +194,3 @@ Check: `uv run pytest -q tests/unit_tests/test_llm_factory.py` (21 passed), `ruf
 | Docs | • The AI README gives the order for switching an environment: set the provider in Dopbase, deploy, then re-embed; and no longer calls `sentence-transformers` the default |
 
 Check: `uv run pytest -q` (535 passed, 79 skipped), `ruff check` and `ruff format --check`. On `smartledger-local-db` (5 memories) a dry run wrote nothing, `--apply` with `cloudflare` changed every vector (cosine about 0 against the onnx ones) and `--apply` with `onnx` restored the original vectors exactly. Not verified: a run on staging. Commit: the one that adds this entry.
-
-### 2026-11-05 — Embed agent memory with a local ONNX model
-
-| Area | Change |
-|---|---|
-| AI | • New `OnnxEmbeddingModel` (`src/memory/onnx_embedding.py`) runs the int8 ONNX export of `static-similarity-mrl-multilingual-v1` in process with onnxruntime and tokenizers, no torch, cut to 384 dimensions and normalised<br>• `onnx` is the default `AGENT_MEMORY_EMBEDDING_PROVIDER`, with the model at `models/static-mrl-int8`; a model that fails to load turns memory off instead of failing startup<br>• The Docker image downloads the model from one pinned Hugging Face revision, checked by SHA-256; `scripts/ai/fetch-embedding-model.sh` does the same for a dev machine |
-| Docs | • The AI README and ADR-0002 describe the provider, its measured recall (0.753 against embeddinggemma's 0.861) and that switching provider means re-embedding the stored memories |
-
-Check: `uv run pytest -q` (532 passed, 79 skipped), `ruff check` and `ruff format --check`; the image builds on the Mac with matching checksums and gives 384-dimension vectors in the container. Real turns on `smartledger-local-db` stored a 384-dimension unit vector and recalled it for an accented paraphrase, an unaccented question and a second memory. `ai/dev` in Dopbase now uses `onnx`. Not verified: the linux/amd64 build in CI, staging, and re-embedding the staging memories that were written with Workers AI. Commit: the one that adds this entry.
