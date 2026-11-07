@@ -161,6 +161,10 @@ Profiles in `eas.json`:
 
 Where the code lives: `src/lib/auth/` (the `AuthClient` interface; `mock.ts`, `firebase.ts` for native, `firebase.web.ts` for web), `src/lib/api.ts` (Bearer + `X-Shop-Id` + `{code,message,traceId}` errors, 401 → sign out), `src/lib/sessionApi.ts` (`/auth/session`, `/me`, `/shops`), and the sign-in flow in `src/store/AppStore.tsx` (`signIn`, `logout`, startup waits for Firebase to restore the session).
 
+### Google Analytics
+
+`@react-native-firebase/analytics` sends usage events to GA4 only after the user agrees in the one-time prompt after sign-in or in Settings ([ADR-0010](../../docs/architecture/adr/0010-mobile-usage-analytics-ga4.md)). Each Firebase project sends to its own GA4 property: `android-production` builds to the production property used for product metrics, `android-dev` and `android-staging` builds to the staging property used for testing; the event catalogue is `src/lib/analyticsEvents.ts`.
+
 ### Connect to the real Core
 
 Flow: Firebase authenticates (email or Facebook) → FE sends the **Firebase ID token** (`Authorization: Bearer …`) to Core → Core verifies it with the Firebase Admin SDK, creates/finds the account and returns the session.

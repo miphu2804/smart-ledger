@@ -126,6 +126,7 @@ Bán 100.000đ, giá vốn 120.000đ và chi 10.000đ: lãi gộp −20.000đ, l
 | `BR-023` | Đo ngày có request nghiệp vụ đã xác thực thành công, gồm đọc, tách OWNER/ADMIN và tài khoản load test; chỉ lưu user/ngày, giữ 90 ngày theo quyết định đã duyệt. Lỗi telemetry không cản nghiệp vụ và không thay audit. DAU/MAU, số tạo mới và số request là các chỉ số khác nhau. |
 | `BR-024` | Quota upload/tạo tiệm theo tài khoản dùng chung giữa instance và giữ qua restart. Chỉ thao tác commit tiêu lượt; rollback/replay hợp lệ không tiêu thêm, giữ chỗ tạm ngăn vượt khi đồng thời. Cửa sổ tạo tiệm 24 giờ từ request đầu; không phải giới hạn tổng số tiệm, gói trả phí hoặc quota chat. |
 | `BR-025` | OWNER giảm tồn của Product ACTIVE được theo dõi trong tiệm ACTIVE mình sở hữu do hỏng/thất thoát/kiểm kho thiếu: lượng giảm dương, lý do bắt buộc và không âm tồn. Tồn/audit/cảnh báo/kết quả chống trùng cùng commit/rollback; không tự tạo sale/chi/payment/nợ/refund hoặc đổi giá vốn. Không mở thêm ledger kiểm kê hay trả hàng từng phần. |
+| `BR-026` | Nhóm sản phẩm đo cách chủ tiệm dùng app mobile (màn đã mở, đăng nhập, tạo tiệm, lưu đơn, đọc đơn bằng giọng nói, hỏi trợ lý, thêm sản phẩm, ghi chi) bằng Google Analytics 4, chỉ khi người dùng đồng ý trên máy đó. Mặc định không gửi; người dùng rút lại đồng ý bất cứ lúc nào. Không gửi tên, số điện thoại, email, tên tiệm, tên món, số tiền, nội dung chat hay ID quảng cáo. Số liệu này chỉ tính người đã đồng ý nên là ước lượng, không thay ngày hoạt động của `BR-023` hay sổ nghiệp vụ. |
 
 Các quyết định đã duyệt về stock-in, barcode, Zalo, media, audit, ADMIN growth, hoạt động ngày và quota được giữ bằng các mã trên; tham số API, lease, migration và rollout dẫn về contract/thiết kế kỹ thuật thay vì lặp snapshot nhánh cũ tại BRD.
 
@@ -197,6 +198,7 @@ Giữ an toàn dữ liệu và contract đang có dù là dự án môn học. D
 | `BR-001`/`BR-002` | `FR-025`–`FR-026`, `FR-035` | `AC-018`–`AC-019`, `AC-096` |
 | `BO-003`, `BR-013`/`BR-014` | `FR-022`–`FR-024`, `NFR-009` | `AC-015`–`AC-017`, `AC-040`–`AC-043`, `AC-097`–`AC-100` |
 | `BR-023`/`BR-024` | `FR-036`–`FR-037` | `AC-101`–`AC-108` |
+| `BO-001`/`BO-003`, `BR-026` | `FR-039`, `NFR-011` | `AC-119`–`AC-121`; đề xuất, chờ chủ sản phẩm và người đứng tên pháp lý duyệt ([ADR-0010](../architecture/adr/0010-mobile-usage-analytics-ga4.md)) |
 | `BO-004`, `BR-INV-001`–`BR-INV-008` | `FR-INV-001`–`FR-INV-007`, `NFR-004` | `AC-INV-001`–`AC-INV-002` provisional; không kích hoạt trước quyết định mục 8 |
 
 Đây là truy vết theo nhóm nghiệp vụ, không chứng nhận AC đạt. [Phụ lục kiểm định §4](business-requirements-audit.md#4-truy-vết-chi-tiết-frnfr-và-ac) liệt kê đầy đủ từng FR/NFR và liên kết AC trực tiếp, gồm khoảng trống chưa có AC. Không lấy số lượng mã/link hợp lệ làm bằng chứng tài liệu đã đúng nghiệp vụ.

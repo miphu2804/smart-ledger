@@ -10,6 +10,15 @@
 
 Check: each changed claim was checked with grep, `ls` and a read of the cited code at `f2be945`; no build or script was run. Left alone: `backend/core/**` (Core is out of scope under AGENTS.md) and the `github.sh` step in ci-cd. Commit: the one that adds this entry.
 
+### 2026-11-06 — Mobile usage analytics in GA4 behind a consent prompt
+
+| Area | Change |
+|---|---|
+| Mobile | • `@react-native-firebase/analytics` 26.4.0 with `firebase.json` turning off automatic collection, advertising IDs and automatic screen reporting; Android blocks `AD_ID` and iOS builds without IDFA<br>• `AnalyticsConsentPrompt` asks once per device right after sign-in, and Settings has a "Gửi số liệu sử dụng" switch; nothing is sent until the user agrees, and withdrawing resets on-device Analytics data<br>• Screen views from expo-router segments with `[id]` kept as is, the Core account id as `user_id`, and the events in `analyticsEvents.ts`: `login`, `shop_created`, `sale_completed`, `voice_order_reviewed`, `ai_message_sent`, `product_created`, `expense_created`, with enum or count parameters only; the web build sends nothing |
+| Docs | • ADR-0010, `BR-026`, `FR-039`, `NFR-011`, `AC-119`–`AC-121` as proposed and awaiting approval; Data safety adds device IDs and the Google Analytics processor row with the checks the legal owner still has to make; the mobile README explains DebugView |
+
+Check: `npm run typecheck` passes; `npm test` 194 of 196 pass, and the two failures (`parseOrder` shared names, quick navigation labels) fail the same way on a clean `staging` checkout. Not verified: a native build, the consent dialog on a device, and events in DebugView. Commit: the one that adds this entry.
+
 ### 2026-11-06 — Add shared documentation skills for agents
 
 | Area | Change |
@@ -182,11 +191,3 @@ Check: `uv run pytest` (582 passed, 13 skipped) with `POSTGRES_TEST_URL` on a th
 | AI | • HoneyHive sessions carry `history_ms`, the time to read the conversation history before the session opens<br>• New `memory enabled` and `save turn` spans time the memory switch read and the exchange save, so the turn's untraced gap splits into named steps |
 
 Check: 475 unit tests and ruff pass; two real turns on `smartledger-local-db` recorded history 0 and 26 ms, memory enabled 81 and 3 ms, memory recall 1015 and 1753 ms, save turn 44 and 33 ms. Not verified: production timings, which need the deploy. Commit: the one that adds this entry.
-
-### 2026-11-04 — Tier classifier tokens reach HoneyHive
-
-| Area | Change |
-|---|---|
-| AI | • `BifrostTierClassifier` records each `/v1/decisions` call as a `tier classifier` span of type `model` with the model and the token counts Bifrost returns, so the session's Total Tokens and model events include the `jev-latest` call; `Observability.span` takes the event type |
-
-Check: `uv run ruff check`, `ruff format --check` and `uv run pytest tests/unit_tests` (474 passed); the SDK's `trace` and `enrich_span` signatures read from the installed package. Not verified: the span on a real HoneyHive session, since traces run only in production. Commit: the one that adds this entry.

@@ -6,6 +6,7 @@ import { LogoMark, useToast } from '../../src/components/brand';
 import { Button, Field, Row, Screen, T } from '../../src/components/ui';
 import { WEBSITE_URL } from '../../src/config';
 import { AuthError, authClient } from '../../src/lib/auth';
+import { track } from '../../src/lib/analytics';
 import { debugLog } from '../../src/lib/debug';
 import { setEmailDraft } from '../../src/lib/emailDraft';
 import { describeError, errorMessage, isDisplayNameRequired } from '../../src/lib/errors';
@@ -51,6 +52,7 @@ export default function Welcome() {
       } else await authClient.signInWithGoogle();
       const session = await app.signIn(displayName); // gửi Firebase ID token xuống Core (POST /auth/session)
       void saveLastSignIn(provider);
+      track('login', { method: provider });
       router.replace(session.needsOnboarding ? '/(auth)/setup' : '/(tabs)');
     } catch (e) {
       if (e instanceof AuthError && e.code === 'cancelled') return; // người dùng tự đóng, không phải lỗi

@@ -8,6 +8,7 @@ import { useToast } from '../src/components/brand';
 import { FakeQR } from '../src/components/FakeQR';
 import { Badge, Button, Card, Chips, EmptyState, Field, Header, IconName, Row, Screen, Stepper, T } from '../src/components/ui';
 import type { LineItem, ProductView } from '../src/data/types';
+import { track } from '../src/lib/analytics';
 import { productApi } from '../src/lib/catalogApi';
 import { errorMessage } from '../src/lib/errors';
 import { vnd } from '../src/lib/format';
@@ -131,6 +132,8 @@ export default function Checkout() {
         initialPaidVnd: method === 'debt' ? debtUpfrontAmount : total,
         initialPaymentMethod: method === 'debt' ? (debtUpfrontAmount > 0 ? 'CASH' : null) : method === 'cash' ? 'CASH' : 'TRANSFER',
       });
+      // Đơn của lần bấm trước đã được đếm khi nó lưu xong, nên lần khôi phục không đếm lại.
+      if (!recovered) track('sale_completed', { source: app.draft?.source ?? 'manual', payment: method, item_count: items.length });
       app.setDraft(null);
       setDoneTotal(sale.totalVnd);
       setDoneId(sale.id);
