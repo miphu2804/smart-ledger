@@ -241,7 +241,7 @@ Add `-- --headed` to watch the browser, `-- --ui` to step through. The report is
   CORE_URL=https://<authorized-core-host> node scripts/dev-cors-proxy.js
   ```
   and set `EXPO_PUBLIC_API_ENDPOINT=http://127.0.0.1:8010` in `.env` (rerun `npm run web -- --clear` after the change). Without `CORE_URL` the proxy points at the local Core (`http://localhost:8000`). For Firebase alone without Core, set `EXPO_PUBLIC_MOCK_CORE=true` and skip the proxy. The web cannot test native adapters, phone sign-in on a real device or Android networking.
-- **Timeout:** every Core call stops after 15 seconds (`ApiError` code `timeout`) instead of spinning forever on a wrong IP or a blocking firewall.
+- **Timeout:** a Core call stops after 15 seconds by default, and assistant chat and streaming after 45 seconds, instead of spinning forever on a wrong IP or a blocking firewall.
 - **Common errors:** `network` = Core unreachable (IP, firewall, Android blocking HTTP); `timeout` = the firewall drops packets; `401 unauthorized` = the token does not match Core's project; `400 validation_failed` on `/auth/session` = a new account needs `displayName` (normal); `provider-disabled` = the sign-in method is not enabled in Firebase Console.
 
 Unimplemented client paths in this source review include Apple sign-in and Zalo on iOS; AI order recognition is not the rule-based `parseOrder()` path. Provider/device acceptance remains unverified.
