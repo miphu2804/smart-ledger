@@ -4,7 +4,7 @@ title: "CORE-019: shared success quotas"
 description: "Core rollout for success quotas: V20 schema, activation and recovery."
 owner: Core owner
 status: stable
-generated: { by: human:miphu2804, at: 2026-11-06T22:18:48+07:00 }
+author: miphu2804
 stale_after: 2027-01-05T22:18:48+07:00
 ---
 # CORE-019: shared success quotas

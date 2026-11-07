@@ -1,3 +1,11 @@
+### 2026-11-07 — Clean README front pages and old document metadata
+
+| Area | Change |
+|---|---|
+| Docs | • READMEs outside `docs/` no longer carry frontmatter, so GitHub opens them on the title instead of a metadata table; `AGENTS.md` and the docs conventions record the rule<br>• The root README reads as a production overview again: the course-scope paragraph is gone, the boundaries table regains a Runs on column, and the repository layout is a directory tree checked against `staging`<br>• Eighteen documents move from the old `generated: { by: human:… }` field to `author:`, and the marketing README folds its one-row status table into the intro |
+
+Check: every directory in the layout tree exists on `staging` `a1245a1`; relative links in the edited front pages resolve; no `generated:` field remains in tracked Markdown; `git diff --check` passed. Rendering on GitHub was not checked.
+
 ### 2026-11-07 — Link onboarding to owned guides and local checks
 
 | Area | Change |
@@ -186,12 +194,3 @@ Check: `uv run pytest -q` (535 passed, 79 skipped), `ruff check` and `ruff forma
 | Docs | • The AI README describes the field |
 
 Check: `uv run pytest -q tests/unit_tests/test_llm_factory.py` (21 passed), `ruff check` and `ruff format --check`. Not verified: that Bifrost forwards `service_tier` to OpenAI, and no Dopbase alias sets it yet. Commit: the one that adds this entry.
-
-### 2026-11-05 — Re-embed stored agent memories after a provider change
-
-| Area | Change |
-|---|---|
-| AI | • New `src/memory/reembed.py`: `uv run python -m src.memory.reembed` embeds every stored memory with the configured provider as a dry run, and `--apply` writes all vectors in one transaction; it refuses a vector of the wrong size, a zero vector or a non-finite one |
-| Docs | • The AI README gives the order for switching an environment: set the provider in Dopbase, deploy, then re-embed; and no longer calls `sentence-transformers` the default |
-
-Check: `uv run pytest -q` (535 passed, 79 skipped), `ruff check` and `ruff format --check`. On `smartledger-local-db` (5 memories) a dry run wrote nothing, `--apply` with `cloudflare` changed every vector (cosine about 0 against the onnx ones) and `--apply` with `onnx` restored the original vectors exactly. Not verified: a run on staging. Commit: the one that adds this entry.

@@ -4,7 +4,7 @@ title: "Independent stock decreases — CORE-021"
 description: "Core handoff for stock decrease adjustments: scope and how to test."
 owner: Core owner
 status: stable
-generated: { by: human:miphu2804, at: 2026-11-06T22:18:48+07:00 }
+author: miphu2804
 stale_after: 2027-01-05T22:18:48+07:00
 ---
 # Independent stock decreases — CORE-021
