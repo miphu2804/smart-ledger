@@ -42,6 +42,8 @@ uv run evaluation/run.py memory --verbose                # show the app's INFO l
 uv run evaluation/run.py memory --gate other.toml        # use other bounds
 ```
 
+`--model` replaces only the `chat` alias. With `MODEL_TIERING_ENABLED=true` the router still picks a tier alias for each turn, so set `MODEL_TIERING_ENABLED=false` when you benchmark one alias; evaluating the tier router itself is a separate comparison with tiering on.
+
 Everything stays on your machine unless you pass `--sync`, which needs `HH_API_KEY` and spends one HoneyHive event per case. Both evaluations refuse a database that is not local, so they never touch real shops. CI runs `agent_chat` by hand through the [Eval regression](../../../docs/development/ci-cd.md#eval-regression) workflow and posts the markdown report on the pull request.
 
 ## Folders

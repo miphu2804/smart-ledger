@@ -13,9 +13,10 @@ Asks the real chat agent 23 questions about a made-up shop and checks the answer
 
 ## Run
 
-From `backend/ai`, with `smartledger-local-db` running. Seed the shop first, on the day you run it, because the seed dates sales from today:
+From `backend/ai`, with `smartledger-local-db` running. Seed the shop first, on the day you run it, because the seed dates sales from today. The seed gives the shop to the first user, so the first command adds a placeholder owner when the disposable database has no user yet, as CI does:
 
 ```bash
+docker exec smartledger-local-db psql -U smartledger -d smartledger -q -v ON_ERROR_STOP=1 -c "INSERT INTO users (display_name) SELECT 'Eval owner' WHERE NOT EXISTS (SELECT 1 FROM users)"
 docker exec -i smartledger-local-db psql -U smartledger -d smartledger -q -v ON_ERROR_STOP=1 < evaluation/agent_chat/seed.sql
 uv run evaluation/run.py agent_chat
 ```
@@ -54,5 +55,5 @@ The output shows one row per question (passes out of the repeats, slowest run), 
 - The seed has traps on purpose: sales at 00:30 and 23:30 (catches time zone bugs), discounts, voided sales, partly repaid debts and an archived product. Keep them when you edit it.
 - The two safety patterns in `metrics/safety.py` are copies of `.honeyhive/evaluators/`; change both together.
 - A run that crosses midnight shop time fails, because "today" changed after the expected answers were computed. Just rerun.
-- Inside a Claude Code terminal, run `unset ANTHROPIC_BASE_URL` first, or the model answers 401.
+- A 401 from the model means `OPENAI_API_KEY` or `OPENAI_BASE_URL` in `.env` does not match the gateway; the [runtime reference](../../docs/runtime-reference.md#configuration) owns both.
 - The agent cannot save new memories during a run, so every run starts from the same two facts.
