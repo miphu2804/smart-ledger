@@ -47,7 +47,7 @@ The calculation tool performs bounded in-process arithmetic. The optional Monty 
 
 ## Long-term memory and ONNX embeddings
 
-Long-term memory is approved by the product owner ([ADR-0002](../../../docs/architecture/adr/0002-agent-long-term-memory.md), `FR-039`) and enabled in production; the code default of `AGENT_MEMORY_ENABLED` is still `false`, so each environment sets it. Memories are scoped by user and shop; default embeddings run locally. Selecting a remote embedding provider adds an external data flow.
+Long-term memory is approved by the product owner ([ADR-0002](../../../docs/architecture/adr/0002-agent-long-term-memory.md), `FR-040`) and enabled in production; the code default of `AGENT_MEMORY_ENABLED` is still `false`, so each environment sets it. Memories are scoped by user and shop; default embeddings run locally. Selecting a remote embedding provider adds an external data flow.
 
 Turning the owner's switch off suppresses recall and extraction, but an already-recalled turn can still update usage metadata. It does not delete retained memories or guarantee zero writes. [Providers, lifecycle and authorized re-embedding](runtime-reference.md#long-term-memory-and-onnx-embeddings).
 

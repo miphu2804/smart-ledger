@@ -40,7 +40,7 @@ Sổ Nghe Lời đang chạy production và giúp người bán nhỏ ghi đơn 
 
 Hai giao diện đã có vẫn được giữ: `OWNER` dùng mobile vận hành tiệm; `ADMIN` dùng web hỗ trợ hồ sơ/trạng thái và không sửa sổ của chủ tiệm. Nhóm ưu tiên nối và làm ổn định luồng OWNER; chọn phần hỗ trợ có ích để demo thêm, không mở rộng dashboard chỉ để đủ nhiều tính năng.
 
-Mobile có đường nhận giọng nói theo nền tảng và parser FE; Bobi chat gọi AI qua Core. Các API parse audio/ảnh mới, RAG chưa cần hoàn thành cho demo chính; memory dài hạn đã được PO duyệt và bật trên production (`FR-039`), chưa nghiệm thu tích hợp. Mọi đề xuất phải được người bán kiểm tra, AI không tự ghi sổ. Phần đã triển khai và giới hạn tích hợp được ghi tại [thiết kế kỹ thuật §1](../architecture/technical-design.md#1-scope); thay đổi ưu tiên không xóa chức năng hoặc biến phần chưa có thành đã có.
+Mobile có đường nhận giọng nói theo nền tảng và parser FE; Bobi chat gọi AI qua Core. Các API parse audio/ảnh mới, RAG chưa cần hoàn thành cho demo chính; memory dài hạn đã được PO duyệt và bật trên production (`FR-040`), chưa nghiệm thu tích hợp. Mọi đề xuất phải được người bán kiểm tra, AI không tự ghi sổ. Phần đã triển khai và giới hạn tích hợp được ghi tại [thiết kế kỹ thuật §1](../architecture/technical-design.md#1-scope); thay đổi ưu tiên không xóa chức năng hoặc biến phần chưa có thành đã có.
 
 ## 2. Vấn đề
 
@@ -79,7 +79,7 @@ Demo chính dùng một tiệm thử, dữ liệu có thể đối chiếu và n
 |---|---|
 | Hoàn thiện luồng chính | Đăng nhập/tiệm, danh mục, POS/nhập câu/voice, giỏ và chốt thu/ghi nợ, lịch sử, chi phí, thu nợ, báo cáo cơ bản và Bobi chat |
 | Giữ chức năng đang có | Nhiều tiệm, barcode, tồn đơn giản, hủy đơn có dấu vết, ảnh Product, inbox/audit và ADMIN; kiểm tra phần được dùng và không gỡ bỏ để thu hẹp tài liệu |
-| Hoãn mở rộng chưa cần | Nhận diện ảnh/API audio mới, RAG, mở rộng memory ngoài `FR-039`, chart/analytics nâng cao, UI/provider chưa cần cho kịch bản, tối ưu tải lớn và kiến trúc bổ sung |
+| Hoãn mở rộng chưa cần | Nhận diện ảnh/API audio mới, RAG, mở rộng memory ngoài `FR-040`, chart/analytics nâng cao, UI/provider chưa cần cho kịch bản, tối ưu tải lớn và kiến trúc bổ sung |
 
 Các hành vi và mã yêu cầu chi tiết vẫn ở [BRD](business-requirements.md) và [PRD](product-requirements.md#11-ưu-tiên-hoàn-thành-môn-exe201). Danh mục đó không buộc hoàn thành mọi hạng mục trước demo môn học; chức năng được dùng vẫn phải đúng tiền/nợ/tồn, đúng quyền và có phản hồi lỗi dễ hiểu.
 
