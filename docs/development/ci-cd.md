@@ -25,7 +25,7 @@ Branch and review rules are in [CONTRIBUTING](../../CONTRIBUTING.md). Workflow d
 | [`mobile-release.yml`](../../.github/workflows/mobile-release.yml) | Manually triggered Android build and optional publication |
 | [`infra.yml`](../../.github/workflows/infra.yml) | Validates and applies infrastructure through the authorized operations workflow |
 | [`eval-regression.yml`](../../.github/workflows/eval-regression.yml) | Runs the explicitly requested Agent evaluation and reports its result |
-| [`honeyhive-sync.yml`](../../.github/workflows/honeyhive-sync.yml), [`honeyhive-dashboards.yml`](../../.github/workflows/honeyhive-dashboards.yml) | Apply matching observability configuration changes on eligible pushes or manual dispatch |
+| [`honeyhive-sync.yml`](../../.github/workflows/honeyhive-sync.yml), [`honeyhive-dashboards.yml`](../../.github/workflows/honeyhive-dashboards.yml) | Apply observability configuration changes on a push to `main` that touches their files |
 | [`release-policy.yml`](../../.github/workflows/release-policy.yml) | Checks the permitted production release source |
 
 ## Delivery and runtime topology
@@ -52,7 +52,7 @@ Source: [`vps-network.drawio`](../architecture/diagrams/src/vps-network.drawio),
 
 ## Path filtering
 
-Area checks are selected by paths in the workflows. Read the definitions when changing dependencies or shared files; do not infer coverage from the PR's overall green status. The required-check policy is in [CONTRIBUTING](../../CONTRIBUTING.md#required-checks-and-deployment).
+Area checks are selected by changed paths in [`scripts/ci/changes.sh`](../../scripts/ci/changes.sh), not by workflow `on.paths`, so every check still reports a result. Read the definitions when changing dependencies or shared files; do not infer coverage from the PR's overall green status. The required-check policy is in [CONTRIBUTING](../../CONTRIBUTING.md#required-checks-and-deployment).
 
 ## Service variables
 

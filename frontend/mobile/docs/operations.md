@@ -19,7 +19,7 @@ npm install
 npx expo start --dev-client   # native Firebase and sherpa-onnx require a rebuilt development client
 npm run web             # or press w: run in the browser (440px frame)
 npm run typecheck
-npm test                # tests for the assistant answer parser (node --test, no device needed)
+npm test                # unit tests under tests/ (node --test, no device needed)
 npm run export:web      # build static web into dist/
 ../../scripts/release/ios-device-release.sh   # default: build Release (staging Core) and install on the iOS Simulator; a menu picks a paired iPhone; --simulator, --device <name|UDID>, --check only checks
 ../../scripts/release/android-release.sh      # default on a machine: build a Release APK (staging Core) for the emulator ABI, install and open it on the Android emulator (starts the AVD if it is not running)
@@ -32,7 +32,7 @@ The two local build scripts check the environment before building. When a new ma
 
 - Tap **Tạo tài khoản** at the bottom of the sign-in card and enter any email and password (6 characters or more); on the email verification screen just tap **Tôi đã xác minh**. Dev builds have a **Vào app** button under the card that goes straight to the sample user.
 - Every email is a new user: after verification it goes through shop creation (name and industry). Only the **Vào app** button (dev builds) goes straight to the sample shop “Tiệm tạp hoá cô Thỏ”.
-- The first time an account opens Tổng quan on a device, the app runs the overlay guide `src/components/GuideTour.tsx` (steps in `src/lib/guideSteps.ts`): it highlights each button (Đọc đơn, Chọn hàng, Quét mã, Trợ lý, Bobi, Thông báo, the quick-switch menu, the Đơn hàng tab, the Quản lý tab). Finishing or skipping is remembered on the device and the guide does not reopen by itself; replay it from Quản lý → Xem lại hướng dẫn.
+- The first time an account opens Tổng quan on a device, the app runs the overlay guide `src/components/GuideTour.tsx` (steps in `src/lib/guideSteps.ts`): it greets the owner, then highlights the Tạo đơn tab, the Đơn hàng tab, the Bobi tab, the notification bell, the quick-switch menu and the Quản lý tab. Finishing or skipping is remembered on the device and the guide does not reopen by itself; replay it from Quản lý → Xem lại hướng dẫn.
 - Reload the app to reset the in-memory data to its initial state.
 
 ## Screens
@@ -51,13 +51,13 @@ The two local build scripts check the environment before building. When a new ma
 | `/pos` | Quick item picking in a grid, the cart, quickly adding an item to the catalog |
 | `/checkout` | Payment: cash (change), bank transfer (illustrative QR), credit |
 | `/invoice/[id]` | Internal sale detail: view the order, void it in full and view the refund; no printing/sale editing yet |
-| `/products` | Goods and stock, add/edit/delete, simulated “AI photo” |
+| `/products` | Goods and stock, add/edit/delete, product photo upload |
 | `/debts` | Debt book: partial / full repayment, history, call / remind |
 | `/bestsellers` | Best-seller ranking, slow-seller suggestions |
 | `/profile` | Edit shop details (name, address, industry), saved to Core through `PATCH /api/v1/shops/{shopId}`; full name, email, Facebook and bank account are stored only on the device |
-| `/settings` | Sound, vibration, read back the order, auto-open printing |
+| `/settings` | Vibration; sound, read-back, auto-print and auto-backup are shown as coming soon |
 | `/notifications` | In-app notifications |
-| `/ai` | Q&A with the assistant through `src/lib/agentApi.ts` → Core `/api/v1/agent/*`; conversation history. Assistant answers go through `components/ChatText.tsx` and are read by `lib/chatMarkdown.ts` for both streaming text and stored answers: `**bold**`, `` `code` ``, headings, `-`/`1.` lists, tables, ```chart blocks (bar/area charts) and ```actions blocks (`splitActions` separates them from the text; buttons that open screens per `SCREEN_LINKS` show in a separate card under the bubble, only once the answer is complete); other markup shows as plain text. With mocks on, `mockCore` answers with fake data; ask with the word "biểu đồ" or "bảng" to see tables and charts, and ask "sắp hết hàng" to see the screen button card under the bubble |
+| `/ai` | Q&A with the assistant through `src/lib/agentApi.ts` → Core `/api/v1/agent/*`; conversation history. Assistant answers go through `components/ChatText.tsx` and are read by `lib/chatMarkdown.ts` for both streaming text and stored answers: `**bold**`, `` `code` ``, headings, `-`/`1.` lists, tables, ```chart blocks (bar/line charts) and ```actions blocks (`splitActions` separates them from the text; buttons that open screens per `SCREEN_LINKS` show in a separate card under the bubble, only once the answer is complete); other markup shows as plain text. With mocks on, `mockCore` answers with fake data; ask with the word "biểu đồ" or "bảng" to see tables and charts, and ask "sắp hết hàng" to see the screen button card under the bubble |
 | `/printer` | K80/K58 printer settings screen; no device connection yet |
 | `/debug` | Connection diagnostics, dev builds only (see [Debug](#debug)) |
 

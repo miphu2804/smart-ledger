@@ -19,7 +19,7 @@ This AI-owned reference contains implementation details and operational settings
 
 - History is never summarized: older messages than `AGENT_HISTORY_TURNS` (default 30 exchanges) simply do not reach the model. The input-character cap is not a guarantee of total context size because saved assistant answers also consume context.
 - The current shop time (`Asia/Ho_Chi_Minh`) follows the new message after a cache breakpoint and is never stored, so instructions and history stay a cacheable prefix.
-- `AgentConversationRepository.recent_messages` checks the conversation belongs to the user and shop before reading it.
+- `AgentConversationRepository.recent_messages` checks in the database that the conversation belongs to the user and shop on a cache miss; the Redis key carries the user and shop, so a hit only follows an earlier passed check.
 - With `REDIS_URL` set, the repository keeps each conversation's latest messages in Redis for 24 hours, keyed by conversation, user and shop, so a repeat turn skips the database read; `save_exchange` updates a cached entry after it commits, `delete_conversation` removes it, and an unset or unreachable Redis makes every turn read PostgreSQL. Start a local one with `docker run -d --rm --name smartledger-local-redis -p 127.0.0.1:6379:6379 redis:7-alpine redis-server --maxmemory 64mb --maxmemory-policy allkeys-lru` and set `REDIS_URL=redis://127.0.0.1:6379/0`.
 - `chat_conversations.summary` and `summary_through_message_id` are unused and kept only so the previous release can roll back.
 
