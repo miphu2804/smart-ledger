@@ -7,8 +7,6 @@
 /scripts/                @miphu2804
 /secrets/                @miphu2804
 /.honeyhive/             @miphu2804
-/sync-dashboards.sh      @miphu2804
-/sync-evaluators.sh      @miphu2804
 /compose.yaml            @miphu2804
 /docs/development/       @miphu2804
 /SECURITY.md             @miphu2804

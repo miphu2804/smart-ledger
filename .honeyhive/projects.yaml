@@ -1,4 +1,4 @@
-# Projects that sync-dashboards.sh applies charts/ and alerts/ to. Staging and
+# Projects that scripts/honeyhive/sync-dashboards.sh applies charts/ and alerts/ to. Staging and
 # production share this project and are told apart by the source field.
 projects:
   - id: 3YTtWlTpmol_XX7yZ8YpG332

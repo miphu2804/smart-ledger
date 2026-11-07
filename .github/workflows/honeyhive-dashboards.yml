@@ -8,7 +8,7 @@ name: Sync HoneyHive charts and alerts
 on:
   push:
     branches: [main]
-    paths: [".honeyhive/charts/**", ".honeyhive/alerts/**", ".honeyhive/projects.yaml", "sync-dashboards.sh"]
+    paths: [".honeyhive/charts/**", ".honeyhive/alerts/**", ".honeyhive/projects.yaml", "scripts/honeyhive/sync-dashboards.sh"]
 
 permissions:
   contents: read
@@ -44,4 +44,4 @@ jobs:
         run: scripts/ci/install-honeyhive.sh
       - name: Apply charts and alerts
         # HH_API_URL is the AI service's data plane URL; the keys above are loaded from Dopbase ai/production.
-        run: HH_DATA_PLANE_URL="$HH_API_URL" bash sync-dashboards.sh
+        run: HH_DATA_PLANE_URL="$HH_API_URL" bash scripts/honeyhive/sync-dashboards.sh
