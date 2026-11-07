@@ -1,12 +1,3 @@
----
-type: Runbook
-title: "Local development"
-description: "Setup, run commands, pre-PR checks, local Compose, the local database and the shared-database migration workflow."
-owner: Technical owner
-status: stable
-author: miphu2804
-stale_after: 2027-01-03T23:08:04+07:00
----
 # Local development
 
 How to install, run and check each service on a developer machine, how the local Compose stack reaches the databases, and how schema migrations reach the shared environments. Deployment to the VPS and Vercel is in [CI/CD](ci-cd.md); each service README has its own commands and variables. Run every command below from the repository root.

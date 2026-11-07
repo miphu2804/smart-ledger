@@ -1,12 +1,3 @@
----
-type: API Contract
-title: "API Contract — SmartLedger"
-description: "Implemented FE ↔ Core and Core ↔ AI endpoint contracts, authorization, errors and stream semantics."
-owner: Core, AI and FE owners
-status: stable
-author: miphu2804
-stale_after: 2027-01-05T22:18:48+07:00
----
 # API Contract — SmartLedger
 
 This document holds the implemented source contracts; live enablement, deployment and integrated acceptance are verified separately.
@@ -25,7 +16,7 @@ CORE-018 #409 adds internal telemetry under `FR-036`; it adds no endpoint and ch
 - Do not use the ports in the architecture diagram as the API contract.
 - Bifrost and HoneyHive have no public API. FE does not call these components directly.
 
-**Source review:** endpoint availability was checked against `staging` revision `a2766ee3a37e23c0f03fd43383b608c1b2fac898`. The checked-in Core includes stock-in, media, paginated OWNER lists, filtered sales totals, notifications and ADMIN growth. Source availability does not establish live migration, flags, deployment or integrated acceptance. Historical branch evidence belongs to the [Core verification guides](../../backend/core/docs/index.md), not the consumer contract.
+**Source review:** endpoint availability was checked against `staging` revision `a2766ee3a37e23c0f03fd43383b608c1b2fac898`. The checked-in Core includes stock-in, media, paginated OWNER lists, filtered sales totals, notifications and ADMIN growth. Source availability does not establish live migration, flags, deployment or integrated acceptance. Historical branch evidence belongs to the [Core verification guides](../../backend/core/README.md), not the consumer contract.
 
 **AI and the Agent proxy:** AI has `GET /health` and ten `/internal/v1/agent/*` endpoints (chat, chat/stream, list, detail, rename, delete, `GET`/`PUT` memory/settings, `GET`/`DELETE` memory/items); Core proxies all ten endpoints. Every `/internal/v1/*` path requires `X-Internal-Token`; a missing or wrong token, or AI without `INTERNAL_API_TOKEN` configured, returns `401`, except `/health`, which stays public; `GET /metrics` (request counts and latency per route for Grafana) also needs no token because AI publishes no port and only containers on the same project network, such as Alloy, can call it. Core proxies `/api/v1/agent/*` to these ten paths, sends `X-Internal-Token` and takes `user_id`/`shop_id` from the authenticated OWNER's shop; AI `404` becomes `conversation_not_found`; AI `422` carrying a guardrail code (section 6) keeps `422` and that code in `code`; any other error or timeout becomes `503 ai_unavailable`. An error before the first event of `/api/v1/agent/chat/stream` is JSON, so the client sends `Accept: text/event-stream, application/json`; if it accepts only `text/event-stream`, Core cannot write the JSON error. This source audit does not establish end-to-end acceptance of the FE → Core → AI flow with a real model.
 

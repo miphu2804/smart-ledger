@@ -45,6 +45,7 @@ jobs:
       landing: ${{ steps.filter.outputs.landing }}
       containers: ${{ steps.filter.outputs.containers }}
       shell: ${{ steps.filter.outputs.shell }}
+      docs: ${{ steps.filter.outputs.docs }}
     steps:
       # The whole history, so changes.sh can diff against the base commit.
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -76,6 +77,17 @@ jobs:
           actionlint
           git ls-files -z '*.sh' ':!backend/core' | xargs -0 shellcheck --severity=warning
           scripts/ci/check-provider-coupling.sh
+
+  # docs checks that the .okf/ metadata bundle matches the Markdown documents and that their relative links resolve.
+  # It needs only Python 3 from the runner image. See docs/README.md#conventions.
+  docs:
+    needs: [select-runner, changes]
+    if: needs.changes.outputs.docs == 'true'
+    runs-on: ${{ fromJSON(needs.select-runner.outputs.runs_on) }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Check the OKF bundle
+        run: python3 scripts/docs/okf_sync.py --check
 
   ai:
     needs: [select-runner, changes]
@@ -232,7 +244,7 @@ jobs:
   summary:
     name: CI result summary
     if: always()
-    needs: [select-runner, ai, core, mobile-web, landing, container-images]
+    needs: [select-runner, docs, ai, core, mobile-web, landing, container-images]
     runs-on: ${{ fromJSON(needs.select-runner.outputs.runs_on) }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -240,6 +252,7 @@ jobs:
           sparse-checkout: scripts/ci
       - name: Build compact report
         env:
+          DOCS_RESULT: ${{ needs.docs.result }}
           AI_RESULT: ${{ needs.ai.result }}
           AI_TESTS: ${{ needs.ai.outputs.tests }}
           AI_FAILURES: ${{ needs.ai.outputs.failures }}

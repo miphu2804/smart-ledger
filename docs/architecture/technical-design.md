@@ -1,12 +1,3 @@
----
-type: Technical Design
-title: "Technical design — SmartLedger"
-description: "Implementation status (§1), components, data, main flows and verification."
-owner: Technical owner
-status: stable
-author: miphu2804
-stale_after: 2027-01-05T22:18:48+07:00
----
 # Technical design — SmartLedger
 
 This document describes the responsibilities of the checked-in components of SmartLedger, which runs in production, and keeps source implementation separate from live enablement and acceptance. Core, AI and FE owners review it.
@@ -65,7 +56,7 @@ ANDROID browser handoff and V18 are checked in, default-off. The service binds c
 - Read views exclude customer contacts but expose shop phone/address. Enabled tracing can export personal data remaining after redaction.
 - Mobile totals use Core report APIs; some Analytics charts/best-seller displays still aggregate loaded invoices. See [current report boundaries](../../frontend/mobile/docs/operations.md#homeanalytics-metrics).
 
-The [AI architecture](../../backend/ai/docs/architecture.md) owns these boundaries, and the [runtime reference](../../backend/ai/docs/runtime-reference.md) owns defaults and implementation details. The [API contract](../contracts/api-contracts.md) owns consumer semantics; [service verification guides](../../backend/core/docs/index.md) retain feature-specific procedures and dated evidence. BRD/PRD/ADR history and approval status are unchanged.
+The [AI architecture](../../backend/ai/docs/architecture.md) owns these boundaries, and the [runtime reference](../../backend/ai/docs/runtime-reference.md) owns defaults and implementation details. The [API contract](../contracts/api-contracts.md) owns consumer semantics; [service verification guides](../../backend/core/README.md) retain feature-specific procedures and dated evidence. BRD/PRD/ADR history and approval status are unchanged.
 
 ## 2. Components and ownership
 

@@ -1,12 +1,3 @@
----
-type: Guide
-title: "Diagram guide"
-description: "How logical architecture diagrams are scoped, edited and checked without publishing private deployment details."
-owner: Technical owner
-status: stable
-author: miphu2804
-stale_after: 2027-01-05T22:18:48+07:00
----
 # Diagram guide
 
 Repository diagrams explain logical responsibilities, data relationships, code paths and the delivery/runtime topology drawn from tracked `deploy/` and workflow files. Environment addresses, domains, IPs, server paths, credential values and access procedures belong to the private operations knowledge base and must not appear in a diagram source or export; use generic labels such as `private host` instead.
@@ -49,4 +40,4 @@ docs/architecture/service-walkthrough/export.sh
 - Validate node/edge references, render the affected artifact when tooling is available, and inspect readability. Do not claim visual verification from a successful source edit alone.
 - Do not embed credentials, certificate-to-environment mappings or private network identifiers in diagram metadata or compressed exports.
 
-Product mock screenshots and design references have their own scope in [marketing](../../marketing/README.md) and [design](../../design/index.md). They are not provider, device or acceptance evidence.
+Product mock screenshots and design references have their own scope in [marketing](../../marketing/README.md) and [design](../../../.okf/docs/design/index.md). They are not provider, device or acceptance evidence.

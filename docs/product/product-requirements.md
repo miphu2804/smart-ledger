@@ -1,12 +1,3 @@
----
-type: Product Requirements
-title: "Yêu cầu sản phẩm"
-description: "Hành vi quan sát được `FR-*`, `NFR-*` và tiêu chí nghiệm thu `AC-*`."
-owner: Chủ sản phẩm
-status: stable
-generated: { by: human:TranTho918, at: 2026-11-06T04:32:37+07:00 }
-stale_after: 2027-01-05T04:32:37+07:00
----
 # Yêu cầu sản phẩm
 
 Chủ sản phẩm phê duyệt tài liệu này, có người rà soát kỹ thuật. Danh mục yêu cầu và trạng thái tích hợp được giữ để tra cứu.

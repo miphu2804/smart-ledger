@@ -1,11 +1,3 @@
----
-type: Verification Guide
-title: "SmartLedger Core — verification and regression guide"
-description: "Disposable-database checks, feature regression commands and migration evidence boundaries for Core."
-owner: Core owner
-status: stable
-author: miphu2804
----
 # SmartLedger Core — verification and regression guide
 
 Source review: `staging` commit `a2766ee3a37e23c0f03fd43383b608c1b2fac898`. This Core-owned guide preserves detailed regression commands, provider setup and smoke procedures moved out of the service landing page. Commands and `scripts/` paths are relative to `backend/core` unless stated otherwise. It is an engineering verification guide, not a product contract or deployment approval. The [API contracts](../../../docs/contracts/api-contracts.md), feature handoffs and [technical design](../../../docs/architecture/technical-design.md) own behavior; local tests prove implementation against their checked-in revision only.
