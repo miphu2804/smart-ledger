@@ -4,8 +4,8 @@ title: "CI/CD"
 description: "Flow from feature branch to the VPS and Vercel, GitHub environments, VPS provisioning and Core CORS origins."
 owner: Technical owner
 status: stable
-generated: { by: human:miphu2804, at: 2026-11-06T22:18:48+07:00 }
-stale_after: 2027-01-05T22:18:48+07:00
+generated: { by: human:miphu2804, at: 2026-11-07T02:08:00+07:00 }
+stale_after: 2027-01-06T02:08:00+07:00
 ---
 # CI/CD
 
@@ -50,11 +50,11 @@ Job `changes` runs [`scripts/ci/changes.sh`](../../scripts/ci/changes.sh), which
 
 | Area | Paths | Jobs |
 |---|---|---|
-| `ai` | `backend/ai/**`, `supabase/**`, `deploy-backend.yml` | `ai`, `container-images`, `deploy-backend` |
-| `core` | `backend/core/**`, `deploy-backend.yml` | `core`, `container-images`, `deploy-backend` |
+| `ai` | `backend/ai/**`, `supabase/**`, `deploy-backend.yml` | `ai`, `deploy-backend` |
+| `core` | `backend/core/**`, `deploy-backend.yml` | `core`, `deploy-backend` |
 | `mobile` | `frontend/mobile/**`, `deploy-web.yml` | `mobile-web`, `deploy-web` |
 | `landing` | `frontend/web/**`, `deploy-landing.yml` | `landing`, `deploy-landing` |
-| `containers` | `compose.yaml` | `container-images` |
+| `containers` | `compose.yaml`, `backend/ai/**`, `backend/core/**` | `container-images` |
 | `shell` | `**/*.sh`, `.github/workflows/**`, `.shellcheckrc` | `shellcheck` |
 
 - A change to `ci.yml`, `cd.yml`, `select-runner.yml` or `scripts/ci/` runs everything, because the jobs and deploys run those scripts; a docs-only change deploys nothing.
@@ -204,7 +204,7 @@ Compose names a project after its directory unless the file sets `name:`, which 
 
 1. Maven builds Core's jar on the runner; [`Dockerfile.prebuilt`](../../backend/core/Dockerfile.prebuilt) wraps it in a JRE.
 2. Images are pushed for `linux/amd64` as `ghcr.io/<owner>/<repo>-<service>-<environment>:<sha>`, using the job's `GITHUB_TOKEN`.
-3. The job uploads the settings GitHub owns, then runs [`deploy/vps/deploy.sh`](../../deploy/vps/deploy.sh) over SSH.
+3. The job writes `core.env` and `ai.env` from Dopbase `core/<environment>` and `ai/<environment>`, then runs [`deploy/vps/deploy.sh`](../../deploy/vps/deploy.sh) over SSH.
 4. `deploy.sh` writes `ENVIRONMENT` and the new image names to `.env`, pulls, starts `ai` then `core` with `docker compose up --wait`, waits once more when a container is not healthy (Core retries its first database connection for 30 s, so this covers a slower start), fails if it is still unhealthy, and prunes unused images.
 5. GHCR keeps the latest 10 staging and 20 production images per service; that is the rollback window.
 
@@ -238,7 +238,7 @@ docker run --rm -v "$PWD:/work" -w /work -e SMARTLEDGER_VPS_HOST -e SMARTLEDGER_
   smartledger-infra scripts/infra/run.sh plan staging --scope app
 ```
 
-[`infra.yml`](../../.github/workflows/infra.yml) is the GitHub adapter and only maps secrets to those variables. [`scripts/ci/plan-infra-runs.sh`](../../scripts/ci/plan-infra-runs.sh) lists the runs. A pull request that touches `deploy/` or `scripts/infra/` gets only the lint, so code that is not merged never reads the VPS key; a push to `staging` plans and then applies `staging` in scope `app`; a push to `main` plans and then applies `production` in scope `all`; each plan is uploaded as an artifact, and a full artifact quota only skips the upload because the plan is also in the job log; Actions, Infra, Run workflow runs any combination by hand. The plan and apply jobs, both [`infra-run.yml`](../../.github/workflows/infra-run.yml), share the concurrency group `vps-<environment>` with the backend deploy, because both write the app directory; `queue: max` makes the jobs wait in turn instead of GitHub cancelling all waiting jobs but the newest. Its `lint` job runs [`scripts/infra/lint.sh`](../../scripts/infra/lint.sh), the syntax check of both scopes and `ansible-lint` with only `uv` installed; `ci.yml` lints the scripts and workflows and runs `scripts/ci/check-provider-coupling.sh`, which keeps GitHub names out of `deploy/` and `scripts/`. It needs three GitHub environments: `infra-staging` limited to branch `staging`, and `infra-production-plan` and `infra-production` limited to branch `main`; a production apply first waits in job `approve` on `production-approval`, after the plan and outside the VPS lock; the branch rule keeps a manual run from another branch away from the key. Each holds variables `SMARTLEDGER_VPS_HOST`, `SMARTLEDGER_VPS_USER` and `DOPBASE_URL` and secrets `SSH_PRIVATE_KEY` (base64 of an admin login's key with sudo, not the deploy key), `SSH_KNOWN_HOSTS` and the five `DOPBASE_TOKEN_*` runner tokens of that environment's groups. Create each token with `dopbase token create <group>/<environment> --name github-<GitHub environment>-<date> --expires-in 45d --json` and store its `plaintextToken` field, which starts with `dbs_`; the `token` field is only the metadata, and Dopbase keeps a revoked token's name reserved, hence the date.
+[`infra.yml`](../../.github/workflows/infra.yml) is the GitHub adapter and only maps secrets to those variables. [`scripts/ci/plan-infra-runs.sh`](../../scripts/ci/plan-infra-runs.sh) lists the runs. A pull request that touches `deploy/` or `scripts/infra/` gets only the lint, so code that is not merged never reads the VPS key; a push to `staging` plans and then applies `staging` in scope `app`; a push to `main` plans and then applies `production` in scope `all`; each plan is uploaded as an artifact, and a full artifact quota only skips the upload because the plan is also in the job log; Actions, Infra, Run workflow runs any combination by hand. The plan and apply jobs, both [`infra-run.yml`](../../.github/workflows/infra-run.yml), share the concurrency group `vps-<environment>` with the backend deploy, because both write the app directory; `queue: max` makes the jobs wait in turn instead of GitHub cancelling all waiting jobs but the newest. Its `lint` job runs [`scripts/infra/lint.sh`](../../scripts/infra/lint.sh), the syntax check of both scopes and `ansible-lint` with only `uv` installed; `ci.yml` lints the scripts and workflows and runs `scripts/ci/check-provider-coupling.sh`, which keeps GitHub names out of `deploy/` and `scripts/`. It needs three GitHub environments: `infra-staging` limited to branch `staging`, and `infra-production-plan` and `infra-production` limited to branch `main`; a production apply first waits in job `approve` on `production-approval`, after the plan and outside the VPS lock; the branch rule keeps a manual run from another branch away from the key. Each holds variables `SMARTLEDGER_VPS_USER` and `DOPBASE_URL` and secrets `SSH_PRIVATE_KEY` (base64 of an admin login's key with sudo, not the deploy key) and the five `DOPBASE_TOKEN_*` runner tokens of that environment's groups; the VPS address and pinned host key come from `VPS_HOST` and `VPS_KNOWN_HOSTS` in Dopbase `vps/<environment>`. Create each token with `dopbase token create <group>/<environment> --name github-<GitHub environment>-<date> --expires-in 45d --json` and store its `plaintextToken` field, which starts with `dbs_`; the `token` field is only the metadata, and Dopbase keeps a revoked token's name reserved, hence the date.
 
 Dopbase owns every value, so the playbook has no fallbacks: it stops before it changes anything when `CADDY_DOMAIN`, `VPS_SSH_PUBLIC_KEY` (scope `all`) or, with `GRAFANA_PG_HOST` set, `GRAFANA_PG_PORT`, `GRAFANA_PG_DATABASE` and `GRAFANA_PG_PASSWORD` are empty. A domain or token left empty skips its feature.
 
@@ -266,7 +266,7 @@ The first deploy must include both services (start CD by hand with `backend-ai` 
 | `DATABASE_URL`, `DATABASE_USERNAME`, `DATABASE_PASSWORD` | Supabase JDBC URL of the environment |
 | `FIREBASE_PROJECT_ID`, `FIREBASE_SERVICE_ACCOUNT_JSON` | Firebase project of the environment; empty key falls back to `GOOGLE_APPLICATION_CREDENTIALS` |
 | `JAVA_TOOL_OPTIONS` | Heap limit, e.g. `-Xmx256m` |
-| `CORS_ALLOWED_ORIGINS` | From GitHub, see [Core CORS origins](#core-cors-origins) |
+| `CORS_ALLOWED_ORIGINS` | From Dopbase, see [Core CORS origins](#core-cors-origins) |
 | `CLOUDINARY_ENABLED` | `true` only after V13 is migrated in that environment |
 | `CLOUDINARY_CLOUD_NAME`, `CLOUDINARY_API_KEY`, `CLOUDINARY_API_SECRET` | Only in `core.env`, never in Vercel, GitHub variables or client code |
 | `CLOUDINARY_PUBLIC_ID_PREFIX` | Required when enabled, e.g. `smartledger/staging`; no leading or trailing slash, no `..` |
@@ -282,7 +282,7 @@ Compose sets `AI_BASE_URL`, `SERVER_PORT` and `FLYWAY_ENABLED=false` itself. Bef
 | `POSTGRES_URL` | Supabase `postgresql://` URL of the environment |
 | `AI_SQL_READER_URL` | Read-only `ai_sql_reader` login as a `postgresql://` URL; empty means the agent cannot read shop data |
 | `POSTGRES_POOL_MAX_SIZE`, `SQL_POOL_MAX_SIZE` | Optional, default `2`; they share the Supabase pooler limit with Core ([AI README](../../backend/ai/README.md#database-access)) |
-| Model and tracing variables | From GitHub, see below |
+| Model and tracing variables | From Dopbase, see below |
 | `AGENT_MEMORY_*`, `CLOUDFLARE_ACCOUNT_ID`, `CLOUDFLARE_API_TOKEN` | Optional, `ai.env` only; memory is off until the PO approves it ([ADR-0002](../architecture/adr/0002-agent-long-term-memory.md), [AI README](../../backend/ai/README.md#long-term-memory-off-by-default)) |
 | `REDIS_URL` | `redis://redis:6379/0`, the stack's own Redis; unset makes every chat turn read its history from PostgreSQL |
 
@@ -321,7 +321,7 @@ Source: [`dopbase-secrets-and-backup.drawio`](../architecture/diagrams/src/dopba
 
 The VPS holds the age public key only, so it writes an archive that nothing on the VPS can read back.
 
-Dopbase, the team's self-hosted secrets manager, runs on the same VPS as its own Compose project in `/opt/dopbase` ([`deploy/dopbase/`](../../deploy/dopbase/)), shared by every environment and behind the same Caddy as Core. The playbook sets it up only when `DOPBASE_DOMAIN` holds a name that resolves to the VPS, `secrets.songheloi.id.vn`; without it every Dopbase task is skipped. The zone's nameservers are Mắt Bão, not Cloudflare, so Cloudflare Access cannot sit in front of it: until the zone moves, the login and setup pages are protected only by Dopbase's own password, and `sites/dopbase.caddy` is where an allowlist or `basic_auth` would go. On first start Dopbase prints a protected setup link, which an operator must open right away because the setup page is reachable by anyone who has the address: read it with `docker compose logs dopbase` in `/opt/dopbase`. Dopbase is the source of every service variable: the backend deploy exports `core/<environment>` and `ai/<environment>` with a runner token per service, and [`scripts/infra/run.sh`](../../scripts/infra/run.sh) exports the VPS files for the playbook. Create the tokens once per environment with `dopbase token create core/<environment> --name github-deploy` (and the same for `ai`), save them as `DOPBASE_CORE_TOKEN` and `DOPBASE_AI_TOKEN` on `backend-<environment>`, and set the variable `DOPBASE_URL` to `https://secrets.songheloi.id.vn`. Because Dopbase runs on the VPS it serves, a lost VPS is rebuilt in this order: restore Dopbase from its backup (below), then run the wrapper.
+Dopbase, the team's self-hosted secrets manager, runs on the same VPS as its own Compose project in `/opt/dopbase` ([`deploy/dopbase/`](../../deploy/dopbase/)), shared by every environment and behind the same Caddy as Core. The playbook sets it up only when `DOPBASE_DOMAIN` holds a name that resolves to the VPS, `secrets.songheloi.id.vn`; without it every Dopbase task is skipped. The zone's nameservers are Mắt Bão, not Cloudflare, so Cloudflare Access cannot sit in front of it: until the zone moves, the login and setup pages are protected only by Dopbase's own password, and `sites/dopbase.caddy` is where an allowlist or `basic_auth` would go. On first start Dopbase prints a protected setup link, which an operator must open right away because the setup page is reachable by anyone who has the address: read it with `docker compose logs dopbase` in `/opt/dopbase`. Dopbase is the source of every service variable: the backend deploy exports `core/<environment>` and `ai/<environment>` with a runner token per service, and [`scripts/infra/run.sh`](../../scripts/infra/run.sh) exports the VPS files for the playbook. Create the tokens once per environment with `dopbase token create core/<environment> --name github-deploy` (and the same for `ai`), save them as `DOPBASE_TOKEN_CORE` and `DOPBASE_TOKEN_AI` (and the `vps` token as `DOPBASE_TOKEN_VPS`) on `backend-<environment>`, and set the variable `DOPBASE_URL` to `https://secrets.songheloi.id.vn`. Because Dopbase runs on the VPS it serves, a lost VPS is rebuilt in this order: restore Dopbase from its backup (below), then run the wrapper.
 
 Its SQLite database and master key live in the `dopbase_data` volume, which is the only copy of every stored secret, so [`deploy/dopbase/backup.sh`](../../deploy/dopbase/backup.sh) copies it off-site every night at 03:00 as a cron job of user `deploy`, logging to `/var/log/dopbase-backup.log`. The script stops Dopbase for the few seconds of the copy, because a tar of a running SQLite database can catch a torn write-ahead log, encrypts the archive with age before it leaves the machine, and uploads it to an R2 bucket as `dopbase-<timestamp>.tar.gz.age`. The private half of the age key stays with the maintainer and never reaches the VPS, so a leaked bucket or a leaked VPS token exposes nothing. Old archives are deleted by a lifecycle rule on the bucket, which keeps the token free of delete permission; set the rule to the retention the team wants, for example 30 days.
 
@@ -437,7 +437,7 @@ A deploy can succeed while production still does not work. Check these first:
 
 | Check | Symptom when missing |
 |---|---|
-| `VPS_*` set in `backend-production` and the [one-time setup](#one-time-setup) done | `Permission denied` or `Host key verification failed` |
+| `VPS_*` set in Dopbase `vps/production`, `DOPBASE_TOKEN_VPS` in `backend-production`, and the [one-time setup](#one-time-setup) done | `Permission denied` or `Host key verification failed` |
 | Domain resolves to the VPS, route in `sites/production.caddy` | TLS errors in the app |
 | Firebase Email/Password enabled, web domain in Authorized domains | Sign-in returns 400 `signInWithPassword` |
 | AI baseline and all Core migrations applied ([Database migrations](local-development.md#database-migrations)) | Chat returns 503 `ai_unavailable`, or Core fails its schema check |

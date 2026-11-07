@@ -4,8 +4,8 @@ title: "Sổ Nghe Lời — Mobile (Expo)"
 description: "How to run, configure and test the OWNER mobile app, including Firebase, speech and Core setup."
 owner: FE owner
 status: stable
-generated: { by: human:miphu2804, at: 2026-11-06T22:18:48+07:00 }
-stale_after: 2027-01-05T22:18:48+07:00
+generated: { by: human:miphu2804, at: 2026-11-07T02:08:00+07:00 }
+stale_after: 2027-01-06T02:08:00+07:00
 ---
 # Sổ Nghe Lời — Mobile (Expo)
 
@@ -20,7 +20,7 @@ npm install
 npx expo start          # scan the QR with Expo Go (a build that supports SDK 57)
 npm run web             # or press w: run in the browser (440px frame)
 npm run typecheck
-npm test                # tests for the assistant answer parser (node --test, no device needed)
+npm test                # unit tests in tests/ (node --test, no device needed)
 npm run export:web      # build static web into dist/
 ../../scripts/release/ios-device-release.sh   # default: build Release (staging Core) and install on the iOS Simulator; a menu picks a paired iPhone; --simulator, --device <name|UDID>, --check only checks
 ../../scripts/release/android-release.sh      # default on a machine: build a Release APK (staging Core) for the emulator ABI, install and open it on the Android emulator (starts the AVD if it is not running)
@@ -33,7 +33,7 @@ The two local build scripts check the environment before building. When a new ma
 
 - Tap **Tạo tài khoản** at the bottom of the sign-in card and enter any email and password (6 characters or more); on the email verification screen just tap **Tôi đã xác minh**. Dev builds have a **Vào app** button under the card that goes straight to the sample user.
 - Every email is a new user: after verification it goes through shop creation (name and industry). Only the **Vào app** button (dev builds) goes straight to the sample shop “Tiệm tạp hoá cô Thỏ”.
-- The first time an account opens Tổng quan on a device, the app runs the overlay guide `src/components/GuideTour.tsx` (steps in `src/lib/guideSteps.ts`): it highlights each button (Đọc đơn, Chọn hàng, Quét mã, Trợ lý, Bobi, Thông báo, the quick-switch menu, the Đơn hàng tab, the Quản lý tab). Finishing or skipping is remembered on the device and the guide does not reopen by itself; replay it from Quản lý → Xem lại hướng dẫn.
+- The first time an account opens Tổng quan on a device, the app runs the overlay guide `src/components/GuideTour.tsx` (steps in `src/lib/guideSteps.ts`): it shows a welcome card, then highlights the Tạo đơn tab, the Đơn hàng tab, the Trợ lý Bobi tab, Thông báo, the quick-switch menu and the Quản lý tab. Finishing or skipping is remembered on the device and the guide does not reopen by itself; replay it from Quản lý → Xem lại hướng dẫn.
 - Reload the app to reset the in-memory data to its initial state.
 
 ## Screens
@@ -45,7 +45,7 @@ The two local build scripts check the environment before building. When a new ma
 | `/(tabs)` | Home: revenue today/this week/this month, tasks to handle, suggestions and best sellers |
 | `/analytics` | Analysis by period: revenue, trend by hour/day of week/week of month, expenses, estimated gross profit, best sellers, debts |
 | `/(tabs)/invoices` | Orders: infinite scroll, 20 orders at a time; time filter and search run in Core |
-| `/(tabs)/sales` | Sales: opens straight to the paged catalog (20 items per page, search/filter/sort in Core), pick items and view the cart; the Zen ring (drag and drop, snaps to the left/right edge, keeps its position across tabs) opens Q&A, Đọc đơn or today's report |
+| `/(tabs)/sales` | Sales: opens straight to the paged catalog (20 items per page, search/filter/sort in Core), pick items and view the cart, with Quét mã and Đọc đơn buttons; the Trợ lý Bobi tab opens `/ai` |
 | `/(tabs)/more` | Management: profile, reports, goods, expenses, debts, settings and sign out |
 | `/expenses` | Expenses by month, expense breakdown, add an expense by voice / manual entry |
 | `/voice` | Đọc đơn: type text or hold the mic button, offer to add unknown items to the catalog, edit quantities. Mic: web uses the Web Speech API (`vi-VN`); Android uses the sherpa-onnx model on the device (see “Speech recognition on Android”), with no fake sample phrases any more. When nothing is supported the app says so and uses the Nhập tay button |
@@ -173,7 +173,7 @@ Flow: Firebase authenticates (email or Facebook) → FE sends the **Firebase ID 
 2. Reopening the app: Firebase restores the session → `GET /api/v1/me`. `404 auth_profile_not_found` (still signed in to Firebase but Core has no account) → the app returns to the name screen. `401` → sign out. `403 account_disabled` → sign out and report that the account is locked.
 3. `needsOnboarding = true` (no shop yet) → the shop creation screen, which calls the real `POST /shops` (Core stores `industry` as a string — the chosen industries are joined with ", ").
 
-The business APIs (catalog/products, customers, POS/checkout creating a draft then confirming, orders, debts, expenses, assistant) all need the `X-Shop-Id` header; the contract is in [API contracts](../../docs/contracts/api-contracts.md). With the real Core, mobile uses the `src/lib/*Api.ts` clients for the connected flows; Home/Analytics do not call `/api/v1/reports/summary` yet (see [Home/Analytics metrics](#homeanalytics-metrics)). `SaleDraft.confirm` accepts any `initialPaidVnd` from 0 to the order total — when underpaid, Core (`SaleDraftServiceImpl.confirm`/`customerForConfirmation`) creates a `Debt` for the customer (it needs an existing `customerId` or a `customerName` so Core can create a new customer; with neither it fails with `customer_required_for_debt`); this matches the mobile credit payment screen. `EXPO_PUBLIC_USE_MOCK=true` enables a preview mode without the real Core — `src/lib/mockCore.ts` simulates those endpoints in memory.
+The business APIs (catalog/products, customers, POS/checkout creating a draft then confirming, orders, debts, expenses, assistant) all need the `X-Shop-Id` header; the contract is in [API contracts](../../docs/contracts/api-contracts.md). With the real Core, mobile uses the `src/lib/*Api.ts` clients for the connected flows; Home and Analytics read their period totals from Core `/api/v1/reports/*` (see [Home/Analytics metrics](#homeanalytics-metrics)). `SaleDraft.confirm` accepts any `initialPaidVnd` from 0 to the order total — when underpaid, Core (`SaleDraftServiceImpl.confirm`/`customerForConfirmation`) creates a `Debt` for the customer (it needs an existing `customerId` or a `customerName` so Core can create a new customer; with neither it fails with `customer_required_for_debt`); this matches the mobile credit payment screen. `EXPO_PUBLIC_USE_MOCK=true` enables a preview mode without the real Core — `src/lib/mockCore.ts` simulates those endpoints in memory.
 
 Mobile checkout currently requires a `productId` for every item. The “Món ngoài danh mục” flow quickly creates a Product with `tracked=false`, then adds it to the cart; it does not use a custom item with `productId=null` yet, although Core supports it.
 
@@ -194,13 +194,7 @@ Run Core locally only when changing the backend (see [Local development](../../d
 
 ### Home/Analytics metrics
 
-Home and Analytics load the sale/product/debt/expense lists through [`useCoreData.ts`](src/lib/useCoreData.ts), convert the data with [`coreAdapters.ts`](src/lib/coreAdapters.ts), then compute metrics on the device with [`stats.ts`](src/lib/stats.ts). This is not the Core summary response:
-
-- Orders use `soldAt` as the sale time; orders currently `VOIDED` are excluded and periods are filtered by device time. Voiding an order from an earlier period can change that old period's figures, instead of creating an adjustment in the `voidedAt` period as Core does.
-- Revenue is the total of the remaining orders, without separating `grossRevenueVnd`, `voidedRevenueVnd`, `netRevenueVnd` or cash flow by `receivedAt`/`refundedAt`.
-- Gross profit is revenue minus the **estimated** cost of goods, before operating expenses. Cost comes from the current catalog; without `costPriceVnd` the adapter estimates 60% of the catalog selling price, and a line that matches no product uses 60% of the line unit price. This is not a historical cost snapshot or official profit.
-
-The standard Core summary definition is in [API contract — Period overview](../../docs/contracts/api-contracts.md#period-overview). Moving FE to the summary needs its own integration task and acceptance; editing this document does not prove that mobile reports match Core or meet `FR-006`/`AC-031`.
+Home loads its period figures from Core through [`useHomeOverview.ts`](src/lib/useHomeOverview.ts) (`/reports/summary` with `/sales/summary`, `/reports/top-products` and `GET /products?stockStatus=NEEDS_RESTOCK`). Analytics reads revenue, voided orders, refunds and estimated profit from Core through [`useReportTotals.ts`](src/lib/useReportTotals.ts) (`/reports/summary`, `/reports/profit-estimate` and `/sales/summary`). Only the chart sections still compute on the device from [`useCoreData.ts`](src/lib/useCoreData.ts) and [`stats.ts`](src/lib/stats.ts). The standard Core summary definition is in [API contract — Period overview](../../docs/contracts/api-contracts.md#period-overview).
 
 ### Email and password sign-in
 

@@ -4,8 +4,8 @@ title: "HoneyHive config as code"
 description: "Evaluators, charts and alerts that watch the shop agent, kept as files and how to apply them."
 owner: AI owner
 status: stable
-generated: { by: human:miphu2804, at: 2026-11-04T22:01:25+07:00 }
-stale_after: 2027-01-03T22:01:25+07:00
+generated: { by: human:miphu2804, at: 2026-11-07T02:08:00+07:00 }
+stale_after: 2027-01-06T02:08:00+07:00
 ---
 # HoneyHive config as code
 
@@ -54,7 +54,7 @@ HH_DATA_PLANE_API_KEY=$(v HH_DATA_PLANE_API_KEY) HH_DATA_PLANE_URL=$(v HH_API_UR
 
 Pass only these variables rather than sourcing the whole file: the CLI still reads `HH_API_KEY` and `HH_API_URL` as deprecated names and prints a warning on stdout, which breaks the `jq` in the scripts.
 
-Every value comes from `backend/ai/.env`, declared in `AppConfig` and `.env.example` and held in Dopbase `ai/production`; nothing is written into the scripts or workflows. The CLI names the project key `HH_PROJECT_API_KEY` and the data plane URL `HH_DATA_PLANE_URL`, which are the AI service's `HH_API_KEY` and `HH_API_URL`. `HH_DATA_PLANE_API_KEY` and `HH_CONTROL_PLANE_API_KEY` are fine-grained keys under Settings, Workspace, API Keys: a Data Plane key with `project.chart.list`, `.post` and `.put`, and a Control Plane key with `project.alert.list` and `.post`; with `HH_CONTROL_PLANE_URL` only `sync-dashboards.sh` reads them. The workflows read the keys from repository secrets and the URLs from repository variables, named as in Dopbase.
+Every value comes from `backend/ai/.env`, declared in `AppConfig` and `.env.example` and held in Dopbase `ai/production`; nothing is written into the scripts or workflows. The CLI names the project key `HH_PROJECT_API_KEY` and the data plane URL `HH_DATA_PLANE_URL`, which are the AI service's `HH_API_KEY` and `HH_API_URL`. `HH_DATA_PLANE_API_KEY` and `HH_CONTROL_PLANE_API_KEY` are fine-grained keys under Settings, Workspace, API Keys: a Data Plane key with `project.chart.list`, `.post` and `.put`, and a Control Plane key with `project.alert.list` and `.post`; with `HH_CONTROL_PLANE_URL` only `sync-dashboards.sh` reads them. The workflows load the keys and URLs from Dopbase `ai/production` with the `DOPBASE_TOKEN_AI` runner token of GitHub environment `backend-production`.
 
 Create a new evaluator locally and commit the `state.json` the run updates: an evaluator created in CI would get an ID the workflow cannot commit, so the workflow refuses to sync while an evaluator has no ID in `state.json`.
 

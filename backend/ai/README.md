@@ -4,8 +4,8 @@ title: "SmartLedger AI"
 description: "Internal FastAPI service for the owner Agent chat: routes, configuration, guardrails, memory and observability."
 owner: AI owner
 status: stable
-generated: { by: human:miphu2804, at: 2026-11-06T22:18:48+07:00 }
-stale_after: 2027-01-05T22:18:48+07:00
+generated: { by: human:miphu2804, at: 2026-11-07T02:08:00+07:00 }
+stale_after: 2027-01-06T02:08:00+07:00
 ---
 # SmartLedger AI
 
@@ -264,7 +264,7 @@ Settings come from `src/app_config.py`, read from the environment or `.env`; bla
 | | `SQL_TIMEOUT_MS` | `3000` | Statement timeout |
 | | `SQL_ROW_LIMIT` | `100` | Row cap per query |
 | Model | `MODEL_ALIASES` | `chat` on `gpt-6-luna` over `openai_responses`, effort `medium` | Alias to `protocol`, `model` and optional `effort` |
-| | `MODEL_FALLBACKS` | `[]` | JSON list of `provider:model` |
+| | `MODEL_FALLBACKS` | `[]` | JSON list of `protocol:model` |
 | | `MODEL_TIMEOUT_SECONDS` | `20` | Timeout per model request |
 | | `MODEL_REASONING_EFFORT` | `low` | Effort of an alias that sets none; the values depend on the model |
 | | `MODEL_TIERING_ENABLED` | `false` | Pick each turn's model by tier; see [Model tiers](#model-tiers) |

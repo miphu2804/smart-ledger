@@ -1,3 +1,15 @@
+### 2026-11-07 — Fix stale setup, CI and mobile docs against the code
+
+| Area | Change |
+|---|---|
+| CI | • Path-filter table and deploy notes match `changes.sh`, `upload-settings.sh`, `infra-run.yml` and `deploy-backend.yml`: settings come from Dopbase, `container-images` runs only for the `containers` area, and `VPS_*` and the runner token names are the ones the workflows read |
+| AI | • `MODEL_FALLBACKS` is documented as `protocol:model`, as in `app_config.py` |
+| Honeyhive | • The sync workflows load keys from Dopbase `ai/production`, not repository secrets |
+| Mobile | • Sample sign-in, test script, guide steps, Zen ring and Home/Analytics data source match the code |
+| Web | • Bobi brand image names match `frontend/web/public/brand` |
+
+Check: each changed claim was checked with grep, `ls` and a read of the cited code at `f2be945`; no build or script was run. Left alone: `backend/core/**` (Core is out of scope under AGENTS.md) and the `github.sh` step in ci-cd. Commit: the one that adds this entry.
+
 ### 2026-11-07 — Align quick-navigation test labels with the app
 
 | Area | Change |
@@ -179,19 +191,3 @@ Check: `uv run pytest -q` (587 passed, 13 skipped) with `POSTGRES_TEST_URL` on a
 | Docs | • ADR-0002 says use is recorded after the answer, in the background |
 
 Check: `uv run pytest` (582 passed, 13 skipped) with `POSTGRES_TEST_URL` on a throwaway pgvector container that was removed afterwards, `ruff check` and `ruff format --check` pass. Real turns on `smartledger-local-db`: an owner with no memories skips recall (before: 1015 and 1753 ms), an owner with two memories recalls in 612 and 1045 ms and in 3 ms for a repeated question, and both memories got their use recorded after the answer. Not verified: production timings across the Hanoi to Singapore link. Commit: the one that adds this entry.
-
-### 2026-11-04 — Trace the untimed steps of a chat turn
-
-| Area | Change |
-|---|---|
-| AI | • HoneyHive sessions carry `history_ms`, the time to read the conversation history before the session opens<br>• New `memory enabled` and `save turn` spans time the memory switch read and the exchange save, so the turn's untraced gap splits into named steps |
-
-Check: 475 unit tests and ruff pass; two real turns on `smartledger-local-db` recorded history 0 and 26 ms, memory enabled 81 and 3 ms, memory recall 1015 and 1753 ms, save turn 44 and 33 ms. Not verified: production timings, which need the deploy. Commit: the one that adds this entry.
-
-### 2026-11-04 — Tier classifier tokens reach HoneyHive
-
-| Area | Change |
-|---|---|
-| AI | • `BifrostTierClassifier` records each `/v1/decisions` call as a `tier classifier` span of type `model` with the model and the token counts Bifrost returns, so the session's Total Tokens and model events include the `jev-latest` call; `Observability.span` takes the event type |
-
-Check: `uv run ruff check`, `ruff format --check` and `uv run pytest tests/unit_tests` (474 passed); the SDK's `trace` and `enrich_span` signatures read from the installed package. Not verified: the span on a real HoneyHive session, since traces run only in production. Commit: the one that adds this entry.
