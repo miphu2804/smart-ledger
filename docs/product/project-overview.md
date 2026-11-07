@@ -9,10 +9,7 @@ stale_after: 2027-01-05T04:32:37+07:00
 ---
 # Mô tả sản phẩm
 
-| Siêu dữ liệu | Giá trị |
-|---|---|
-| Trạng thái | MVP môn EXE201 — tập trung luồng cốt lõi, demo đầu-cuối và kiểm chứng người dùng |
-| Tên tiếng Anh | So Nghe Loi — AI Voice POS |
+Tên tiếng Anh: So Nghe Loi — AI Voice POS.
 
 ## Tài liệu liên quan
 

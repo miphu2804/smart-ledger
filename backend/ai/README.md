@@ -1,12 +1,3 @@
----
-type: Service Guide
-title: "SmartLedger AI"
-description: "Internal FastAPI service for the owner Agent chat: routes, configuration, guardrails, memory and observability."
-owner: AI owner
-author: miphu2804
-status: stable
-stale_after: 2027-01-05T22:18:48+07:00
----
 # SmartLedger AI
 
 SmartLedger AI is the internal FastAPI service for the owner's Agent chat. Core is the only caller: it proxies the public `/api/v1/agent/*` routes to AI. Frontends must not call this service directly.

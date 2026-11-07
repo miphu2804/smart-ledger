@@ -1,12 +1,3 @@
----
-type: Guide
-title: "Memory evaluation"
-description: "Checks that memory recall finds the fact a chat message needs, using the shipped ranking."
-owner: AI owner
-status: stable
-generated: { by: human:miphu2804, at: 2026-11-06T22:18:48+07:00 }
-stale_after: 2027-01-05T22:18:48+07:00
----
 # Memory evaluation
 
 Checks that memory recall (`AgentMemoryService.with_memories`) finds the fact a chat message needs. It runs the real service on the local database, so it scores the ranking the app ships (`src/memory/ranking.py`).

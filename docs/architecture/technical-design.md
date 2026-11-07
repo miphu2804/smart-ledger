@@ -9,10 +9,7 @@ stale_after: 2027-01-05T22:18:48+07:00
 ---
 # Technical design — SmartLedger
 
-| Metadata | Value |
-|---|---|
-| Status | SmartLedger runs in production; this document describes checked-in component responsibilities and separates source implementation from live enablement and acceptance |
-| Reviewers | Core, AI and FE owners |
+This document describes the responsibilities of the checked-in components of SmartLedger, which runs in production, and keeps source implementation separate from live enablement and acceptance. Core, AI and FE owners review it.
 
 ## Related documents
 
