@@ -67,7 +67,7 @@ Demo chính dùng một tiệm thử, dữ liệu có thể đối chiếu và n
 |---|---|
 | Hoàn thiện luồng chính | Đăng nhập/tiệm, danh mục, POS/nhập câu/voice, giỏ và chốt thu/ghi nợ, lịch sử, chi phí, thu nợ, báo cáo cơ bản và Bobi chat |
 | Giữ chức năng đang có | Nhiều tiệm, barcode, tồn đơn giản, hủy đơn có dấu vết, ảnh Product, inbox/audit và ADMIN; kiểm tra phần được dùng và không gỡ bỏ để thu hẹp tài liệu |
-| Hoãn mở rộng chưa cần | Nhận diện ảnh/API audio mới, RAG, mở rộng memory ngoài `FR-040`, chart/analytics nâng cao, UI/provider chưa cần cho kịch bản, tối ưu tải lớn và kiến trúc bổ sung |
+| Hoãn mở rộng chưa cần | Nhận diện ảnh/API audio mới, RAG, mở rộng memory ngoài `FR-040`, analytics nâng cao ngoài thẻ chat `AC-127`, UI/provider chưa cần cho kịch bản, tối ưu tải lớn và kiến trúc bổ sung |
 
 Các hành vi và mã yêu cầu chi tiết vẫn ở [BRD](business-requirements.md) và [PRD](product-requirements.md#11-ưu-tiên-hoàn-thành-môn-exe201). Danh mục đó không buộc hoàn thành mọi hạng mục trước demo môn học; chức năng được dùng vẫn phải đúng tiền/nợ/tồn, đúng quyền và có phản hồi lỗi dễ hiểu.
 

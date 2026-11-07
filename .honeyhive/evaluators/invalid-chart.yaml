@@ -1,7 +1,7 @@
 name: invalid-chart
 type: PYTHON
 return_type: boolean
-description: True when the answer holds a chart block the mobile app cannot draw, by the same checks as readChart in frontend/mobile/src/lib/chatMarkdown.ts, or more than one chart block.
+description: True when the answer holds a chart or ui block the mobile app cannot draw, by the same checks as readChart in frontend/mobile/src/lib/chatMarkdown.ts and readUi in frontend/mobile/src/lib/chatUi.ts, or more than one such block.
 enabled_in_prod: true
 sampling_percentage: 100
 filters:
@@ -20,35 +20,161 @@ criteria: |
   import re
 
   # A block without its closing fence is caught by comparing openings with blocks.
-  BLOCK = re.compile(r"^[ \t]*```chart[ \t]*\n(.*?)^[ \t]*```[ \t]*$", re.DOTALL | re.MULTILINE)
-  OPENING = re.compile(r"^[ \t]*```chart[ \t]*$", re.MULTILINE)
+  BLOCK = re.compile(r"^[ \t]*```(chart|ui)[ \t]*\n(.*?)^[ \t]*```[ \t]*$", re.DOTALL | re.MULTILINE)
+  OPENING = re.compile(r"^[ \t]*```(?:chart|ui)[ \t]*$", re.MULTILINE)
+  SCREENS = {"sales", "voice_order", "orders", "products", "debts", "expenses", "reports"}
 
 
-  def drawable(body):
+  def number(value, allow_negative=False):
+      # Python's json reads NaN and Infinity, which the app's JSON.parse refuses.
+      if isinstance(value, bool) or not isinstance(value, (int, float)) or not math.isfinite(value):
+          raise ValueError
+      if value < 0 and not allow_negative:
+          raise ValueError
+      return value
+
+
+  def items(value, low, high):
+      if not isinstance(value, list) or not low <= len(value) <= high:
+          raise ValueError
+      return value
+
+
+  def text(value):
+      if not isinstance(value, str) or not value.strip():
+          raise ValueError
+
+
+  def unit(value):
+      # The app rejects an unknown unit such as "túi" rather than drawing it as money.
+      if value not in ("vnd", "count", "percent"):
+          raise ValueError
+
+
+  def point(value):
+      if not isinstance(value, dict):
+          raise ValueError
+      text(value.get("label"))
+      return number(value.get("value"))
+
+
+  def chart_drawable(body):
       # The app trims long labels and defaults the unit, so neither fails here.
       try:
           chart = json.loads(body)
+          if not isinstance(chart, dict) or chart.get("type") not in ("bar", "line"):
+              return False
+          for p in items(chart.get("data"), 1, 31):
+              point(p)
+          return True
       except ValueError:
           return False
-      if not isinstance(chart, dict) or chart.get("type") not in ("bar", "line"):
+
+
+  def ui_node(elements, node_id, depth, seen):
+      if depth > 4 or node_id in seen or node_id not in elements:
+          raise ValueError
+      seen.add(node_id)
+      element = elements[node_id]
+      if not isinstance(element, dict):
+          raise ValueError
+      props = element.get("props") if isinstance(element.get("props"), dict) else {}
+      kind = element.get("type")
+      if kind in ("Card", "Row"):
+          for child in items(element.get("children"), 1, 40):
+              if not isinstance(child, str):
+                  raise ValueError
+              ui_node(elements, child, depth + 1, seen)
+      elif kind == "Metric":
+          text(props.get("label"))
+          number(props.get("value"))
+          unit(props.get("unit"))
+          if "change" in props:
+              number(props["change"], allow_negative=True)
+          if "trend" in props:
+              for v in items(props["trend"], 1, 31):
+                  number(v)
+      elif kind in ("LineChart", "BarChart", "HBarChart", "Donut"):
+          unit(props.get("unit"))
+          values = [point(p) for p in items(props.get("data"), 2 if kind == "LineChart" else 1, 6 if kind == "Donut" else 31)]
+          if kind == "Donut" and not any(values):
+              raise ValueError
+      elif kind in ("GroupedBar", "StackedBar"):
+          unit(props.get("unit"))
+          labels = items(props.get("labels"), 1, 31)
+          for label in labels:
+              text(label)
+          for series in items(props.get("series"), 1, 4):
+              if not isinstance(series, dict):
+                  raise ValueError
+              text(series.get("name"))
+              if len(items(series.get("values"), 1, 31)) != len(labels):
+                  raise ValueError
+              for v in series["values"]:
+                  number(v)
+      elif kind == "Progress":
+          text(props.get("label"))
+          number(props.get("value"))
+          unit(props.get("unit"))
+          if number(props.get("max")) <= 0:
+              raise ValueError
+      elif kind == "Table":
+          columns = items(props.get("columns"), 1, 5)
+          for column in columns:
+              text(column)
+          for row in items(props.get("rows"), 1, 20):
+              if len(items(row, 1, 5)) != len(columns):
+                  raise ValueError
+              for cell in row:
+                  if isinstance(cell, str):
+                      text(cell)
+                  else:
+                      number(cell, allow_negative=True)
+      elif kind == "List":
+          for item in items(props.get("items"), 1, 20):
+              if not isinstance(item, dict):
+                  raise ValueError
+              text(item.get("label"))
+              if "value" in item:
+                  number(item["value"])
+              # A List row may carry the product's own unit word, such as "túi".
+              if "unit" in item and not (isinstance(item["unit"], str) and item["unit"].strip()):
+                  raise ValueError
+      elif kind == "OrderCard":
+          text(props.get("code"))
+          number(props.get("total"))
+          for line in items(props.get("items"), 1, 20):
+              if not isinstance(line, dict):
+                  raise ValueError
+              text(line.get("name"))
+              number(line.get("qty"))
+              number(line.get("price"))
+      elif kind in ("Badge", "Text"):
+          text(props.get("text"))
+      elif kind == "ScreenButton":
+          if props.get("screen") not in SCREENS:
+              raise ValueError
+      else:
+          raise ValueError
+
+
+  def ui_drawable(body):
+      try:
+          spec = json.loads(body)
+          if not isinstance(spec, dict) or not isinstance(spec.get("root"), str):
+              return False
+          elements = spec.get("elements")
+          if not isinstance(elements, dict) or len(elements) > 40:
+              return False
+          ui_node(elements, spec["root"], 0, set())
+          return True
+      except (ValueError, RecursionError):
           return False
-      data = chart.get("data")
-      if not isinstance(data, list) or not 1 <= len(data) <= 31:
-          return False
-      for point in data:
-          if not isinstance(point, dict) or not isinstance(point.get("label"), str):
-              return False
-          value = point.get("value")
-          # Python's json reads NaN and Infinity, which the app's JSON.parse refuses.
-          if isinstance(value, bool) or not isinstance(value, (int, float)):
-              return False
-          if not math.isfinite(value) or value < 0:
-              return False
-      return True
 
 
   answer = outputs.get("answer") or ""
   blocks = BLOCK.findall(answer)
   openings = len(OPENING.findall(answer))
-  # The prompt allows at most one chart block per answer.
-  result = openings > 1 or len(blocks) != openings or not all(drawable(b) for b in blocks)
+  drawable = {"chart": chart_drawable, "ui": ui_drawable}
+  # The prompt allows at most one chart or ui block per answer.
+  result = openings > 1 or len(blocks) != openings or not all(drawable[kind](body) for kind, body in blocks)

@@ -1435,6 +1435,8 @@ function mockAgentAnswer(question: string): string {
     const top = [...active].sort((a, b) => b.sellingPriceVnd - a.sellingPriceVnd).slice(0, 5);
     return `Năm món giá cao nhất:\n${top.map((p, i) => `${i + 1}. ${p.name} — ${vnd(p.sellingPriceVnd)}`).join('\n')}\n${scope}`;
   }
+  if (/mau (chart|bieu do)/.test(q)) return mockUiChartGallery();
+  if (/mau the|giao dien/.test(q)) return mockUiCardGallery();
   if (/bieu do|bang/.test(q)) {
     // Có bảng và khối chart để xem cách bong bóng trình bày chúng (docs/contracts/api-contracts.md, mục Stream).
     const top = [...active].sort((a, b) => b.sellingPriceVnd - a.sellingPriceVnd).slice(0, 5);
@@ -1681,4 +1683,130 @@ export function mockCoreRequest<T>(path: string, method: string, body: unknown, 
   }
 
   throw apiErr(501, 'mock_not_implemented', `Chưa hỗ trợ giả lập cho ${method} ${path} khi EXPO_PUBLIC_USE_MOCK=true.`);
+}
+
+/** Một khối ```ui (src/lib/chatUi.ts) từ danh sách phần tử; phần tử đầu là gốc, id là chỉ số. */
+function uiBlock(elements: { type: string; props?: object; children?: number[] }[]): string {
+  const spec = {
+    root: 'e0',
+    elements: Object.fromEntries(
+      elements.map((el, i) => [`e${i}`, { type: el.type, props: el.props ?? {}, children: (el.children ?? []).map((c) => `e${c}`) }]),
+    ),
+  };
+  return ['```ui', JSON.stringify(spec), '```'].join('\n');
+}
+
+/** Hỏi "mẫu chart" ở bản giả lập để xem mọi loại biểu đồ của khối ```ui. Số là số mẫu cố định. */
+function mockUiChartGallery(): string {
+  const days = ['T2', 'T3', 'T4', 'T5', 'T6', 'T7', 'CN'];
+  return [
+    'Đây là các mẫu biểu đồ mà trợ lý có thể vẽ (số mẫu).',
+    '',
+    uiBlock([
+      { type: 'Card', props: { title: 'Doanh thu 7 ngày (LineChart)' }, children: [1] },
+      { type: 'LineChart', props: { unit: 'vnd', data: days.map((label, i) => ({ label, value: [820000, 760000, 910000, 1040000, 980000, 1520000, 1380000][i] })) } },
+    ]),
+    uiBlock([
+      { type: 'Card', props: { title: 'Số đơn theo ngày (BarChart)' }, children: [1] },
+      { type: 'BarChart', props: { unit: 'count', data: days.map((label, i) => ({ label, value: [18, 15, 21, 24, 22, 35, 31][i] })) } },
+    ]),
+    uiBlock([
+      { type: 'Card', props: { title: 'Top món bán chạy (HBarChart)' }, children: [1] },
+      {
+        type: 'HBarChart',
+        props: {
+          unit: 'count',
+          data: [
+            { label: 'Cà phê sữa đá', value: 142 },
+            { label: 'Bạc xỉu', value: 98 },
+            { label: 'Trà đào cam sả', value: 76 },
+            { label: 'Nước suối', value: 51 },
+            { label: 'Bánh mì trứng', value: 34 },
+          ],
+        },
+      },
+    ]),
+    uiBlock([
+      { type: 'Card', props: { title: 'Cơ cấu doanh thu theo nhóm (Donut)' }, children: [1] },
+      {
+        type: 'Donut',
+        props: {
+          unit: 'vnd',
+          data: [
+            { label: 'Cà phê', value: 4200000 },
+            { label: 'Trà', value: 2100000 },
+            { label: 'Đồ ăn', value: 1300000 },
+            { label: 'Nước đóng chai', value: 650000 },
+          ],
+        },
+      },
+    ]),
+    uiBlock([
+      { type: 'Card', props: { title: 'Tuần này so với tuần trước (GroupedBar)' }, children: [1] },
+      {
+        type: 'GroupedBar',
+        props: {
+          unit: 'vnd',
+          labels: days,
+          series: [
+            { name: 'Tuần trước', values: [700000, 810000, 760000, 900000, 1010000, 1300000, 1250000] },
+            { name: 'Tuần này', values: [820000, 760000, 910000, 1040000, 980000, 1520000, 1380000] },
+          ],
+        },
+      },
+    ]),
+    uiBlock([
+      { type: 'Card', props: { title: 'Thu và chi theo tuần (StackedBar)' }, children: [1] },
+      {
+        type: 'StackedBar',
+        props: {
+          unit: 'vnd',
+          labels: ['Tuần 1', 'Tuần 2', 'Tuần 3', 'Tuần 4'],
+          series: [
+            { name: 'Tiền mặt', values: [3100000, 2800000, 3500000, 3900000] },
+            { name: 'Chuyển khoản', values: [2200000, 2600000, 2900000, 3400000] },
+            { name: 'Ghi nợ', values: [400000, 650000, 300000, 520000] },
+          ],
+        },
+      },
+    ]),
+  ].join('\n');
+}
+
+/** Hỏi "mẫu thẻ" ở bản giả lập để xem các thẻ không phải biểu đồ của khối ```ui. */
+function mockUiCardGallery(): string {
+  return [
+    'Tuần này tiệm bán tốt hơn tuần trước, chi phí điện nước sắp chạm ngân sách (số mẫu).',
+    '',
+    uiBlock([
+      { type: 'Card', props: { title: 'Tổng quan tuần này' }, children: [1, 4] },
+      { type: 'Row', children: [2, 3] },
+      { type: 'Metric', props: { label: 'Doanh thu', value: 7410000, unit: 'vnd', change: 8.4, trend: [820000, 760000, 910000, 1040000, 980000, 1520000, 1380000] } },
+      { type: 'Metric', props: { label: 'Số đơn', value: 166, unit: 'count', change: -3.2, trend: [18, 15, 21, 24, 22, 35, 31] } },
+      { type: 'Row', children: [5, 6] },
+      { type: 'Metric', props: { label: 'Lãi gộp', value: 2960000, unit: 'vnd', change: 12 } },
+      { type: 'Metric', props: { label: 'Tỷ lệ lãi', value: 39.9, unit: 'percent' } },
+    ]),
+    uiBlock([
+      { type: 'Card', props: { title: 'Ngân sách chi tháng 11' }, children: [1, 2, 3] },
+      { type: 'Progress', props: { label: 'Nguyên liệu', value: 5200000, max: 8000000, unit: 'vnd' } },
+      { type: 'Progress', props: { label: 'Điện nước', value: 1700000, max: 2000000, unit: 'vnd' } },
+      { type: 'Progress', props: { label: 'Mặt bằng', value: 4000000, max: 4000000, unit: 'vnd' } },
+    ]),
+    uiBlock([
+      { type: 'OrderCard', props: { code: 'DH-0142', date: '06/11 18:42', customer: 'Chị Lan', status: 'Ghi nợ', total: 128000, items: [{ name: 'Cà phê sữa đá', qty: 2, price: 29000 }, { name: 'Bạc xỉu', qty: 1, price: 32000 }, { name: 'Bánh mì trứng', qty: 2, price: 19000 }] } },
+    ]),
+    uiBlock([
+      { type: 'Card', props: { title: 'Khách còn nợ' }, children: [1, 2] },
+      { type: 'List', props: { items: [{ label: 'Chị Lan', note: '3 đơn, lâu nhất 12 ngày', value: 412000, unit: 'vnd' }, { label: 'Anh Tuấn (sửa xe)', note: '1 đơn', value: 96000, unit: 'vnd' }, { label: 'Cô Ba', note: '2 đơn', value: 150000, unit: 'vnd' }] } },
+      { type: 'ScreenButton', props: { screen: 'debts' } },
+    ]),
+    uiBlock([
+      { type: 'Card', props: { title: 'So sánh hai món' }, children: [1, 2] },
+      { type: 'Table', props: { columns: ['Món', 'Đã bán', 'Doanh thu'], rows: [['Cà phê sữa đá', 142, 4118000], ['Bạc xỉu', 98, 3136000]] } },
+      { type: 'Row', children: [3, 4] },
+      { type: 'Badge', props: { text: 'Bán chạy nhất', tone: 'good' } },
+      { type: 'Badge', props: { text: 'Sắp hết sữa đặc', tone: 'warn' } },
+    ]),
+  ].join('\n');
 }
