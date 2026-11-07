@@ -8,7 +8,7 @@ The repository-level [`AGENTS.md`](../../AGENTS.md) is the canonical policy. Rea
 
 - State the smallest success check before editing, inspect the relevant Expo Router route, shared components, theme tokens and data path, and preserve unrelated behavior.
 - Keep engineering documentation, READMEs, indexes, scoped instructions and code comments in English. Preserve exact Vietnamese UI copy and quoted business/product requirements; do not translate code identifiers, paths or API fields.
-- Follow the root documentation and OKF rules. Hand-authored documentation may use `author: miphu2804`; `generated` is optional. A formatting-only edit does not justify refreshing `stale_after`; verify living facts against the checked-out source before making freshness claims.
+- Follow the root documentation and OKF rules, including authorship and freshness metadata.
 - Keep this file scoped to mobile workflow, safety and verification. Put product scope and API ownership in the canonical product and contract documents.
 
 ## Expo Router and runtime safety
