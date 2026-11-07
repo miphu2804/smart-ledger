@@ -1,4 +1,6 @@
-# backend/core/docs
+# Core Documentation
+
+Feature handoffs and operational verification guides for the Java Core service.
 
 * [Admin dashboard: daily creation counts](admin-dashboard-growth.md) - Core handoff for the ADMIN daily creation API: verification steps and history.
 * [CORE-015 local verification evidence](zalo-auth.tdd.md) - Test-driven records and local verification evidence for Zalo web sign-in.

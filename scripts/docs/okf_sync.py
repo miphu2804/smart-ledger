@@ -124,6 +124,24 @@ def write_concepts(concepts: dict[str, list[str]]) -> None:
             concepts[concept] = lines
 
 
+def read_header(path: str) -> str | None:
+    """Returns the hand-written part of an index (everything above its first bullet), or None when it has no file."""
+    file = ROOT / path
+    if not file.is_file():
+        return None
+    text = file.read_text(encoding="utf-8")
+    return re.split(r"^\* ", text, maxsplit=1, flags=re.M)[0]
+
+
+def header_parts(header: str | None) -> tuple[str, str]:
+    """Returns the H1 and the intro sentence (the paragraph after the H1) of an index header; empty when absent."""
+    body = (split_frontmatter(header) or ([], header))[1] if header else ""
+    lines = [line for line in body.split("\n") if line.strip()]
+    h1 = next((line[2:].strip() for line in lines if line.startswith("# ")), "")
+    after = lines[lines.index(f"# {h1}") + 1 :] if h1 else []
+    return h1, after[0].strip() if after and not after[0].startswith("<") else ""
+
+
 def listing(directory: str, concepts: dict[str, list[str]], indexed: dict[str, list[tuple[str, str, str]]]):
     """Returns the (title, description, link) entries of a bundle directory and records the directories that get an index.
 
@@ -142,7 +160,8 @@ def listing(directory: str, concepts: dict[str, list[str]], indexed: dict[str, l
         sub_path = f"{directory}/{sub}" if directory else sub
         sub_entries = listing(sub_path, concepts, indexed)
         if len(sub_entries) >= 2:
-            entries.append((sub_path, f"Index of `{sub_path}`.", f"{sub}/index.md"))
+            h1, intro = header_parts(read_header(f".okf/{sub_path}/index.md"))
+            entries.append((h1 or sub_path, intro or "TODO", f"{sub}/index.md"))
         else:
             entries.extend((title, desc, f"{sub}/{link}") for title, desc, link in sub_entries)
     entries.sort(key=lambda entry: entry[0].casefold())
@@ -158,10 +177,13 @@ def expected_indexes(concepts: dict[str, list[str]]) -> dict[str, str]:
     files = {}
     for directory, entries in indexed.items():
         body = "\n".join(f"* [{title}]({link}) - {desc}" for title, desc, link in entries)
-        if directory:
-            files[f".okf/{directory}/index.md"] = f"# {directory}\n\n{body}\n"
-        else:
-            files[".okf/index.md"] = f'---\nokf_version: "0.2"\n---\n\n# SmartLedger documentation metadata\n\n{ROOT_NOTE}\n\n{body}\n'
+        path = f".okf/{directory}/index.md" if directory else ".okf/index.md"
+        header = read_header(path)
+        if header is None and directory:
+            header = f"# {directory}\n\nTODO\n"
+        elif header is None:
+            header = f'---\nokf_version: "0.2"\n---\n\n# SmartLedger Documentation Metadata\n\n{ROOT_NOTE}\n'
+        files[path] = f"{header.rstrip()}\n\n{body}\n"
     return files
 
 
@@ -216,6 +238,9 @@ def check(concepts: dict[str, list[str]]) -> list[str]:
     for path, content in expected_indexes(concepts).items():
         if not (ROOT / path).is_file() or (ROOT / path).read_text(encoding="utf-8") != content:
             problems.append(f"{path}: not what okf_sync.py would generate")
+    for path, content in expected_indexes(concepts).items():
+        if header_parts(content.split("\n* ", 1)[0])[1] in ("", "TODO"):
+            problems.append(f"{path}: group intro is missing")
     for path in BUNDLE.rglob("index.md"):
         if str(path.relative_to(ROOT)) not in expected_indexes(concepts):
             problems.append(f"{path.relative_to(ROOT)}: unexpected index")

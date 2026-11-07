@@ -1,4 +1,6 @@
-# docs/development
+# Development and operations
+
+Local setup, CI/CD, secrets and release guides.
 
 * [CI/CD](ci-cd.md) - Repository delivery workflows, validation gates and links to private operational procedures.
 * [Credential map](credential-map/README.md) - Private ownership boundary for environment-specific credential inventories.

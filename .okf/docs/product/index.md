@@ -1,4 +1,6 @@
-# docs/product
+# Product scope and requirements
+
+Business and product requirements, the product overview and user flows (Vietnamese requirements, English technical guide).
 
 * [Demo và kiểm chứng MVP EXE201](mvp-demo-validation.md) - Fixture demo, các bước đầu-cuối, cách thu phản hồi người dùng và mẫu ghi kết quả cho MVP môn EXE201.
 * [Khai báo Data safety trên Google Play](google-play-data-safety.md) - Câu trả lời cho form Data safety trên Play Console, khớp với trang chính sách công khai.

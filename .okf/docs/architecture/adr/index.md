@@ -1,4 +1,6 @@
-# docs/architecture/adr
+# Architecture decisions
+
+Architecture decision records, one decision per file.
 
 * [ADR-0001: Use pgvector on Supabase as the vector store instead of Qdrant](0001-vector-store-pgvector.md) - Accepted: embeddings live in Supabase PostgreSQL with pgvector instead of Qdrant.
 * [ADR-0002: Agent long-term memory modeled on TencentDB for PostgreSQL, built on Supabase pgvector](0002-agent-long-term-memory.md) - Accepted: pgvector design for agent long-term memory; option A is approved by the product owner and enabled in production through `AGENT_MEMORY_ENABLED`.
