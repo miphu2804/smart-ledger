@@ -1,4 +1,4 @@
-// Điều khiển Chrome chạy ẩn qua DevTools Protocol, không cần thư viện ngoài (Node 22 có sẵn WebSocket và fetch).
+// Drives headless Chrome through the DevTools Protocol with no external library (Node 22 includes WebSocket and fetch).
 import { spawn } from 'node:child_process';
 import { mkdtempSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';

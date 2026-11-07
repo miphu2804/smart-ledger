@@ -35,13 +35,13 @@ type Tab1IconName =
 
 const tab1Icons: Record<Tab1IconName, ImageSourcePropType> = {
   logo: require('../../assets/tab1-overview/logo.png'),
-  revenue: require('../../assets/tab1-overview/doanh-thu.png'),
-  closedOrders: require('../../assets/tab1-overview/da-chot-trong-ky.png'),
-  shopDebt: require('../../assets/tab1-overview/con-no-toan-tiem.png'),
-  assistant: require('../../assets/tab1-overview/tro-li-ai.png'),
-  dataSuggestion: require('../../assets/tab1-overview/goi-y-tu-du-lieu.png'),
-  lowStock: require('../../assets/tab1-overview/kiem-tra-hang-sap-het.png'),
-  collectDebt: require('../../assets/tab1-overview/thu-khoan-con-no.png'),
+  revenue: require('../../assets/tab1-overview/revenue.png'),
+  closedOrders: require('../../assets/tab1-overview/closed-orders.png'),
+  shopDebt: require('../../assets/tab1-overview/shop-debt.png'),
+  assistant: require('../../assets/tab1-overview/ai-assistant.png'),
+  dataSuggestion: require('../../assets/tab1-overview/data-suggestion.png'),
+  lowStock: require('../../assets/tab1-overview/low-stock.png'),
+  collectDebt: require('../../assets/tab1-overview/collect-debt.png'),
 };
 
 export default function Home() {

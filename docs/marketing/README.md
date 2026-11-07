@@ -7,7 +7,7 @@ Phone-ratio screenshots of the Sổ Nghe Lời app, arranged by product flow so 
 - Size: 1170 × 2532 px (a 390 × 844 pt frame at 3x density, a 9:19.5 ratio, equal to the screen resolution of the iPhone 12 through 14), PNG format.
 - No status bar and no device bezel, so the screenshots can be placed inside a phone frame when laid out.
 - Source: the web build of the mobile app running in preview mode (`EXPO_PUBLIC_USE_MOCK=true`), captured automatically with headless Chrome through [`frontend/mobile/scripts/marketing-screenshots/`](../../frontend/mobile/scripts/marketing-screenshots/capture.mjs) (see [How to recapture](#how-to-recapture)). The interface shares code with the phone app, but each image has not been checked against a real device.
-- Version: the `staging` branch at `7d65486`, captured on 2026-10-27 (Vietnam time). The previous set was captured on 2026-10-12 at `33d2da4`; since then the app changed the tab bar (Tổng quan · Đơn hàng · Tạo đơn · Trợ lý Bobi · Quản lý), moved Đọc đơn and Quét mã into the Tạo đơn screen, and replaced item photos with the first letter of the name.
+- Version: the `staging` branch at revision `a1245a1c`, captured on 2026-11-07 (Vietnam time). The previous set was captured on 2026-10-27 at `7d65486`. File names were changed to English.
 
 ## Image list
 
@@ -15,42 +15,42 @@ Phone-ratio screenshots of the Sổ Nghe Lời app, arranged by product flow so 
 
 | Image | Content |
 |---|---|
-| [01-tong-quan.png](dashboard/01-tong-quan.png) | Tổng quan screen: today's revenue compared with yesterday, order count, shop-wide debt, average per order; the tab bar has the Tạo đơn button in the middle |
-| [02-tong-quan-uu-tien-va-ban-chay.png](dashboard/02-tong-quan-uu-tien-va-ban-chay.png) | Tổng quan scrolled down (collapsed header): priority tasks, a suggestion from closed data, today's best sellers |
-| [03-bao-cao-doanh-thu.png](dashboard/03-bao-cao-doanh-thu.png) | Báo cáo: today's revenue, revenue by hour, income and expenses, and estimated gross profit |
-| [04-don-hang.png](dashboard/04-don-hang.png) | Đơn hàng: search, filter by period, total orders and revenue, orders grouped by day |
-| [05-ban-hang.png](dashboard/05-ban-hang.png) | Tạo đơn: the Đọc đơn and Quét mã buttons, search, item groups, two-column product grid |
-| [06-ban-hang-co-gio-hang.png](dashboard/06-ban-hang-co-gio-hang.png) | Tạo đơn after items are selected: increase/decrease buttons on the cards and the cart bar (3 items, 55.000đ) |
-| [07-quan-ly.png](dashboard/07-quan-ly.png) | Quản lý: shop information, reports, goods, expenses, debt, settings, review the guide |
-| [08-hang-hoa.png](dashboard/08-hang-hoa.png) | Hàng hoá: item count, inventory value, number of items running low, a restock button per item |
-| [09-cong-no.png](dashboard/09-cong-no.png) | Công nợ: total outstanding, number of customers in debt, and each customer |
+| [01-overview.png](dashboard/01-overview.png) | Tổng quan screen: today's revenue compared with yesterday, order count, shop-wide debt, average per order; the tab bar has the Tạo đơn button in the middle |
+| [02-overview-priorities-and-bestsellers.png](dashboard/02-overview-priorities-and-bestsellers.png) | Tổng quan scrolled down (collapsed header): priority tasks, a suggestion from closed data, today's best sellers |
+| [03-revenue-report.png](dashboard/03-revenue-report.png) | Báo cáo: today's revenue, revenue by hour, income and expenses, and estimated gross profit |
+| [04-orders.png](dashboard/04-orders.png) | Đơn hàng: search, filter by period, total orders and revenue, orders grouped by day |
+| [05-create-order.png](dashboard/05-create-order.png) | Tạo đơn: the Đọc đơn and Quét mã buttons, search, item groups, two-column product grid |
+| [06-create-order-with-cart.png](dashboard/06-create-order-with-cart.png) | Tạo đơn after items are selected: increase/decrease buttons on the cards and the cart bar (3 items, 55.000đ) |
+| [07-manage.png](dashboard/07-manage.png) | Quản lý: shop information, reports, goods, expenses, debt, settings, review the guide |
+| [08-products.png](dashboard/08-products.png) | Hàng hoá: item count, inventory value, number of items running low, a restock button per item |
+| [09-debts.png](dashboard/09-debts.png) | Công nợ: total outstanding, number of customers in debt, and each customer |
 
 ### `chat/` — AI assistant
 
 | Image | Content |
 |---|---|
-| [01-tro-ly-ai.png](chat/01-tro-ly-ai.png) | The Trợ lý Bobi screen when opened: the greeting and suggested questions |
-| [02-dat-cau-hoi.png](chat/02-dat-cau-hoi.png) | Typing the question "Món nào sắp hết hàng?" |
-| [03-tra-loi.png](chat/03-tra-loi.png) | The assistant answers with the list of items running low |
+| [01-ai-assistant.png](chat/01-ai-assistant.png) | The Trợ lý Bobi screen when opened: the greeting and suggested questions |
+| [02-ask-question.png](chat/02-ask-question.png) | Typing the question "Món nào sắp hết hàng?" |
+| [03-answer.png](chat/03-answer.png) | The assistant answers with the list of items running low |
 
 ### `barcode/` — Barcode scanning
 
 | Image | Content |
 |---|---|
-| [01-quet-ma-vach.png](barcode/01-quet-ma-vach.png) | Scan screen: the viewfinder and the row of control buttons |
-| [02-nhan-dien-mon.png](barcode/02-nhan-dien-mon.png) | Scanning an item that exists in the catalog (code `8935049500544`): item card, stock, quantity, and line total |
-| [03-don-tam-trong-man-quet.png](barcode/03-don-tam-trong-man-quet.png) | The temporary order inside the scan screen, with the payment button ready |
-| [04-ma-chua-co-trong-danh-muc.png](barcode/04-ma-chua-co-trong-danh-muc.png) | Scanning a code that is not yet in the catalog (`8936079140014`): the prompt to add an item |
-| [05-them-mat-hang-moi.png](barcode/05-them-mat-hang-moi.png) | Adding a new item from the code just scanned, with the name and price already filled in, saved to the catalog |
+| [01-scan-barcode.png](barcode/01-scan-barcode.png) | Scan screen: the viewfinder and the row of control buttons |
+| [02-recognize-item.png](barcode/02-recognize-item.png) | Scanning an item that exists in the catalog (code `8935049500544`): item card, stock, quantity, and line total |
+| [03-draft-order-in-scanner.png](barcode/03-draft-order-in-scanner.png) | The temporary order inside the scan screen, with the payment button ready |
+| [04-code-not-in-catalog.png](barcode/04-code-not-in-catalog.png) | Scanning a code that is not yet in the catalog (`8936079140014`): the prompt to add an item |
+| [05-add-new-item.png](barcode/05-add-new-item.png) | Adding a new item from the code just scanned, with the name and price already filled in, saved to the catalog |
 
 ### `voice/` — Voice order reading
 
 | Image | Content |
 |---|---|
-| [01-doc-don.png](voice/01-doc-don.png) | The Đọc đơn screen when opened |
-| [02-nghe-va-ghi-don.png](voice/02-nghe-va-ghi-don.png) | The order recorded after the phrase "2 cà phê sữa đá 1 bánh mì thịt 3 mì gói" |
-| [03-mon-moi-nhap-so-luong.png](voice/03-mon-moi-nhap-so-luong.png) | Ordering an item that is not yet in the catalog ("1 sữa chua nếp cẩm"): enter the price, quantity, and unit to add it to the catalog |
-| [04-don-da-ghi.png](voice/04-don-da-ghi.png) | A complete order of 4 items, total 98.000đ, with the payment button ready |
+| [01-read-order.png](voice/01-read-order.png) | The Đọc đơn screen when opened |
+| [02-listen-and-record-order.png](voice/02-listen-and-record-order.png) | The order recorded after the phrase "2 cà phê sữa đá 1 bánh mì thịt 3 mì gói" |
+| [03-new-item-enter-quantity.png](voice/03-new-item-enter-quantity.png) | Ordering an item that is not yet in the catalog ("1 sữa chua nếp cẩm"): enter the price, quantity, and unit to add it to the catalog |
+| [04-order-recorded.png](voice/04-order-recorded.png) | A complete order of 4 items, total 98.000đ, with the payment button ready |
 
 ## What to know before use
 
