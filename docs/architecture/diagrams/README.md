@@ -35,25 +35,31 @@ Component boundaries from checked-in source, rendered by GitHub and most Markdow
 
 ```mermaid
 flowchart LR
-    mobile["Mobile · OWNER"]
-    admin["Web · ADMIN"]
-    core["Core · authentication and business authorization"]
+    mobile["Mobile app · OWNER"]
+    admin["Web admin · ADMIN"]
+    idp["Firebase Auth"]
+    core["Core · business rules and authorization"]
+    media["Cloudinary media"]
     ledger[("Business ledger")]
-    ai["AI · internal Agent chat"]
+    ai["AI · Agent chat"]
+    cache[("Redis history cache")]
     history[("Chat history and optional memory")]
-    reader["Guarded read-only shop views"]
-    models["Model provider or compatible gateway"]
-    traces["Optional external tracing"]
+    views["Read-only ledger views"]
+    models["OpenAI-compatible model gateway"]
+    traces["HoneyHive tracing"]
 
     mobile --> core
     admin --> core
+    core -->|verify sign-in| idp
+    core --> media
     core --> ledger
-    core -->|"Authorized user/shop context"| ai
+    core -->|user and shop| ai
+    ai -.-> cache
     ai --> history
-    ai --> reader
-    reader --> ledger
+    ai --> views
+    views --> ledger
     ai --> models
-    ai --> traces
+    ai -.-> traces
 ```
 
 ## Editing
