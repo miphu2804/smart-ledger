@@ -1,17 +1,17 @@
 ---
 type: API Contract
 title: "API Contract — SmartLedger"
-description: "FE ↔ Core and Core ↔ AI contracts, with the implemented or target status of each endpoint."
+description: "Implemented FE ↔ Core and Core ↔ AI endpoint contracts, authorization, errors and stream semantics."
 owner: Core, AI and FE owners
 status: stable
-generated: { by: human:miphu2804, at: 2026-11-06T22:18:48+07:00 }
+author: miphu2804
 stale_after: 2027-01-05T22:18:48+07:00
 ---
 # API Contract — SmartLedger
 
 | Metadata | Value |
 |---|---|
-| Status | target for the first release scope (MVP); implemented endpoints are marked separately below |
+| Status | Implemented source contracts; live enablement, deployment and integrated acceptance are separate verification boundaries |
 
 ## Related documents
 
@@ -27,17 +27,9 @@ CORE-018 #409 adds internal telemetry under `FR-036`; it adds no endpoint and ch
 - Do not use the ports in the architecture diagram as the API contract.
 - Bifrost and HoneyHive have no public API. FE does not call these components directly.
 
-**Core cross-check on 2026-10-26:** checked 17 controllers and 87 explicit routes on `feat/admin-dashboard-growth` `3e93dd1`, based on staging `0e2b1de`; every existing route is described in this document. PR #368 merged growth into staging at `d4dc743`; deployment and FE acceptance are not confirmed. AI keeps its own cross-check milestones recorded in the [technical design](../architecture/technical-design.md#1-scope). The per-batch notes below preserve the preparation history; having code does not mean the environment has enabled it or that FE has accepted it.
+**Source review:** endpoint availability was checked against `staging` revision `a2766ee3a37e23c0f03fd43383b608c1b2fac898`. The checked-in Core includes stock-in, media, paginated OWNER lists, filtered sales totals, notifications and ADMIN growth. Source availability does not establish live migration, flags, deployment or integrated acceptance. Historical branch evidence belongs to the [Core verification guides](../../backend/core/docs/index.md), not the consumer contract.
 
-**Core addition on 2026-10-06 on `feat/core-stock-in` (staging base `99ed97a9d03656fe782ae43c81526e68a8c0cc08`):** the stock-in endpoint, the PATCH product contract and the three advanced reports below are on this branch; merge or staging deployment is not confirmed. Mobile has not been changed to use the new contracts.
-
-**Media addition on 2026-10-08 on the current branch:** Core has Product image, Shop logo and avatar upload/delete through Cloudinary; V13/V14 must be migrated before the runtime uses the new entities on the shared DB. This does not confirm that FE or staging has integrated.
-
-**CORE-011 (#153), 2026-10-10:** six paginated OWNER list GETs on `feat/owner-list-pagination`, staging base `50891aabf8b6ba48406799fa5c31fef8c823569f`. The contract below is a breaking change that needs FE coordination through #144; merge or deployment and integration acceptance are not confirmed. Detail, write and report APIs are unchanged.
-
-**CORE-014 (#213), 2026-10-15:** `GET /api/v1/sales/summary` exists on `feat/sales-filter-summary`, continuing from staging `df69819642fc420b7686d6f66073b946df2f13c2`. It is an additional API that computes totals under the same filters as the sales list; it does not change the list response or the definition of the period report. See [sales list totals](#sales-list-totals-under-filters-core-014); FE and staging acceptance are not done.
-
-**AI and the Agent proxy:** AI has `GET /health` and ten `/internal/v1/agent/*` endpoints (chat, chat/stream, list, detail, rename, delete, `GET`/`PUT` memory/settings, `GET`/`DELETE` memory/items); Core proxies all ten endpoints. Every `/internal/v1/*` path requires `X-Internal-Token`; a missing or wrong token, or AI without `INTERNAL_API_TOKEN` configured, returns `401`, except `/health`, which stays public; `GET /metrics` (request counts and latency per route for Grafana) also needs no token because AI publishes no port and only containers on the same project network, such as Alloy, can call it. Core proxies `/api/v1/agent/*` to these ten paths, sends `X-Internal-Token` and takes `user_id`/`shop_id` from the authenticated OWNER's shop; AI `404` becomes `conversation_not_found`; AI `422` carrying a guardrail code (section 6) keeps `422` and that code in `code`; any other error or timeout becomes `503 ai_unavailable`. An error before the first event of `/api/v1/agent/chat/stream` is JSON, so the client sends `Accept: text/event-stream, application/json`; if it accepts only `text/event-stream`, Core cannot write the JSON error. There is no end-to-end acceptance of the FE → Core → AI flow with a real model.
+**AI and the Agent proxy:** AI has `GET /health` and ten `/internal/v1/agent/*` endpoints (chat, chat/stream, list, detail, rename, delete, `GET`/`PUT` memory/settings, `GET`/`DELETE` memory/items); Core proxies all ten endpoints. Every `/internal/v1/*` path requires `X-Internal-Token`; a missing or wrong token, or AI without `INTERNAL_API_TOKEN` configured, returns `401`, except `/health`, which stays public; `GET /metrics` (request counts and latency per route for Grafana) also needs no token because AI publishes no port and only containers on the same project network, such as Alloy, can call it. Core proxies `/api/v1/agent/*` to these ten paths, sends `X-Internal-Token` and takes `user_id`/`shop_id` from the authenticated OWNER's shop; AI `404` becomes `conversation_not_found`; AI `422` carrying a guardrail code (section 6) keeps `422` and that code in `code`; any other error or timeout becomes `503 ai_unavailable`. An error before the first event of `/api/v1/agent/chat/stream` is JSON, so the client sends `Accept: text/event-stream, application/json`; if it accepts only `text/event-stream`, Core cannot write the JSON error. This source audit does not establish end-to-end acceptance of the FE → Core → AI flow with a real model.
 
 ## Request conventions
 
@@ -150,7 +142,7 @@ Covers `FR-010`, `FR-011`, `NFR-003`; the dashboard `FR-022` still needs integra
 
 ### Zalo CORE-015
 
-**Status:** Core on `feat/zalo-login`, continuing from staging `120779d`; V17 is prepared, and `ZALO_ENABLED=false` by default. The user confirmed LOGIN through the local test harness on 2026-10-16; FE acceptance, LINK with the real provider, the VPS and native are not done. FE web (the web build of the mobile app) calls the LOGIN flow behind the build flag `EXPO_PUBLIC_ZALO_LOGIN`: it opens the popup before any `await`, checks `event.origin`, `event.source`, `requestId` and `purpose`, exchanges the proof, then calls `signInWithCustomToken` and `/auth/session`; LINK is not built and nothing has been tried with the real provider. Boundary owner: Core provides, FE/mobile consumes; the product owner approves behavior. The parameter/DTO contract is reflected in the OpenAPI `/v3/api-docs` of a configured runtime; OpenAPI/HTTP tests must verify the real response, and consumer acceptance must not be inferred.
+**Status:** WEB authorize/callback/exchange and LINK are implemented in the audited Core source with V17. `ZALO_ENABLED=false` is the code default. Historical local LOGIN evidence is retained in the Core guide; live provider behavior, configuration and integrated acceptance were not audited.
 
 | Method | Path | Request | Response / permission |
 |---|---|---|---|
@@ -181,11 +173,11 @@ These four paths do not use `X-Shop-Id`, `Idempotency-Key` or a client-supplied 
 | `413` / `429` | `invalid_zalo_request` / `zalo_rate_limited`; reduce the body or wait, then start again. |
 | `503` | `zalo_unavailable` (feature off/config/schema/storage), `zalo_provider_unavailable` (provider/Firebase); do not show the raw provider body. |
 
-V17 and the rollout/recovery order are in the [ERD description](../architecture/erd-description.md#zalo-core-015-v17); configuration is in the [Core README](../../backend/core/README.md#zalo-authentication-core-015-local-backend-implementation). Do not put `ZALO_MANUAL_*`, tunnels, test pages or JSON paths from a dev machine onto the VPS. Covers `BR-022` → `FR-010`/`NFR-003` → `AC-081`–`AC-086`; consumer and staging acceptance are separate.
+V17 and the rollout/recovery order are in the [ERD description](../architecture/erd-description.md#zalo-core-015-v17); configuration is in the [Core README](../../backend/core/docs/zalo-auth-implementation-plan.md#runtime-configuration). Do not put `ZALO_MANUAL_*`, tunnels, test pages or JSON paths from a dev machine onto the VPS. Covers `BR-022` → `FR-010`/`NFR-003` → `AC-081`–`AC-086`; consumer and staging acceptance are separate.
 
 ### Zalo Android CORE-016
 
-**Status:** Core/V18 on `feat/zalo-android` for #276; the migration is approved and the configuration for **enabling on staging after merge** is prepared, but nothing has been run on the shared DB, enabled on the VPS or accepted on an APK. The runtime stays off by default and does not enable production on its own. It uses only the external browser/Custom Tabs + HTTPS App Link; it is not the Zalo Android SDK or a WebView. Provider: Core; FE/APK consumes. Traceability `BR-009`/`BR-022` → `FR-010`/`NFR-003` → `AC-087`–`AC-092`. The WEB contract of CORE-015 is unchanged.
+**Status:** Native handoff and V18 are implemented in the audited Core source. Native is default-off; shared-DB migration, runtime enablement, provider/device behavior and integrated acceptance were not audited. A checked-in staging sample does not establish any of those states.
 
 | Method | Path | Request | Response / permission |
 |---|---|---|---|
@@ -215,7 +207,7 @@ The schema is managed by the real migration `V18__add_zalo_android_handoff.sql`,
 
 ## 2. Category, Product and Customer
 
-**CORE-012 #163/#164 addition on `feat/core-barcode`, 2026-10-12:** lookup, normalization and the 409 detail exist in Core; V16 changes the unique barcode to ACTIVE-only. This is the scope of the branch under review and does not claim that it has been merged, migrated on staging, or integrated with the FE scanner #162/#165. Traceability `BR-021` → `FR-034` → `AC-064`–`AC-067`.
+**CORE-012 #163/#164:** lookup, normalization and conflict details are implemented in Core. V16 enforces ACTIVE-only barcode uniqueness; current runtime migration and integrated acceptance require separate evidence.
 
 The APIs below require a Bearer token and `X-Shop-Id`. GET list/detail return only ACTIVE records; DELETE is an archive and does not delete related history.
 
@@ -297,7 +289,7 @@ Create/PATCH/lookup trim leading and trailing Unicode whitespace, including CR/L
 
 `message` is a description; FE branches on code/field. If two writers pass the precheck at the same time, the V16 partial unique index blocks the losing write; the handler maps `uq_products_shop_barcode_active` (and the old constraint during the upgrade period) to the same 409, **possibly without details**. No extra query is made on a DB transaction that has already failed in order to fill in details. A lookup that sees 404 does not guarantee that the next create succeeds; FE must handle 409 and may look up again. Create/PATCH have no replay guarantee through Idempotency-Key.
 
-**Rollout:** V16 is reviewed and merged into staging before the migration owner runs it on the shared DB; do not run a feature-branch migration against the business DB. The transactional index build happens in a maintenance window that stops catalog writes; it is not zero-downtime. Archiving and reuse do not edit the productId or snapshots of old sales and drafts. FE #162/#165 must use lookup, keep the code characters unchanged, not create a fake Product when the API fails, and handle a 409 with or without details; the UI and cart are still decided by the team and accepted separately. See `FR-034`, `AC-064`–`AC-067` and the [Core guide](../../backend/core/README.md#exact-product-barcode-lookup-and-active-only-uniqueness-core-012--163164).
+**Rollout:** V16 is reviewed and merged into staging before the migration owner runs it on the shared DB; do not run a feature-branch migration against the business DB. The transactional index build happens in a maintenance window that stops catalog writes; it is not zero-downtime. Archiving and reuse do not edit the productId or snapshots of old sales and drafts. FE #162/#165 must use lookup, keep the code characters unchanged, not create a fake Product when the API fails, and handle a 409 with or without details; the UI and cart are still decided by the team and accepted separately. See `FR-034`, `AC-064`–`AC-067` and the [Core guide](../../backend/core/docs/verification.md#catalog-and-barcode-verification).
 
 ### 2.3. Customer
 
@@ -353,7 +345,7 @@ Example mixing catalog items and free-form items:
 ```
 
 - items is non-empty; quantity > 0; unitPriceVnd ≥ 0 (the line's selling price is chosen by the request and is not required to equal the catalog price). lineTotalVnd is rounded HALF_UP to VND; the total after discount must be > 0.
-- When productId is omitted or null, a non-empty productName/unit is required (max 255/50); no Product or stock is created. A catalog item needs an ACTIVE product of the same shop, and the name/unit snapshot comes from the product; sending productName/unit together with a productId returns `400 draft_item_invalid`. Repeating a catalog product returns `400 draft_item_duplicate`; a free-form item is an independent line.
+- When productId is omitted or null, a non-empty productName/unit is required (max 255/50); no Product or stock is created. A catalog item needs an ACTIVE product of the same shop, and the name/unit snapshot comes from the product; sending a non-blank productName or unit together with a productId returns `400 draft_item_invalid`. Repeating a catalog product returns `400 draft_item_duplicate`; a free-form item is an independent line.
 - discountVnd/initialPaidVnd are optional, default 0, non-negative. initialPaidVnd is the amount actually collected, not the cash the customer hands over before change is returned, and does not exceed the total. > 0 requires initialPaymentMethod CASH|TRANSFER; = 0 requires the method to be null or omitted, otherwise `400 draft_payment_invalid`.
 - customerId or customerName/customerPhone are optional. customerId must be ACTIVE in the same shop; the name/phone snapshot comes from this profile. With no ID, the draft may have no customer; a confirm that leaves debt needs a non-empty name (`400 customer_required_for_debt`), and phone is optional. Core creates a new customer at confirm when the sale is short, and does not look for a customer with the same name/phone. A fully paid sale may have no customer.
 - A draft can be edited or cancelled only while it is a DRAFT that is still valid; it expires one month after creation and editing does not extend it. Cancelled or expired drafts can still be read; an invalid operation returns `409 draft_not_editable`.
@@ -526,50 +518,26 @@ The `audit_logs` table is append-only (V10, a trigger blocks UPDATE/DELETE/TRUNC
 
 ## 5. AI through Core
 
-AI only creates drafts, suggestions and chat answers. These endpoints do not write invoices, expenses or stock.
+The implemented AI routes provide chat, read-only suggestions and conversation/memory management. They do not create ledger drafts or write sales, expenses or stock. There is no public AI draft-parsing endpoint.
 
 | Method | Path | Input | Returns | Status |
 |---|---|---|---|---|
-| `POST` | `/api/v1/ai/drafts` | JSON `{ type: TEXT, mode, text }` or multipart `type=AUDIO\|IMAGE`, `mode=SALE\|EXPENSE`, `file` | `DraftView` | Target |
 | `POST` | `/api/v1/agent/chat` | `X-Shop-Id`, `{ conversation_id?, message }` | `AgentChatMessageView` | Implemented |
 | `POST` | `/api/v1/agent/chat/stream` | `X-Shop-Id`, `{ conversation_id?, message }` | `text/event-stream`: `delta`, `reset`, `memory` (only when memory is on), `tool_start`, `tool_end`, `done` (`AgentChatMessageView`), `error` ([Stream section](#chat-answer-stream)) | Implemented |
 | `GET` | `/api/v1/agent/conversations` | `X-Shop-Id` | `AgentConversationSummary[]` | Implemented |
 | `GET` | `/api/v1/agent/conversations/{conversation_id}` | `X-Shop-Id` | `AgentConversationView` | Implemented |
 | `PATCH` | `/api/v1/agent/conversations/{conversation_id}` | `X-Shop-Id`, `{ title }` (1–255 characters, non-empty) | `AgentConversationSummary` | Implemented |
 | `DELETE` | `/api/v1/agent/conversations/{conversation_id}` | `X-Shop-Id` | `204 No Content` | Implemented |
-| `GET` | `/api/v1/agent/memory/settings` | `X-Shop-Id` | `{ memory_enabled, available }` | Works only when `AGENT_MEMORY_ENABLED` is on; awaiting PO approval ([ADR-0002](../architecture/adr/0002-agent-long-term-memory.md)) |
+| `GET` | `/api/v1/agent/memory/settings` | `X-Shop-Id` | `{ memory_enabled, available }` | Memory is active only when `AGENT_MEMORY_ENABLED` is on (otherwise reads return `available=false` or an empty list). The PO approved the feature on 2026-11-07 and production has the flag on ([ADR-0002](../architecture/adr/0002-agent-long-term-memory.md), `FR-040`, `AC-122`–`AC-126`) |
 | `PUT` | `/api/v1/agent/memory/settings` | `X-Shop-Id`, `{ memory_enabled }` | `{ memory_enabled, available }` | As above |
 | `GET` | `/api/v1/agent/memory/items` | `X-Shop-Id` | `[AgentMemoryItem]` (see `/internal/v1/agent/memory/items`) | As above |
 | `DELETE` | `/api/v1/agent/memory/items/{memoryId}` | `X-Shop-Id` | `204`; an id that does not belong to the shop owner becomes `404 conversation_not_found` (Core turns every AI `404` into this code) | As above |
-
-`DraftView`:
-
-```json
-{
-  "request_id": "uuid",
-  "transcript": "bán hai cà phê sữa",
-  "mode": "SALE",
-  "items": [
-    {
-      "product_id": 12,
-      "name": "Cà phê sữa",
-      "unit": "ly",
-      "qty": 2,
-      "unit_price": 25000,
-      "confidence": 0.94
-    }
-  ],
-  "warnings": []
-}
-```
-
-`product_id` is the `BIGINT` of `products.id` per the ERD, or `null` when there is no match, an ambiguous match, low confidence, or an id returned by the model that is not in the shop's ACTIVE catalog; in that case `unit` and `unit_price` are also `null` and `warnings` states the reason in Vietnamese. For `SALE`, `name`, `unit` and `unit_price` come from the shop's catalog; the price is not taken from the model or from what the user said. For `EXPENSE`, each expense is a line with `product_id: null`, `unit: null`, `qty: 1`, `name` as the description and `unit_price` as the VND amount, or `null` with a warning when the amount is unclear. The text parsing step already exists in AI (`DraftService`, see the [AI README](../../backend/ai/README.md#text-drafts)); the endpoint and audio remain the target of #3.
 
 `AgentChatMessageView` has `conversation_id`, `message_id`, `answer`. `AgentConversationSummary` has `conversation_id`, `title`, `last_message_at`. `AgentConversationView` has the summary and `messages[]` with `message_id`, `role` (`USER` or `ASSISTANT`), `content`, `created_at`. Conversation and message IDs are `BIGINT` as in the ERD.
 
 The Agent endpoints require an authenticated OWNER and a valid `X-Shop-Id`. Core takes the user from the authenticated identity; FE does not send `user_id` to establish permissions. List, view, chat and delete are all limited to the authenticated user/shop.
 
-`FR-007` (restock suggestions) and `FR-020` (asking about operating figures) are currently delivered through `/api/v1/agent/chat`: the agent calls AI's read-only tools and then answers in the same conversation, not through a separate endpoint. Restock suggestions have no end-to-end acceptance; `COVER_DAYS` and the two data periods currently used are defaults awaiting PO approval, see the [Restock suggestions section](../../backend/ai/README.md#restock-suggestions).
+`FR-007` (restock suggestions) and `FR-020` (asking about operating figures) are currently delivered through `/api/v1/agent/chat`: the agent calls AI's read-only tools and then answers in the same conversation, not through a separate endpoint. Restock suggestions have no end-to-end acceptance; `COVER_DAYS` and the two data periods currently used are defaults awaiting PO approval, see the [Restock suggestions section](../../backend/ai/docs/architecture.md#restock-suggestions).
 
 Covers `FR-007`, `FR-008`, `FR-017`, `FR-018`, `FR-020`, `FR-021`, `FR-027`.
 
@@ -583,34 +551,33 @@ Covers `FR-007`, `FR-008`, `FR-017`, `FR-018`, `FR-020`, `FR-021`, `FR-027`.
 | `GET` | `/internal/v1/agent/conversations/{conversation_id}` | Query `user_id`, `shop_id`; returns the conversation and messages | Implemented |
 | `PATCH` | `/internal/v1/agent/conversations/{conversation_id}` | Body `{ user_id, shop_id, title }`, `title` 1–255 characters after trimming both ends; returns the renamed summary | Implemented |
 | `DELETE` | `/internal/v1/agent/conversations/{conversation_id}` | Query `user_id`, `shop_id`; deletes the conversation, returns `204` | Implemented |
-| `GET` | `/internal/v1/agent/memory/settings` | Query `user_id`, `shop_id`; returns `{ memory_enabled, available }`. `available` is `false` (and `memory_enabled` `false`) when long-term memory is not enabled system-wide or the memory service cannot be built (missing chat model, Postgres or embedder) | Works only when `AGENT_MEMORY_ENABLED` is on; awaiting PO approval (ADR-0002); Core proxies through `/api/v1/agent/memory/settings` |
+| `GET` | `/internal/v1/agent/memory/settings` | Query `user_id`, `shop_id`; returns `{ memory_enabled, available }`. `available` is `false` (and `memory_enabled` `false`) when long-term memory is not enabled system-wide or the memory service cannot be built (missing chat model, Postgres or embedder) | Memory is active only when `AGENT_MEMORY_ENABLED` is on (otherwise reads return `available=false` or an empty list); approved by the PO on 2026-11-07 and enabled in production (ADR-0002, `FR-040`); Core proxies through `/api/v1/agent/memory/settings` |
 | `PUT` | `/internal/v1/agent/memory/settings` | Body `{ user_id, shop_id, memory_enabled }`; returns as `GET`. When memory is not enabled or cannot be built it returns `409` `{ "detail": "memory_unavailable" }`, which Core turns into `503 ai_unavailable` | As above |
 | `GET` | `/internal/v1/agent/memory/items` | Query `user_id`, `shop_id`; returns an array of memories still in effect (not yet replaced by a newer memory) `{ id, memory_type, content, use_count, last_used_at, created_at, source_conversation_id }`, most recently used first, at most 200 memories; an empty array when memory cannot be built. The app draws this list as a memory map in the assistant settings | As above; Core proxies through `/api/v1/agent/memory/items` |
 | `DELETE` | `/internal/v1/agent/memory/items/{memory_id}` | Query `user_id`, `shop_id`; deletes the memory together with the older versions it replaced (so old versions do not come back to life), returns `204`. An id that does not belong to the shop owner returns `404` `{ "detail": "memory_not_found" }`; memory that cannot be built returns `409` `memory_unavailable` | As above |
-| `POST` | `/internal/v1/drafts/parse` | Text/voice/image → `DraftView` | Target |
-| `GET` | `/internal/v1/recommendations/restock` | Query `user_id`, `shop_id`, `period`; returns a structured list of restock suggestions for the overview screen (#103) | Target |
 
 General requirements:
 
-- a model error (after the SDK retries itself and the models in `MODEL_FALLBACKS`, if any, also fail) returns `503` with `{ "detail": "ai_unavailable" }`. Each model request has a limit of `MODEL_TIMEOUT_SECONDS` (20 seconds by default) and the OpenAI/Anthropic SDK retries itself at most 2 times, so a hung model usually makes the chat turn reach `AGENT_TURN_TIMEOUT_SECONDS` first and return `422 answer_timeout`; Core does not retry the AI call on its own;
-- a guardrail that stops the chat turn returns `422` with `{ "detail": "<code>" }` and stores nothing: `input_too_long` (the new message is longer than `AGENT_MAX_INPUT_CHARS`, 2000 characters by default), `answer_unavailable` (model calls exhausted, the turn's token budget exceeded, or the answer is still blocked after the rewrite requests) or `answer_timeout` (the chat turn exceeded `AGENT_TURN_TIMEOUT_SECONDS`, 35 seconds by default, lower than Core's 40-second read timeout). AI returns only the code; the display text is mapped by FE; Core forwards `422` and this code in the `code` of the Core error;
+- a model error (after the SDK retries itself and the models in `MODEL_FALLBACKS`, if any, also fail) returns `503` with `{ "detail": "ai_unavailable" }`. Each model request has a limit of `MODEL_TIMEOUT_SECONDS` (20 seconds by default) and the OpenAI SDK retries itself at most 2 times, so a hung model usually makes the chat turn reach `AGENT_TURN_TIMEOUT_SECONDS` first and return `422 answer_timeout`; Core does not retry the AI call on its own;
+- a guardrail that stops the chat turn returns `422` with `{ "detail": "<code>" }` without saving unsuccessful generation (an already-running database write may still commit if cancellation/timeout races persistence): `input_too_long` (the new message is longer than `AGENT_MAX_INPUT_CHARS`, 2000 characters by default), `answer_unavailable` (model calls exhausted, the turn's token budget exceeded, or the answer is still blocked after the rewrite requests) or `answer_timeout` (the model run exceeded `AGENT_TURN_TIMEOUT_SECONDS`, 35 seconds by default, lower than Core's 40-second read timeout; reading history, recall and saving fall outside this limit). AI returns only the code; the display text is mapped by FE; Core forwards `422` and this code in the `code` of the Core error;
 - a successful response has `request_id`, `model`, `model_version`;
 - AI has no endpoint that creates, edits or deletes business data;
-- Core and AI both check `shop_id`; cross-shop tests are required. `user_id`, `shop_id` and `conversation_id` must be greater than 0, otherwise AI returns FastAPI's default `422` validation;
+- Core authorizes the OWNER against the shop; AI accepts caller-supplied IDs after validating a shared service token and does not independently verify user-to-shop ownership. The token is not tenant-bound; network isolation and trusted Core context are security requirements. `user_id`, `shop_id` and a body `conversation_id` must be greater than 0, otherwise AI returns FastAPI's default `422` validation; a conversation ID in the path that matches no conversation, including 0, returns `404 conversation_not_found`;
 - Core forwards the authenticated `user_id`; AI queries by both `user_id` and `shop_id`. A conversation that does not exist or is out of scope returns `404 conversation_not_found`;
 - chats are kept across sessions until the OWNER deletes them; deleting a chat removes the messages from the history and the assistant context. No automatic TTL is applied at present;
-- Core calls `/internal/v1/*` with the header `X-Internal-Token` carrying the environment's `INTERNAL_API_TOKEN` value. A missing header or wrong value returns `401` with `{ "detail": "unauthorized" }`. When AI has no token configured, every `/internal/v1/*` path returns `401` (fail closed), except `/health` and `/metrics` (Prometheus), which need no token; AI publishes no port, so only containers on the same network can call `/metrics`;
+- Core calls `/internal/v1/*` with the header `X-Internal-Token` carrying the environment's `INTERNAL_API_TOKEN` value. A missing header or wrong value returns `401` with `{ "detail": "unauthorized" }`. When AI has no token configured, every `/internal/v1/*` path returns `401` (fail closed), except `/health` and `/metrics` (Prometheus), which need no token; the VPS deployment publishes no AI port, so only containers on the same network can call `/metrics` there; local Compose publishes the AI port to the host for development;
 
 ### Agent tool for reading shop data
 
 The agent has an internal tool `query_shop_data` to answer questions about the shop profile, categories, products, orders, debts, collected payments and expenses. It is not an endpoint: there is **no** `POST /internal/v1/agent/sql`, Core and FE connect only to `/internal/v1/agent/chat`, and the chat request and response do not change.
 
-- The model passes only `sql`; `shop_id` comes from the authenticated request and reaches the tool through Pydantic AI's run context (`deps`), not in the tool schema or system prompt, so the model cannot change the shop scope.
+- The model passes only `sql`; `shop_id` comes from Core's authorized request context and reaches the tool through Pydantic AI's run context (`deps`), not in the tool schema or system prompt, so the model cannot change the shop scope.
+- Shop-profile results include the shop's phone and address; customer-contact exclusions do not make all tool output anonymous. Enabled model/tracing integrations can receive these results.
 - The query runs with the read-only role `ai_sql_reader` on eight views of the `ai_read` schema: `v_shop_profile`, `v_categories`, `v_products`, `v_sales`, `v_sale_items`, `v_debts`, `v_payments`, `v_expenses`. The views filter by the transaction's shop themselves and have no `shop_id` column; the role has no permission on the base tables. `v_sales`/`v_sale_items` do not expose the customer snapshot or `void_reason`. `v_debts`/`v_payments` filter the shop through the sale and have only `customer_id` (no name or phone number), no transfer reference or collector; `v_expenses` has only ACTIVE expenses and no `description`.
 - SQL is at most 4000 characters long (longer gives `SQL_TOO_LONG`) and must pass the AST checker: exactly one `SELECT` statement (`WITH` and `UNION` allowed), using only functions and casts in the allowlist. The transaction is `READ ONLY` (`postgresql_readonly`), `statement_timeout` is 3000 ms by default, at most 100 rows; on success it commits (nothing can be written), on error it rolls back; each chat turn calls the model at most 4 times and tools at most 3 times, with a total of at most 200000 input and output tokens and at most 35 seconds of running time. These defaults are temporary, awaiting PO approval.
 - A query rejected by the checker or the database, or one that times out, is returned to the model in the form `Error[CODE]: reason` (for example `UNSAFE_FUNCTION`, `QUERY_TIMEOUT`, `SQL_ERROR`) so the model can rewrite the query; the chat turn still answers. If the read database cannot be connected, the chat turn returns `503 ai_unavailable`. When AI has no `AI_SQL_READER_URL` configured, the agent still chats but has neither this tool nor `suggest_restock`.
 - Deterministic guardrails around the agent: a new message longer than 2000 characters is rejected with `422 input_too_long` without calling the model; API keys, bearer tokens, JWTs, private keys, IBANs, Luhn-valid card numbers and emails in the message are replaced with `[redacted:<kind>]` before being sent to the model and before being stored; an empty answer or one that leaks internal details (view names, SQL, error codes) is sent back to the model to be rewritten, and when model calls run out it returns `422 answer_unavailable`. The system prompt limits the agent to shop matters (revenue, orders, products, categories, prices, stock, restocking, debts, collected payments, expenses, record drafts, how to use SmartLedger); an out-of-scope question gets a short refusal sentence with `200`, not an error code, and this is a prompt constraint, not a deterministic filter. The request and successful response of `/internal/v1/agent/chat` do not change; the error codes are in the general requirements above.
-- The agent can read the shop profile, categories, products, orders (`v_sales`, `v_sale_items`), **debts, collected payments and expenses** (`v_debts`, `v_payments`, `v_expenses`; `AC-076`–`AC-077`); customer names/contacts, expense descriptions, refunds and stock-in history are still not exposed. Besides `query_shop_data`, the agent has the tool `suggest_restock`, which returns restock suggestions from `CONFIRMED` orders; `COVER_DAYS` and the two periods `last_7_days`/`last_30_days` are currently defaults awaiting PO approval, not final decisions. Operating details are in the [AI README](../../backend/ai/README.md#read-only-shop-data) and the [Restock suggestions section](../../backend/ai/README.md#restock-suggestions).
+- The agent can read the shop profile, categories, products, orders (`v_sales`, `v_sale_items`), **debts, collected payments and expenses** (`v_debts`, `v_payments`, `v_expenses`; `AC-076`–`AC-077`); customer names/contacts, expense descriptions, refunds and stock-in history are still not exposed. Besides `query_shop_data`, the agent has the tool `suggest_restock`, which returns restock suggestions from `CONFIRMED` orders; `COVER_DAYS` and the two periods `last_7_days`/`last_30_days` are currently defaults awaiting PO approval, not final decisions. Operating details are in the [AI README](../../backend/ai/docs/architecture.md#read-only-shop-data) and the [Restock suggestions section](../../backend/ai/docs/architecture.md#restock-suggestions).
 - The agent has a `calculate` tool to do arithmetic itself instead of computing in the answer: it takes an ordered list of steps (`add`, `subtract`, `multiply`, `divide`, `percentage` (a is a percentage of b), `round` half-up with `digits` 0–6, default 0, `min`, `max`), and every step except the first may use `$` for the previous step's result. The tool runs in the AI process on a closed set of operations, without calling the sandbox; results are rounded to 6 decimal places, with a per-step trace for cross-checking. A rejected plan is returned to the model in the form `Error[CODE]: reason` (`DIVISION_BY_ZERO`, `BAD_OPERATION`, `OPERAND_TOO_LARGE`, `RESULT_TOO_LARGE`, `TOO_MANY_OPERATIONS`, `INVALID_NUMBER`); operands and results are capped at `CALC_MAX_OPERAND_VALUE` (1e15 by default), and each call has at most `CALC_MAX_OPERATIONS` steps (20 by default). The tool is off when `CALC_ENABLED=false`. `calculate` is a pure in-process computation tool (no I/O), so it does not count against the per-turn tool-call cap `AGENT_TOOL_CALL_LIMIT`. The defaults are temporary, awaiting PO approval.
 - When `SANDBOX_ENABLED` is on (the default), the agent has the additional tool `run_code`: the model writes a small Python program that runs in the [Monty](https://github.com/pydantic/monty) sandbox. The program cannot call any tool, uses only data from earlier tool results, and is only for what a single SQL statement or `calculate` cannot do; `query_shop_data` and `suggest_restock` remain directly called tools ([ADR-0007](../architecture/adr/0007-sandbox-without-data-tools.md)). The sandbox is not an endpoint; the chat request and response do not change. Limits per `run_code` snippet: heap at most `SANDBOX_MAX_MEMORY_BYTES` (64 MiB by default; exceeding it returns `MemoryError` to the model to rewrite, without killing the worker), runs at most `SANDBOX_MAX_DURATION_SECS` (5 by default) seconds and pauses at most `SANDBOX_MAX_SUSPENSIONS` (1000 by default) times. The heap limit only bounds the sandbox, not the AI process RAM; the OS/container RAM limit remains the final barrier. The defaults are temporary, awaiting PO approval.
 
@@ -625,8 +592,8 @@ On each chat turn, AI sends the model the static system prompt, then the most re
 A successful response has `Content-Type: text/event-stream`. Each event has a name and `data` that is JSON:
 
 - `delta` `{ "text": "..." }`: append `text` to the part already displayed.
-- `reset` `{}`: discard the part already displayed; a new model answer follows. This happens when the model writes text before a data-reading tool call, or when the answer screen rejects the answer and the model rewrites it. Text the model writes before calling only `suggest_screen` is part of the answer: the stream keeps it, text written afterwards continues after a blank line, and no `reset` is sent.
-- `memory` `{ "used": [{ "id", "memory_type", "content", "source_conversation_id", "created_at" }] }`: the long-term memories used this turn, including at most 10 `preference` memories that are always included and at most 5 memories found by the question; `source_conversation_id` is the conversation that produced the memory, `created_at` is ISO 8601; sent once, before the first `delta`, and only when `AGENT_MEMORY_ENABLED` is on, the shop owner has not turned memory off, and some memory was used (awaiting PO approval, ADR-0002). The app shows a memory icon (with a count when there are several) on the answer; tapping it shows each memory with the date remembered and can open the source conversation through `GET /api/v1/agent/conversations/{conversation_id}`; the event does not enter the conversation history.
+- `reset` `{}`: discard the part already displayed; a new model answer follows. This happens when the model writes text before a data-reading tool call, or when the answer screen rejects the answer and the model rewrites it. Text the model writes before calling only `suggest_screen` is part of the answer: the stream keeps it, the model is not asked again once the buttons return, and no `reset` is sent.
+- `memory` `{ "used": [{ "id", "memory_type", "content", "source_conversation_id", "created_at" }] }`: the long-term memories used this turn, including at most 10 `preference` memories that are always included and at most 5 memories found by the question; `source_conversation_id` is the conversation that produced the memory, `created_at` is ISO 8601; sent once, before the first `delta`, and only when `AGENT_MEMORY_ENABLED` is on, the shop owner has not turned memory off, and some memory was used (approved by the PO on 2026-11-07, ADR-0002, `FR-040`/`AC-126`). The app shows a memory icon (with a count when there are several) on the answer; tapping it shows each memory with the date remembered and can open the source conversation through `GET /api/v1/agent/conversations/{conversation_id}`; the event does not enter the conversation history.
 - `tool_start` `{ "call_id": "...", "name": "query_shop_data" }`: the model starts calling a tool; `name` is the tool name (`query_shop_data`, `suggest_restock`, `suggest_screen`, `calculate`, `run_code`). AI sends neither the tool's parameters (the SQL statement) nor its result, so the app sets its own display text for each step. A turn may call several tools, each with its own `call_id`; the event does not enter the conversation history.
 - `tool_end` `{ "call_id": "..." }`: the tool with that `call_id` has finished, even if it returned an error for the model to rewrite the query. A `tool_start` with the same `call_id` always comes first.
 - `done`: the same body as the response of `/internal/v1/agent/chat` (`conversation_id`, `message_id`, `request_id`, `answer`, `model`, `model_version`). `answer` is the stored answer and replaces all the text streamed.
@@ -636,7 +603,7 @@ The stream ends after `done` or `error`.
 
 Only text the model wrote that has passed the answer screen is sent; the ```actions block that AI appends after the answer screen travels in the final `delta` (see below). A short tail and text after a pending `select` are held back until the answer screen finishes checking. A turn that ends with `error`, or where the caller disconnects midway, is not stored, unless the caller disconnects exactly while AI is writing the turn to the database.
 
-Core proxies this route through `POST /api/v1/agent/chat/stream` with the same auth, `X-Shop-Id` and body as `/api/v1/agent/chat`. An error before the first event is a Core JSON error and is mapped like the JSON route: AI `404` becomes `conversation_not_found`, AI `422` carrying a guardrail code (`input_too_long`) keeps `422` like the JSON route, and any other error becomes `503 ai_unavailable`. After that, Core forwards each AI event verbatim, except `done`, which keeps only `conversation_id`, `message_id`, `answer` like `AgentChatMessageView`. When the app disconnects, Core closes the stream to AI, so AI cancels the turn as described above. Core's async request expires after 60 seconds, above AI's default turn limit of 35 seconds.
+Core proxies this route through `POST /api/v1/agent/chat/stream` with the same auth, `X-Shop-Id` and body as `/api/v1/agent/chat`. An error before the first event is a Core JSON error and is mapped like the JSON route: AI `404` becomes `conversation_not_found`, AI `422` carrying a guardrail code (`input_too_long`) keeps `422` like the JSON route, and any other error becomes `503 ai_unavailable`. After that, Core forwards each AI event verbatim, except `done`, which keeps only `conversation_id`, `message_id`, `answer` like `AgentChatMessageView`. When the app disconnects, Core closes the stream to AI, so AI cancels the turn as described above. Core configures a 60-second MVC async-request timeout and a separate 40-second AI HTTP read timeout; AI's default turn limit is 35 seconds. These are distinct limits, not a promise that an upstream response can wait for 60 seconds.
 
 The AI Assistant screen on mobile calls the stream route and shows text gradually in the answer bubble; `reset` clears the part already shown, and `done` replaces it with the stored answer. While waiting for the first text, the thinking line shows a waiting phrase; each `tool_start` replaces it with the label of the latest step, and `tool_end` adds a tick after the label. This line disappears when the first `delta` arrives. The answer, stored data and guardrails are unchanged from `/api/v1/agent/chat`.
 
@@ -662,12 +629,12 @@ The model does not write this block itself: the agent calls the tool `suggest_sc
 
 ## 7. Admin dashboard — implemented in Core
 
-The seven base GETs already have a Core controller/service; the branch `feat/admin-dashboard-growth` adds GET `overview/growth` as the eighth endpoint, deployment not confirmed. A valid Firebase ID token and a DB profile of `ADMIN`/`ACTIVE` are required; the role is not taken from the client or a self-made claim. `X-Shop-Id` is not needed; this header and the `actorUserId` param do not change the access scope. A successful response has `Cache-Control: no-store`. The web dashboard (`frontend/web`, built with `VITE_USE_MOCK=false`) reads the base contract through `src/services/adminApi.ts`, signs in with Firebase email/password and then calls `GET /api/v1/me` to check the `role` is ADMIN; the growth chart is not integrated. Core tests do not replace acceptance with real Firebase/FE and staging UAT.
+The audited Core source includes the seven base GETs and `overview/growth` as the eighth endpoint; live deployment and acceptance were not audited. A valid Firebase ID token and a DB profile of `ADMIN`/`ACTIVE` are required; the role is not taken from the client or a self-made claim. `X-Shop-Id` is not needed; this header and the `actorUserId` param do not change the access scope. A successful response has `Cache-Control: no-store`. The web dashboard (`frontend/web`, built with `VITE_USE_MOCK=false`) reads the base contract through `src/services/adminApi.ts`, signs in with Firebase email/password and then calls `GET /api/v1/me` to check the `role` is ADMIN; the growth chart is not integrated. Core tests do not replace acceptance with real Firebase/FE and staging UAT.
 
 | Method | Path | Query | Response |
 |---|---|---|---|
 | `GET` | `/api/v1/admin/overview` | `fromDate?`, `toDate?` | `200 Overview` |
-| `GET` | `/api/v1/admin/overview/growth` | `fromDate?`, `toDate?` | `200 Growth` — new in feat/admin-dashboard-growth |
+| `GET` | `/api/v1/admin/overview/growth` | `fromDate?`, `toDate?` | `200 Growth` — implemented in Core |
 | `GET` | `/api/v1/admin/users` | `query?`, `status?`, `page=0`, `size=20` | `200 AdminPageResponse<OwnerSummary>` |
 | `GET` | `/api/v1/admin/users/{userId}` | — | `200 OwnerDetail` |
 | `GET` | `/api/v1/admin/shops` | `query?`, `status?`, `ownerId?`, `page=0`, `size=20` | `200 AdminPageResponse<ShopSummary>` |
@@ -763,7 +730,7 @@ If the ADMIN audit cannot be stored (or the access history cannot be read): `503
 Covers `BR-013`/`BR-014` → `FR-022`–`FR-024`, `NFR-003`/`NFR-009` → `AC-015`–`AC-017`, `AC-040`–`AC-043`, `AC-097`–`AC-100`. Verification of the API/DB is separate from real Firebase, the web dashboard and staging UAT; the web mock is not acceptance evidence.
 
 
-## 8. OWNER notifications — implemented on `feat/app-notifications`
+## 8. OWNER notifications — implemented in Core
 
 Covers `BR-020`, `FR-032`, `AC-055`–`AC-058`. V15 is needed before a runtime using `ddl-auto=validate`; FE or staging UAT is not proven. This is an in-app inbox, not FCM/push.
 

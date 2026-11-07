@@ -7,13 +7,10 @@ import { fromE164VN } from './auth/phone';
 import { industriesToCore, type ShopChanges } from './shopProfile';
 
 /**
- * Phiên đăng nhập với Core (backend/core, nhánh feat/auth-session):
- *   Firebase xác thực SĐT → FE gửi Firebase ID token (Bearer) → Core xác thực token, tạo/tìm tài khoản, trả phiên.
- *
- * - POST /api/v1/auth/session  body `{ displayName? }` — `displayName` BẮT BUỘC ở lần đăng nhập đầu của một tài khoản
- *   Firebase (thiếu → 400 validation_failed, details.field = displayName). Đăng nhập các lần sau không cần gửi.
- * - GET  /api/v1/me            — khôi phục phiên; 404 auth_profile_not_found nếu Core chưa có tài khoản.
- * - POST /api/v1/shops         — Core CHƯA có endpoint này (mới có auth), xem USE_MOCK_SHOPS.
+ * Core session and shop onboarding use the Firebase ID token as Bearer authorization.
+ * POST /api/v1/auth/session requires displayName for a new Core account.
+ * GET /api/v1/me restores the profile; 404 auth_profile_not_found requires onboarding.
+ * POST /api/v1/shops creates the shop; USE_MOCK_SHOPS selects the simulated path.
  */
 
 // ---- Core giả lập: mô phỏng đúng hành vi của Core thật (tài khoản mới phải gửi displayName) ----

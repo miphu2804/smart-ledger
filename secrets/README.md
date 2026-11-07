@@ -1,51 +1,30 @@
 ---
 type: Guide
 title: "secrets"
-description: "Local copies of the team env files pulled from Dopbase, and what is tracked in git."
+description: "Local secret-file helpers and safe handling; environment access details remain in the private knowledge base."
 owner: Technical owner
 status: stable
-generated: { by: human:miphu2804, at: 2026-11-02T19:08:01+07:00 }
+author: miphu2804
 stale_after: 2027-01-01T19:08:01+07:00
 ---
 # secrets
 
-Local copies of the team's env files, one folder per environment, pulled from Dopbase. Only `staging/targets`, `templates/` and `local.env.*` are in git; every `env/` folder is ignored. The full guide, file format and what each file holds: [Secrets and env files](../docs/development/secrets-and-env.md).
+This directory contains tracked templates and local helper inputs, not a publishable environment inventory. Environment addresses, domains, credential ownership and access instructions belong to the private operations knowledge base.
 
-## Where a credential lives
+## Local use
 
-| What | Where | In git |
-|---|---|---|
-| Values (passwords, tokens, keys) | Dopbase, `https://secrets.songheloi.id.vn`, one project per service and one environment per stage | no |
-| Groups and comments of each file | `templates/.env.<name>`, no values | yes |
-| Local database keys for a dev machine | `local.env.core`, `local.env.ai`, public defaults of `scripts/local-db.sh` | yes |
-| Files `apply.sh` copies to a fixed path | `staging/targets` | yes |
-| Pulled copies | `<environment>/env/` | no |
-| Variable names for people without Dopbase | `.env.example` beside each app | yes |
-
-Never commit a value, paste one into a PR, or edit a pulled file to change it: a pull replaces it. Change the value in Dopbase.
-
-## Set up once
+Without team access, start from each service's `.env.example` and the [local development guide](../docs/development/local-development.md). With authorized access, follow the private procedure before running these repository helpers:
 
 ```bash
-dopbase client connect https://secrets.songheloi.id.vn
-dopbase login
 scripts/secrets/dopbase-sync.sh pull dev
-scripts/local-db.sh
+scripts/secrets/apply.sh dev dev
 scripts/secrets/apply.sh dev dev --apply
 ```
 
-## Use
+The first command retrieves the authorized development source. The second previews changed keys without values; the third writes local files and keeps backups. The development source uses local database settings. Selecting staging is a deliberate shared-environment action, not the default local setup.
 
-| Task | Command |
-|---|---|
-| Get the latest dev machine values | `scripts/secrets/dopbase-sync.sh pull dev` |
-| Get the latest staging or production secrets (runners and deploy tools) | `scripts/secrets/dopbase-sync.sh pull staging` or `pull production` |
-| See what would change in `backend/core/.env`, `backend/ai/.env`, `frontend/mobile/.env` and the other targets | `scripts/secrets/apply.sh dev dev` |
-| Write those files with the local database keys from `local.env.*`, keeping the old ones as `.bak` | `scripts/secrets/apply.sh dev dev --apply` |
-| Change a secret | Dopbase web UI, or `dopbase secret set <project>/<environment> KEY`, then pull |
-| Add a new key | Set it in Dopbase for every environment that needs it, add `KEY=` to its group in `templates/`, then pull |
-| Find keys missing from a template | `scripts/secrets/check-templates.sh` |
-| See who changed a key | `dopbase secret history <project>/<environment> <KEY>` |
-| Run the backend | `docker compose --env-file backend/core/.env --env-file backend/ai/.env up --build` |
+## Safety
 
-A dev machine pulls the `dev` environment (`core/dev`, `ai/dev`, `mobile/dev`), which points at localhost and holds no Zalo credentials, so local testing does not depend on staging. `apply.sh staging dev` still works for a deliberate test against staging values. `apply.sh dev dev` skips the loadtest and monitor targets, which only staging holds. Staging and production are read by the runners and deploy tools; production is pulled for reading by the deploy tools and is never copied to a dev machine.
+Exports, generated `.env` files and `.bak` copies contain plaintext secrets. Keep them and signing keys out of Git, restrict filesystem access, and never include their values in command-line arguments or logs.
+
+Change shared values only through the approved secret-management process. Keep tracked templates and code declarations aligned, but publish no environment-specific credential map here. See [secret handling](../docs/development/secrets-and-env.md).

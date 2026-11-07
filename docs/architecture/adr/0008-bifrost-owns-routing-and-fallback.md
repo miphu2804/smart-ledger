@@ -4,7 +4,7 @@ title: "ADR-0008: Bifrost owns upstream routing and fallback, the AI service onl
 description: "Accepted: the AI service picks a model alias; Bifrost owns upstream routing, fallback and content-free request logs."
 owner: not assigned
 status: stable
-generated: { by: human:miphu2804, at: 2026-11-06T22:18:48+07:00 }
+author: miphu2804
 ---
 # ADR-0008: Bifrost owns upstream routing and fallback, the AI service only picks an alias
 
@@ -13,6 +13,8 @@ generated: { by: human:miphu2804, at: 2026-11-06T22:18:48+07:00 }
 - **Owner:** not assigned
 
 ## Context
+
+Environment statements, alias values and owner tasks below record the dated decisions/observations, not a live deployment audit. Current code defaults, tier examples and settings belong to the [AI model guide](../../../backend/ai/docs/architecture.md#model-provider-and-routing); deployed flags and Dopbase values remain unverified here. The accepted decision and dated update history are unchanged.
 
 - The AI service needs to call the same model through several upstreams (previously OpenCode Go and OpenAI) and switch upstream on transient errors such as 429, without changing code in `agent`, `memory` and `drafts`.
 - Previously `build_chat_model` chose the API by `MODEL_PROVIDER`, and the fallback lived in `MODEL_FALLBACKS` in Python, so every upstream change required changing the AI configuration and redeploying.
@@ -48,7 +50,7 @@ generated: { by: human:miphu2804, at: 2026-11-06T22:18:48+07:00 }
 ## Update 2026-11-04: the AI service picks the alias by the complexity of each chat turn
 
 - **Why:** easy questions need a fast answer on `mercury-3`, hard questions need `gpt-6-luna`. Bifrost's Complexity Router can classify tiers, but a routing rule's target only overrides provider, model, `key_id` and fallbacks, and cannot change the reasoning effort. Inception only has `/chat/completions` while `gpt-6-luna` runs through `openai_responses`, and the Bifrost documentation does not promise converting Responses to Chat for a custom provider. So the AI service picks the alias for each turn, while Bifrost still owns upstream and fallback as in the original decision.
-- **Decision:** when `MODEL_TIERING_ENABLED=true`, `LLMRouterService` (`backend/ai/src/llm_router/`) sends the shop owner's latest message, plus one earlier message of theirs, to `typesafe/jev-latest` through Bifrost's `/v1/decisions`. The assistant's answers are never sent. SIMPLE runs `chat-simple`, MEDIUM runs `chat-medium`, COMPLEX runs `chat-complex`; each alias's model and effort live in `MODEL_ALIASES` (see the [AI README](../../../backend/ai/README.md#model-tiers)).
+- **Decision:** when `MODEL_TIERING_ENABLED=true`, `LLMRouterService` (`backend/ai/src/llm_router/`) sends the shop owner's latest message, plus one earlier message of theirs, to `typesafe/jev-latest` through Bifrost's `/v1/decisions`. The assistant's answers are never sent. SIMPLE runs `chat-simple`, MEDIUM runs `chat-medium`, COMPLEX runs `chat-complex`; each alias's model and effort live in `MODEL_ALIASES` (see the [AI README](../../../backend/ai/docs/runtime-reference.md#model-tiers)).
 - **Per conversation:** like Bifrost's session-aware routing, a conversation keeps the highest tier it has reached and only moves up; once COMPLEX, Jev is no longer called. The tier lives in process memory for 24 hours; a restart only makes the next turn classify again, so no migration is needed.
 - **On failure:** if Jev errors, exceeds `TIER_CLASSIFIER_TIMEOUT_SECONDS` (default 1.5 seconds) or refuses to answer, that turn runs `chat-complex`, and this tier is not kept for the conversation. Each turn picks the model once, and every tool-call step within the turn uses the same model. Classification runs in parallel with memory recall.
 - **Bifrost:** `bifrost.json` adds the `typesafe` provider (key `TYPESAFE_API_KEY`, `max_retries: 0` so retries do not exceed the timeout), lets `vk-ai` use `jev-latest`, and limits `inception` to `chat_completion` and `chat_completion_stream`.

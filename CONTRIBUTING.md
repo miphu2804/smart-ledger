@@ -90,10 +90,10 @@ git switch -c feat/<short-description>
 
 - Pull requests into `staging` and `main` must pass configured checks before merge.
 - Deploy the same tested commit or artifact from staging to production; environment-specific values belong in secrets or environment configuration.
-- Run database migrations on staging before production, and only from code merged into `staging`; never from a feature branch, because dev shares the staging database (see [Database migrations](docs/development/local-development.md#database-migrations)). Destructive migrations require an explicit rollback or recovery plan.
+- Run database migrations on staging before production, and only from code merged into `staging`; never from a feature branch against a shared database (see [Database migrations](docs/development/local-development.md#database-migrations)). Destructive migrations require an explicit rollback or recovery plan.
 - Required CI checks are `ai` (lint and tests), `core` (Maven verify plus Flyway migration against a fresh PostgreSQL service), `container-images` (Docker Compose build of custom service images), and `mobile-web` (TypeScript and Expo web export). Each runs only when its area changed and otherwise shows as skipped, which counts as passed (see [path filtering](docs/development/ci-cd.md#path-filtering)).
 - The mobile web is built and uploaded to Vercel by job `deploy-web` of the CD workflow, which CI starts after `mobile-web` passes: `staging` gets a fixed alias and `main` production; pull requests get no preview, to stay within Vercel's daily deployment limit. See [CI/CD](docs/development/ci-cd.md#mobile-web-on-vercel).
-- CI verifies migrations from an empty database. Staging and production use separate Supabase projects with separate credential files and dev shares the staging database (see [Local Compose](docs/development/local-development.md#local-compose)); backup/restore, rollback, and moving production credentials into an environment-scoped secret store still require an operational smoke check before production release.
+- CI verifies migrations from an empty database. Development uses the [local setup](docs/development/local-development.md#local-compose); actual environment mappings and credential access belong to the private operations knowledge base. Shared migrations, backup/recovery and production release require explicit operational verification and approval.
 
 ### Pull request title
 
@@ -131,6 +131,7 @@ New environment variables, secrets, or migrations, or None.
 - **Summary** with more than one point is a numbered list, one point per line, so each can be referenced in review ("point 2").
 - **Validation** records what was actually run. **Status** is `Verified` (run, with output), `Inferred` (reasoned from code or docs, not run), or `Not verified` (not checked; give the reason in Result, for example a real device or a production run).
 - Link related documentation, API contracts, and issues (`Closes #123`), and state assumptions.
+- When code changes behavior, a contract, the schema, setup, or a decision, update the [owning document](docs/README.md#which-document-to-update) in the same pull request. Update affected local indexes when documents or their titles or descriptions change.
 - Add screenshots or a recording for a visible UI change.
 
 #### Release pull requests (`staging` → `main`)

@@ -8,4 +8,4 @@
 * [Demo và kiểm chứng MVP EXE201](mvp-demo-validation.md) - Fixture demo, các bước đầu-cuối, cách thu phản hồi người dùng và mẫu ghi kết quả cho MVP môn EXE201.
 * [Yêu cầu sản phẩm](product-requirements.md) - Hành vi quan sát được `FR-*`, `NFR-*` và tiêu chí nghiệm thu `AC-*`.
 * [Mô tả sản phẩm](project-overview.md) - Vị trí sản phẩm, người dùng và phạm vi MVP môn EXE201 của Sổ Nghe Lời.
-* [User flows](userflow/README.md) - Screen-to-screen map of the mobile app with staging screenshots, linked to source files and `FR-*` codes.
+* [User flows](userflow/README.md) - Technical map of the mobile screen flows, generated from Expo Router calls and linked to source files and product requirements.

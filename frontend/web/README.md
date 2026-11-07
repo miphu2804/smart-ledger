@@ -4,18 +4,18 @@ title: "Sổ Nghe Lời — Web (landing + admin)"
 description: "How to run and deploy the landing page and the admin pages, in mock and real mode."
 owner: FE owner
 status: stable
-generated: { by: human:miphu2804, at: 2026-11-07T02:08:00+07:00 }
-stale_after: 2027-01-06T02:08:00+07:00
+author: miphu2804
+stale_after: 2027-01-05T22:18:48+07:00
 ---
 # Sổ Nghe Lời — Web (landing + admin)
 
-An AI sales ledger for small shops: say one sentence and the AI records the items, quantities and prices. EXE201 project of Team HEXA (FPT University).
+Web clients for SmartLedger, which runs in production; EXE201 is the course delivery scope. The voice-POS vision is not an AI order-parsing implementation claim: Mobile currently combines speech recognition with a rule-based parser and owner review. See the [implementation boundary](../../docs/architecture/technical-design.md#1-scope).
 
 The landing page and admin pages. Built with Vite, React 19, TypeScript and react-router-dom.
 
 ## Run
 
-Requires Node.js 20 or later.
+Use the Node.js version in the [local development prerequisites](../../docs/development/local-development.md#prerequisites). CI uses Node.js 22.
 
 ```bash
 cd frontend/web
@@ -43,7 +43,7 @@ Public contact details live in [`site.yaml`](site.yaml), not in environment vari
 
 ## Admin pages
 
-Runs only when `VITE_ADMIN_ENABLED=true` (off by default). During development, set it in `.env.local`. A deploy enables admin when the GitHub environment `landing-*` sets `VITE_ADMIN_ENABLED=true` together with `VITE_API_ENDPOINT` and `VITE_FIREBASE_API_KEY`: the admin pages live at `/admin` of the landing site itself and read real Core data (see [Landing page on Vercel](../../docs/development/ci-cd.md#landing-page-on-vercel)).
+Runs only when `VITE_ADMIN_ENABLED=true` (off by default). During development, set it in `.env.local`. A deploy enables admin when the GitHub environment `landing-*` sets `VITE_ADMIN_ENABLED=true` together with `VITE_API_ENDPOINT` and `VITE_FIREBASE_API_KEY`: the admin pages live at `/admin` of the landing site itself and read real Core data (see [Landing page on Vercel](../../docs/development/ci-cd.md#workflows)).
 
 **Two modes:**
 
@@ -79,12 +79,7 @@ Old URLs still work: `/admin/customers/:id` → shop drawer, `/admin/logs` → l
 
 **Responsive:** ≥1280 a 248px sidebar; 768–1279 a 72px sidebar with the side column moved below; <768 the sidebar becomes a drawer, KPIs scroll horizontally, tables become lists, and the Kanban scrolls horizontally with snap. Includes a skip link, clear focus, 40px hit areas, and respects `prefers-reduced-motion`.
 
-**Demo accounts** (mock mode only; the sign-in page has a "Điền" button):
-
-| Email | Password | Role | Result |
-| --- | --- | --- | --- |
-| `admin@songhloi.vn` | `admin123` | ADMIN | Opens the dashboard |
-| `owner@songhloi.vn` | `owner123` | OWNER | 403 page |
+**Mock access:** use the mock sign-in page's built-in sample-data action. Do not publish account/password or OTP pairs in documentation, and never use mock access as evidence of real authentication or authorization.
 
 ## Landing and legal pages
 
@@ -96,22 +91,17 @@ The look follows the new mobile app: brand purple `#482AAC`, cream background `#
 | --- | --- |
 | `screens/{home,voice,checkout,orders,pos,reports,products,debts}.webp` | Screenshots of the mobile app in mock mode (`EXPO_PUBLIC_USE_MOCK=true`), full screen on the iOS Simulator iPhone 17 Pro Max (440×956 pt), exported at 660×1434. The status bar (time, signal, battery, Dynamic Island) is removed. The data in the images is sample data; the floating mascot is hidden while capturing so it does not cover content. `debts.webp` alone is captured from the mock web build (`npm run web` in `../mobile`, a 440×956 frame, leaving 62 pt at the top for the status bar) |
 | `brand/logo.webp`, `favicon.png`, `apple-touch-icon.png` | `frontend/mobile/assets/brand-logo.png` (the app icon) |
-| `brand/bobi-*.webp`, `brand/agent-*.webp` | `frontend/mobile/assets/bubblelogo.png`, `assets/voice/agent-*.png` |
+| `brand/agent-*.webp` | `frontend/mobile/assets/voice/agent-*.png` |
 | `brand/icons/*.webp` | 3D icons in `frontend/mobile/assets/tab1-overview` and `tab4-management` |
 | `brand/app-icon-1024.png` | 1024×1024 icon for the Meta app settings page (Facebook Login), built from `bubblelogo.png` |
 
 Recapture the images when the app UI changes: run a dev build on the simulator in mock mode (`npx expo start --dev-client` in `../mobile` with the three variables `EXPO_PUBLIC_USE_MOCK`, `EXPO_PUBLIC_MOCK_CORE`, `EXPO_PUBLIC_MOCK_SHOPS` set to `true`), capture with `xcrun simctl io booted screenshot`, cover the top 186 px (the status bar at @3x) with the pixel row just below it, then `cwebp -q 82 -resize 660 0`. Keep the 440:956 ratio so the images fit the phone frame in `landing.css`.
 
+**Feedback form:** The `/#gop-y` section is a preview built on request: full name, phone number, feedback type and content. Required fields use browser validation; the Send button only shows a preview notice, calls no API, stores nothing in localStorage and never reports a successful send. There is no receiving service yet; Core business scope and the requirement for real feedback intake are unchanged.
+
 **Legal pages** (`src/pages/legal/`) are public text. When a provider, the data collected or the deletion handling commitment (`DELETION_DAYS`) changes, update the content and `POLICY_UPDATED` in `legalConfig.ts`.
 
-**Deployment:** the `deploy-landing` job in [`cd.yml`](../../.github/workflows/cd.yml) (called by CI after the `landing` job passes) builds this web app and pushes it to a separate Vercel project named `landing`. Vercel Git does not deploy (`git.deploymentEnabled: false` in `vercel.json`). Pull requests do not deploy previews for now (the Vercel Hobby daily deploy limit). Environments, with details in [CI/CD](../../docs/development/ci-cd.md#landing-page-on-vercel):
-
-| Environment | Branch | Address |
-| --- | --- | --- |
-| Staging | `staging` | `LANDING_URL` of the `landing-staging` environment |
-| Production | `main` (needs approval) | `LANDING_URL` of the `landing-production` environment |
-
-One-time setup on Vercel: New Project → import this repo → Root Directory `frontend/web` (the Vite framework is detected). Take the project ID and set it as the `VERCEL_PROJECT_ID` secret in the three `landing-*` environments. Set `LANDING_URL` as a Variable of each environment.
+**Deployment:** the repository [delivery workflows](../../docs/development/ci-cd.md#workflows) build and deliver this application. Provider projects, domains, environment mappings and publication access are maintained in the private operations knowledge base, not this README. PR previews are disabled; deployment does not establish integrated acceptance.
 
 `rewrites` in `vercel.json` sends every path to `index.html` so `/privacy` and `/data-deletion` open directly.
 
@@ -128,7 +118,7 @@ Quick check (mock mode): add `?mock=slow`, `?mock=empty` or `?mock=error` to an 
 
 ## Mock data
 
-- `src/types.ts` describes an **assumed** API contract (`AdminOverviewView`, `AdminUserItem`, `AdminShopDetailView`, `SupportTask`, `AiMessage`…). The `AdminOverviewView` fields are assumptions and must be locked with the backend.
+- `src/types.ts` contains legacy mock-page types, not the real Core contract. Real ADMIN requests and DTOs live in `src/services/adminApi.ts` and follow the [implemented ADMIN contract](../../docs/contracts/api-contracts.md#7-admin-dashboard--implemented-in-core).
 - `src/mocks/accounts.ts` generates 48 OWNERs / 53 shops; `src/mocks/tasks.ts` generates 11 support tasks. Only support data exists. "Today" in the sample data is `MOCK_TODAY` (2026-09-16).
 - `src/services/mockStore.ts` is a "fake backend" stored in `localStorage` (`snl_mock_db`, `snl_mock_tasks`, `snl_mock_ai`, `snl_mock_audit`, `snl_mock_idem`). The **Khôi phục dữ liệu mẫu** button resets it. Personal preferences are stored in `snl_admin_prefs`.
 - AI Support in mock mode is a rule-based responder (`src/services/aiService.ts`) and calls no real model.
@@ -140,7 +130,7 @@ Quick check (mock mode): add `?mock=slow`, `?mock=empty` or `?mock=error` to an 
 src/
   App.tsx, main.tsx          routing
   config.ts                  USE_MOCK, API_ENDPOINT, plan limits
-  types.ts                   data types / assumed API contract
+  types.ts                   legacy mock-page data types
   mocks/                     sample data, sample tasks, simulated API scenarios
   services/                  api, auth, account, task, ai, preferences, mockStore
   components/admin/          ui (Panel, Pill, Avatar, DetailDrawer…), charts
@@ -157,7 +147,3 @@ src/
 ## Mobile app
 
 The Expo app lives in the sibling folder `../mobile`; see `../mobile/README.md`.
-
-### Landing feedback form
-
-The `/#gop-y` section is a preview built on request: full name, phone number, feedback type and content. Required fields use browser validation; the Send button only shows a preview notice, calls no API, stores nothing in localStorage and never reports a successful send. There is no receiving service yet; Core business scope and the requirement for real feedback intake are unchanged.

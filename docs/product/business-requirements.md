@@ -65,7 +65,7 @@ MVP chỉ có hai role hệ thống OWNER và ADMIN; nhân viên/thành viên ti
 |---|---|---|
 | Cốt lõi cần demo thật | Đăng nhập bằng cách đã cấu hình, một tiệm thử, danh mục, POS/nhập câu và voice theo nền tảng, sửa giỏ/chốt, lịch sử đơn, chi phí, công nợ/thu nợ, báo cáo cơ bản và hỏi Bobi | Hoàn thiện đường mobile → Core → dữ liệu và Core → AI cho chat; ưu tiên lỗi chặn luồng, sai số liệu và chỗ người dùng khó hiểu. Nhập tay/POS là đường tiếp tục khi mic lỗi, không thay bằng chứng voice/AI |
 | Có sẵn thì giữ và kiểm tra khi sử dụng | Nhiều tiệm, barcode, tồn đơn giản, hủy toàn bộ, ảnh Product, inbox/audit, hỗ trợ ADMIN và các tiện ích đã có code | Không gỡ bỏ hoặc viết lại; chọn thêm vào demo khi ổn định và có ích. Backend có API không đồng nghĩa mọi UI đã hoàn chỉnh |
-| Có thể hoãn phần tích hợp/mở rộng | API parse audio/ảnh mới, RAG mới, memory dài hạn, UI logo/avatar/chọn khách/giảm tồn còn thiếu, chart ADMIN growth, bật thêm telemetry/quota hoặc provider chưa cần | Ghi backlog và trạng thái thật; không biến thành điều kiện hoàn thành demo chính. Nếu lỗi hiện tại gây sai dữ liệu/quyền hoặc chặn kịch bản thì vẫn ưu tiên sửa |
+| Có thể hoãn phần tích hợp/mở rộng | API parse audio/ảnh mới, RAG mới, mở rộng memory dài hạn ngoài `FR-040`, UI logo/avatar/chọn khách/giảm tồn còn thiếu, chart ADMIN growth, bật thêm telemetry/quota hoặc provider chưa cần | Ghi backlog và trạng thái thật; không biến thành điều kiện hoàn thành demo chính. Nếu lỗi hiện tại gây sai dữ liệu/quyền hoặc chặn kịch bản thì vẫn ưu tiên sửa |
 | Ngoài mục tiêu EXE201 | Quy mô tải lớn, kiến trúc/phân hệ mới, high availability nhiều vùng, microservice bổ sung, kế toán/thuế/hóa đơn điện tử thương mại | Không mở thêm thiết kế hoặc triển khai để đáp ứng các mục tiêu này trong đợt hoàn thành môn học |
 
 Các quy tắc và mã yêu cầu đã có vẫn được giữ để tránh làm sai chức năng đang chạy; đây là điều chỉnh **ưu tiên giao sản phẩm**, không phải xóa code hoặc đổi API. Quy mô benchmark, quota dùng chung, bộ giám sát và cơ chế concurrency đã triển khai được giữ nguyên; không yêu cầu đầu tư thêm cho quy mô chưa có nhu cầu.
@@ -79,7 +79,7 @@ Mobile hiện dùng nhận giọng nói theo nền tảng và parser FE; không 
 - Tồn kho theo lô/nhiều kho, ledger kho/kiểm kê đầy đủ, nghĩa vụ nhà cung cấp hoặc tự đổi giá vốn khi nhập/giảm tồn.
 - Trả hàng/hoàn tiền từng phần; tự gửi SMS/email/push nhắc nợ hoặc tự ghi sổ từ AI. Mở SMS soạn sẵn để người bán tự gửi không phải tự động nhắc nợ.
 - Tasks/AI Support ADMIN, doanh thu nền tảng và các tác vụ chỉ có trong mock.
-- Ghi nhớ dài hạn, chính sách biểu đồ/nút điều hướng/tool tính toán trong chat và cam kết cập nhật APK còn có quyết định riêng ở mục 8; có code không tự bổ sung cam kết MVP.
+- Ghi nhớ dài hạn đã được PO duyệt ngày 2026-11-07 (`OQ-006`, `FR-040`); retention và xóa bản sao bên thứ ba còn mở ở `OQ-008`. Chính sách biểu đồ/nút điều hướng/tool tính toán trong chat và cam kết cập nhật APK còn có quyết định riêng ở mục 8; có code không tự bổ sung cam kết MVP.
 
 ## 4. Quy tắc kinh doanh
 
@@ -176,7 +176,7 @@ Giữ an toàn dữ liệu và contract đang có dù là dự án môn học. D
 | `OQ-003` | Chuyển parser câu từ FE sang AI khi nào? | Chủ AI/Core/FE | Hoãn việc chuyển parser/API draft-audio mới sau demo EXE201 nếu không cần cho luồng cốt lõi; giữ parser FE, voice hiện có và nhập tay/POS, ghi đúng trạng thái chưa tích hợp |
 | `OQ-004` | Hoàn thiện yêu cầu cho bảng/biểu đồ, nút mở màn, tính toán/sandbox và cập nhật APK đã có code | Chủ sản phẩm + chủ AI/FE | Giữ code và `AC-116`/`AC-118` đã có; chỉ bổ sung yêu cầu/kiểm tra cho phần dùng trong demo. Các cải tiến chưa giúp luồng chính hoãn sau môn học |
 | `OQ-005` | Làm sao tránh hiểu nhầm hai customerId dùng chung phone là cùng người? | Chủ sản phẩm + chủ FE | Nhóm UI theo phone đã có `FR-016`/`AC-075`; chỉ còn chốt nhãn/xử lý collision nếu cần, không gộp identity hoặc chuyển nghĩa vụ |
-| `OQ-006` | Có duyệt memory dài hạn, default/opt-in, retention và quyền xóa không? | Chủ sản phẩm + chủ AI + chủ dữ liệu | Hoãn kích hoạt/mở rộng cho demo EXE201, vẫn Proposed theo ADR-0002 và giữ code. Khi system flag bật, setting mới mặc định true; tắt không xóa fact. Chỉ chốt chính sách khi thực sự chọn dùng |
+| `OQ-006` | Có duyệt memory dài hạn, default/opt-in, retention và quyền xóa không? | Chủ sản phẩm + chủ AI + chủ dữ liệu | Đã chốt ngày 2026-11-07 (PO xác nhận qua chủ repository): duyệt memory dài hạn theo ADR-0002 phương án A; cờ hệ thống bật trên production; công tắc từng OWNER mặc định bật khi chưa đặt; tắt công tắc dừng nạp/ghi nhưng không xóa fact đã lưu; OWNER xem và xóa được từng fact trong Cài đặt trợ lý; xóa chat xóa các fact có nguồn từ chat đó. Hành vi ở `FR-040`/`AC-122`–`AC-126`, chưa nghiệm thu tích hợp. Còn mở: thời hạn lưu (hiện không tự xóa theo TTL, chỉ gộp fact cũ hơn 7 ngày) và xóa bản sao ở nhà cung cấp/trace, theo `OQ-008` |
 | `OQ-007` | Baseline, mẫu số, nhóm pilot và target từng BO là gì? | Chủ sản phẩm | Trong môn học, ghi tác vụ, thời gian/lỗi quan sát và phản hồi theo kế hoạch kiểm chứng; không cần thêm hệ analytics. Target định lượng chưa có thì để mở, không tự đặt số |
 | `OQ-008` | Ai duyệt dữ liệu người bán tự gõ gửi model/trace, retention và vận hành xóa? | Minh Thọ (nội dung công khai) + chủ dữ liệu/vận hành cần chỉ định | Mở về phạm vi dữ liệu được phép và thực thi; che secret/email không che toàn bộ tên/phone, xóa chat không tự xóa trace. Đối chiếu cam kết công khai 30 ngày sau xác minh với quy trình Firebase/Core/chat/media/memory/provider; ghi người xử lý, cấu hình cho phép và bằng chứng hoàn tất |
 | `OQ-INV-001` | Hóa đơn điện tử thuộc MVP, pilot riêng hay giai đoạn sau? | Chủ sản phẩm | Hoãn sau EXE201; hiện ngoài MVP |
@@ -194,7 +194,7 @@ Giữ an toàn dữ liệu và contract đang có dù là dự án môn học. D
 | `BO-003`/`BO-005`, `BR-004`/`BR-005`, `BR-009` | `FR-006`, `FR-033`, `NFR-005` | `AC-004`, `AC-031`, `AC-049`–`AC-052`, `AC-059`–`AC-063`, `AC-068`–`AC-073`, `AC-078` |
 | `BR-007`, `BR-009`, `BR-018`–`BR-021`, `BR-025` | `FR-009`, `FR-030`–`FR-032`, `FR-034`, `FR-038`, `NFR-010` | `AC-044`–`AC-048`, `AC-053`–`AC-058`, `AC-064`–`AC-067`, `AC-111`–`AC-115` |
 | `BR-009`, `BR-015`, `BR-022` | `FR-010`–`FR-011`, `NFR-003` | `AC-025`, `AC-079`–`AC-094`, `AC-109`–`AC-110`, `AC-117` |
-| `BO-003`, `BR-011`/`BR-012` | `FR-007`, `FR-017`–`FR-020`, `FR-027`, `NFR-007`–`NFR-008` | `AC-010`, `AC-012`–`AC-014`, `AC-020`–`AC-023`, `AC-076`–`AC-077`, `AC-116`, `AC-118`; OQ-004/006/008 chưa tự được giải quyết |
+| `BO-003`, `BR-011`/`BR-012` | `FR-007`, `FR-017`–`FR-020`, `FR-027`, `FR-040`, `NFR-007`–`NFR-008` | `AC-010`, `AC-012`–`AC-014`, `AC-020`–`AC-023`, `AC-076`–`AC-077`, `AC-116`, `AC-118`, `AC-122`–`AC-126`; OQ-004/008 chưa tự được giải quyết, phần retention của OQ-006 theo OQ-008 |
 | `BR-001`/`BR-002` | `FR-025`–`FR-026`, `FR-035` | `AC-018`–`AC-019`, `AC-096` |
 | `BO-003`, `BR-013`/`BR-014` | `FR-022`–`FR-024`, `NFR-009` | `AC-015`–`AC-017`, `AC-040`–`AC-043`, `AC-097`–`AC-100` |
 | `BR-023`/`BR-024` | `FR-036`–`FR-037` | `AC-101`–`AC-108` |

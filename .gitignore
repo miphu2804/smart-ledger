@@ -22,3 +22,6 @@ deploy/ansible/inventory.ini
 
 # Output of scripts/infra/run.sh plan
 out/
+
+# Live credential-map snapshots belong in the private knowledge base, never in Git
+docs/development/credential-map/*.html

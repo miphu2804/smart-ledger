@@ -3,23 +3,15 @@ type: Guide
 title: "SmartLedger"
 description: "Repository entry point: what the product is, how the services fit together and where to start."
 owner: Technical owner
+author: miphu2804
 status: stable
-generated: { by: human:miphu2804, at: 2026-11-06T22:18:48+07:00 }
 stale_after: 2027-01-05T22:18:48+07:00
 ---
 # SmartLedger
 
-AI voice POS for small shops (So Nghe Loi): say one sentence and the AI records the items, quantities, and prices. Product overview: [docs/product/project-overview.md](docs/product/project-overview.md).
+SmartLedger (Sổ Nghe Lời) runs in production and helps small shops record sales, payments, debts and expenses. AI voice POS is the product direction: the current mobile order-entry path uses platform speech-to-text and a rule-based `parseOrder()` parser, with owner review before checkout. Bobi chat is a separate AI capability accessed through Core; speech recognition is not evidence of AI order parsing.
 
-## Overview
-
-| Step | What happens | Where |
-|---|---|---|
-| 1 | The shop owner signs in with Firebase Auth | Mobile, Core |
-| 2 | The app sends ledger and shop requests to the public API | Mobile → Core |
-| 3 | Core forwards each Agent chat to the AI service with an internal token | Core → AI |
-| 4 | AI answers with the chosen model and streams the reply back | AI |
-| 5 | Core keeps the business data; AI keeps the conversation history | Supabase PostgreSQL |
+EXE201 MVP is a course delivery and acceptance scope, not the system's deployment status. See [product scope](docs/product/project-overview.md) and [implementation evidence](docs/architecture/technical-design.md#1-scope); checked-in features are not automatically enabled, deployed or accepted.
 
 ## Tech stack
 
@@ -31,6 +23,17 @@ AI voice POS for small shops (So Nghe Loi): say one sentence and the AI records 
 | Data and auth | <img alt="PostgreSQL" src="https://img.shields.io/badge/PostgreSQL-4169E1?logo=postgresql&logoColor=white"> <img alt="Supabase" src="https://img.shields.io/badge/Supabase-3FCF8E?logo=supabase&logoColor=white"> <img alt="Firebase Auth" src="https://img.shields.io/badge/Firebase_Auth-DD2C00?logo=firebase&logoColor=white"> |
 | Delivery | <img alt="Docker" src="https://img.shields.io/badge/Docker-2496ED?logo=docker&logoColor=white"> <img alt="Caddy" src="https://img.shields.io/badge/Caddy-1F88C0?logo=caddy&logoColor=white"> <img alt="GitHub Actions" src="https://img.shields.io/badge/GitHub_Actions-2088FF?logo=githubactions&logoColor=white"> <img alt="Ansible" src="https://img.shields.io/badge/Ansible-EE0000?logo=ansible&logoColor=white"> <img alt="Vercel" src="https://img.shields.io/badge/Vercel-000000?logo=vercel&logoColor=white"> |
 
+## System boundaries
+
+| Part | Responsibility | Service guide |
+|---|---|---|
+| Core | Java 21 / Spring Boot public API; authentication, shop ownership and business transactions | [Core](backend/core/README.md) |
+| AI | Internal Python / FastAPI service called by Core; Agent chat, conversation history and AI capabilities | [AI](backend/ai/README.md) |
+| Frontend | Expo Router OWNER app; separate Vite / React landing and ADMIN web | [Frontend](frontend/README.md) |
+| Data | Supabase PostgreSQL; Core Flyway migrations and separate AI CLI migrations | [Local development](docs/development/local-development.md) |
+
+Core verifies client identity and shop access before forwarding Agent requests with an internal token. Core owns business data; AI owns its conversation and memory storage. Runtime configuration and integrated acceptance remain separate from these code boundaries.
+
 ## System architecture
 
 ![SmartLedger system architecture](docs/architecture/diagrams/images/ci-cd.svg)
@@ -38,58 +41,29 @@ AI voice POS for small shops (So Nghe Loi): say one sentence and the AI records 
 | Color | Flow |
 |---|---|
 | Green | Deploy pipeline: push, CI, image build, deploy to the VPS |
-| Purple | One-time VPS setup with Ansible |
-| Orange | Runtime request flow from the app to Core, AI, and the database |
+| Purple | VPS setup with Ansible |
+| Orange | Runtime request flow from the app to Core, AI and the database |
 
-Related: [Technical design §1](docs/architecture/technical-design.md#1-scope) (status per component), [ADRs](docs/architecture/adr/) (why), [CI/CD](docs/development/ci-cd.md) (pipeline).
+The diagram shows the target delivery and runtime topology drawn from the tracked `deploy/` files; it does not prove that every component is enabled in an environment. [Technical design §1](docs/architecture/technical-design.md#1-scope) records implementation status, [CI/CD](docs/development/ci-cd.md) explains the pipeline and the [diagram guide](docs/architecture/diagrams/README.md) lists the other diagrams.
 
-| Part | Path | Runs on | Role |
-|---|---|---|---|
-| Core | [`backend/core`](backend/core/README.md) | VPS (Docker) | Java public API for the clients; owns the database |
-| AI | [`backend/ai`](backend/ai/README.md) | VPS (Docker) | Python FastAPI internal API; only Core calls it |
-| Mobile | [`frontend/mobile`](frontend/mobile/README.md) | Android build, web on Vercel | Expo app for the shop OWNER |
-| Web | [`frontend/web`](frontend/web/README.md) | Vercel | Landing page and ADMIN dashboard |
-| AI schema | [`supabase/`](supabase/) | Supabase | CLI migrations for the AI tables |
+## Start here
 
-## Getting started
-
-| Task | Where |
-|---|---|
-| Set up, run, and check each service before a PR | [Local development](docs/development/local-development.md) |
-| Branches, commits, pull requests, releases | [CONTRIBUTING](CONTRIBUTING.md) |
-| Deploy pipeline and environments | [CI/CD](docs/development/ci-cd.md) |
-| Environment files and secrets | [Secrets and env files](docs/development/secrets-and-env.md) |
+- [Documentation](docs/README.md): domains, canonical sources and reading paths.
+- [Local development](docs/development/local-development.md): setup, Compose and pre-PR checks.
+- [CONTRIBUTING](CONTRIBUTING.md): branches, reviews and releases into `staging`, then production.
+- [AGENTS](AGENTS.md): root policy and scoped instruction loading for coding agents.
+- [Security policy](SECURITY.md): reporting vulnerabilities.
 
 ## Repository layout
 
-```text
-smart-ledger/
-├── README.md
-├── AGENTS.md            # instructions for coding agents
-├── CLAUDE.md            # imports AGENTS.md
-├── CONTRIBUTING.md      # branches, commits, pull requests, releases
-├── PROGRESS.md          # recent progress log
-├── BLOCKERS.md          # open blockers
-├── compose.yaml         # Core + AI (Supabase)
-├── .github/             # CI/CD workflows, PR templates, CI helper scripts
-├── scripts/             # local database, secrets sync, Bruno API collection, Android and iOS release
-├── secrets/             # env files per environment, pulled from Dopbase
-├── supabase/            # AI schema migrations (Supabase CLI)
-├── docs/                # source of truth; start at docs/README.md
-│   ├── product/         # product description, BRD, PRD
-│   ├── architecture/    # technical design, ERD, ADRs, diagrams, service walkthrough
-│   ├── contracts/       # HTTP/wire contracts
-│   ├── design/          # mobile UI direction and wording
-│   ├── development/     # local development, secrets, CI/CD, release runbooks
-│   └── marketing/       # app screenshots per product flow
-├── frontend/
-│   ├── mobile/          # Expo app for the OWNER; mock data by default
-│   └── web/             # landing page + ADMIN dashboard at /admin
-└── backend/
-    ├── core/            # Core public API (Java), DB owner
-    └── ai/              # internal AI API (Python FastAPI)
-```
+| Path | Ownership |
+|---|---|
+| `backend/` | Core and AI services, with their own operational guides |
+| `frontend/` | Mobile and web clients |
+| `docs/` | Product requirements, contracts, architecture, design and operations |
+| `deploy/`, `.github/` | Provisioning and delivery automation; documented in [CI/CD](docs/development/ci-cd.md) |
+| `scripts/` | Local DB, CI, secrets, API checks and device-release tooling; documented by the owning service or operations guide |
+| `secrets/` | [Credential-file workflow](secrets/README.md); do not commit secrets |
+| `supabase/` | AI schema migrations, separate from Core Flyway |
 
-## Documentation
-
-Start at the [documentation index](docs/README.md); it maps every document and names the one that owns each fact.
+Local mock mode must be selected explicitly for Mobile; consult each service guide rather than assuming checkout defaults are deployment configuration.

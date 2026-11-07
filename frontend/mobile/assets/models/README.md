@@ -53,23 +53,9 @@ To skip the server, point straight at R2: `EXPO_PUBLIC_STT_MODEL_URL=https://pub
 
 ## Put the model on R2
 
-Release builds download the model from the public R2 bucket the APK already uses (see "Publish the APK for the landing page" in [`docs/development/ci-cd.md`](../../../../docs/development/ci-cd.md#publish-the-apk-for-the-landing-page)), under the prefix `stt-model/<STT_MODEL_VERSION>/`. The bucket is shared because the app downloads the model without signing in, so the bucket must be public like the APK. The model has nothing to hide either: anyone can unpack a model embedded in an APK. DVC is not needed: the repo does not train models, and DVC stores files by hash so the app could not download them by name.
+The release helper in `.github/scripts/stt-model.mjs` checks the required versioned model files and can publish missing files during an explicitly authorized release. A download build needs a valid public model base URL; local/native embedding is a separate path below.
 
-No manual upload is needed. The "Resolve the speech model URL" step of `mobile-release.yml` runs `.github/scripts/stt-model.mjs`:
-
-1. `check`: reads `STT_MODEL_VERSION` and `STT_MODEL_FILES` from `core.ts`, sends `HEAD` to each file under `<STT_MODEL_BASE_URL>/stt-model/<version>/` and compares sizes.
-2. If a file is missing or differs and this is a release build (`publish=true`): `fetch` downloads the model as above, `aws s3 sync --size-only` uploads it to R2 with the APK bucket's token (only missing or differing files), then `check` runs again.
-3. When every file is present, the build gets `EXPO_PUBLIC_STT_MODEL_URL=<STT_MODEL_BASE_URL>/stt-model/<version>/`.
-
-Test builds (dev, staging) have no R2 token. If the model is not on R2 yet, such a build only warns; it still builds but speech input does not work. The GitHub variable `STT_MODEL_BASE_URL` is the bucket's public address, for example `https://pub-<hash>.r2.dev`. Without it a release build is refused. Check R2 from your machine:
-
-```bash
-STT_MODEL_BASE_URL=https://pub-<hash>.r2.dev node .github/scripts/stt-model.mjs check
-```
-
-To change the model: bump `STT_MODEL_VERSION`, update `STT_MODEL_FILES`, then change `SOURCE_REPO` and `SOURCE_REVISION` in the script. The next release uploads the model under the new prefix. Do not delete old versions, because old APKs still download from their own path. The bucket's optional lifecycle rule may only delete under `android/production/builds/` and must not touch `stt-model/`.
-
-- `r2.dev` addresses are rate-limited and uncached; each new user downloads about 51 MB. When the project has a domain on Cloudflare, only `STT_MODEL_BASE_URL` needs to change.
+Destinations, publication credentials, access policy and retention configuration belong to the private operations knowledge base. Keep older model versions available while supported APKs reference them; never apply a build-artifact cleanup rule to active model files.
 
 ## Embed the model in the APK
 

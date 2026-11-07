@@ -4,7 +4,7 @@ title: "ADR-0007: The code sandbox runs model-written programs, not data tools"
 description: "Accepted: the code sandbox runs model-written programs but holds no data tools."
 owner: not assigned
 status: stable
-generated: { by: human:miphu2804, at: 2026-10-30T00:50:24+07:00 }
+author: miphu2804
 ---
 # ADR-0007: The code sandbox runs model-written programs, not data tools
 
@@ -43,4 +43,4 @@ generated: { by: human:miphu2804, at: 2026-10-30T00:50:24+07:00 }
 ## References
 
 - PRs #317 and #331.
-- [AI README, Calculation and sandbox](../../../backend/ai/README.md#calculation-and-sandbox) for the current limits.
+- [AI README, Calculation and sandbox](../../../backend/ai/docs/architecture.md#calculation-and-sandbox) for the current limits.

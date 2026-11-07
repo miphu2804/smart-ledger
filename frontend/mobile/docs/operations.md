@@ -1,0 +1,252 @@
+---
+type: Runbook
+title: "Mobile integration and native operations"
+description: "Detailed Mobile setup, provider configuration, speech packaging, report limitations and diagnostics."
+owner: FE owner
+author: miphu2804
+status: stable
+---
+# Mobile integration and native operations
+
+The [Mobile README](../README.md) is the setup entry point. This FE-owned runbook preserves detailed commands, native-library constraints, provider setup and integration caveats moved off that landing page. Paths and commands below are relative to `frontend/mobile` unless stated otherwise.
+
+Source baseline: `staging` commit `a2766ee3a37e23c0f03fd43383b608c1b2fac898`. The retained measurements and provider/device notes describe their original evidence, not a fresh runtime test. Configuring an endpoint or checking in a native adapter does not verify deployment, live provider settings or acceptance; all three remain not verified in this documentation change. API semantics belong to the [contract](../../../docs/contracts/api-contracts.md), and delivery belongs to [CI/CD](../../../docs/development/ci-cd.md).
+
+## Run
+
+```bash
+npm install
+npx expo start --dev-client   # native Firebase and sherpa-onnx require a rebuilt development client
+npm run web             # or press w: run in the browser (440px frame)
+npm run typecheck
+npm test                # unit tests under tests/ (node --test, no device needed)
+npm run export:web      # build static web into dist/
+../../scripts/release/ios-device-release.sh   # default: build Release (staging Core) and install on the iOS Simulator; a menu picks a paired iPhone; --simulator, --device <name|UDID>, --check only checks
+../../scripts/release/android-release.sh      # default on a machine: build a Release APK (staging Core) for the emulator ABI, install and open it on the Android emulator (starts the AVD if it is not running)
+../../scripts/release/android-release.sh --build-only [--abis arm64-v8a]   # build the APK exactly like CI and print its size; --install [--device <serial>] installs on a phone through adb; --check only checks
+```
+
+The two local build scripts check the environment before building. When a new machine is missing something (Xcode, its license, CocoaPods, JDK 17, Android Studio and the SDK, Firebase files, an Apple ID, a provisioning profile, an iPhone that has not tapped Trust, Developer Mode, USB debugging, a phone with an unsupported ABI or an Android version that is too old, an installed build signed with a different key…), the script lists every error with its fix, then asks whether to open the download page, open Xcode or Android Studio, or run the fix command. It runs one fix at a time: when a command succeeds the script rechecks from the start, and when it opens a page or an app it stops so you can finish and run it again. When the iOS Simulator runtime or an AVD is missing, the script offers the command to download or create it. If the first Node on PATH differs from the pinned version (`NODE_MAJOR` in `mobile-release.yml`) and the pinned version is installed through Homebrew `node@22`, nvm, fnm, Volta, asdf, mise or n, the script uses the pinned version for that run (without changing the machine's default Node), reinstalls `node_modules` when the previous install ran on a different major, and records the Node path for Xcode in `ios/.xcode.env.local`. Terminal messages are in English.
+
+## Try it with sample data
+
+- Tap **Tạo tài khoản** at the bottom of the sign-in card and enter any email and password (6 characters or more); on the email verification screen just tap **Tôi đã xác minh**. Dev builds have a **Vào app** button under the card that goes straight to the sample user.
+- Every email is a new user: after verification it goes through shop creation (name and industry). Only the **Vào app** button (dev builds) goes straight to the sample shop “Tiệm tạp hoá cô Thỏ”.
+- The first time an account opens Tổng quan on a device, the app runs an overlay guide: it greets the owner, then highlights the Tạo đơn tab, the Đơn hàng tab, the Bobi tab, the notification bell, the quick-switch menu and the Quản lý tab. Finishing or skipping is remembered on the device and the guide does not reopen by itself; replay it from Quản lý → Xem lại hướng dẫn.
+- Reload the app to reset the in-memory data to its initial state.
+
+## Screens
+
+| Route | Screen |
+| --- | --- |
+| `/` | Splash |
+| `/(auth)/welcome`, `/email`, `/verify-email`, `/profile`, `/setup` | Choose a sign-in method, email and password (sign up, forgot password), email verification, first-time name entry, shop creation |
+| `/(tabs)` | Home: revenue today/this week/this month, tasks to handle, suggestions and best sellers |
+| `/analytics` | Analysis by period: revenue, trend by hour/day of week/week of month, expenses, estimated gross profit, best sellers, debts |
+| `/(tabs)/invoices` | Orders: infinite scroll, 20 orders at a time; time filter and search run in Core |
+| `/(tabs)/sales` | Sales: opens straight to the paged catalog (20 items per page, search/filter/sort in Core), pick items and view the cart; the Zen ring (drag and drop, snaps to the left/right edge, keeps its position across tabs) opens Q&A, Đọc đơn or today's report |
+| `/(tabs)/more` | Management: profile, reports, goods, expenses, debts, settings and sign out |
+| `/expenses` | Expenses by month, expense breakdown, add an expense by voice / manual entry |
+| `/voice` | Đọc đơn: type text or hold the mic button, offer to add unknown items to the catalog, edit quantities. Mic: web uses the Web Speech API (`vi-VN`); Android uses the sherpa-onnx model on the device (see “Speech recognition on Android”), with no fake sample phrases any more. When nothing is supported the app says so and uses the Nhập tay button |
+| `/pos` | Quick item picking in a grid, the cart, quickly adding an item to the catalog |
+| `/checkout` | Payment: cash (change), bank transfer (illustrative QR), credit |
+| `/invoice/[id]` | Internal sale detail: view the order, void it in full and view the refund; no printing/sale editing yet |
+| `/products` | Goods and stock, add/edit/delete, product photo upload |
+| `/debts` | Debt book: partial / full repayment, history, call / remind |
+| `/bestsellers` | Best-seller ranking, slow-seller suggestions |
+| `/profile` | Edit shop details (name, address, industry), saved to Core; full name, email, Facebook and bank account are stored only on the device |
+| `/settings` | Vibration; sound, read-back, auto-print and auto-backup are shown as coming soon |
+| `/notifications` | In-app notifications |
+| `/ai` | Q&A with the assistant through Core; conversation history. Streaming and stored answers render the same subset of Markdown: `**bold**`, `` `code` ``, headings, `-`/`1.` lists, tables, ```chart blocks (bar/line charts) and ```actions blocks (buttons that open app screens, shown in a separate card under the bubble once the answer is complete); other markup shows as plain text. With mocks on, the app answers with fake data; ask with the word "biểu đồ" or "bảng" to see tables and charts, and ask "sắp hết hàng" to see the screen button card under the bubble |
+| `/printer` | K80/K58 printer settings screen; no device connection yet |
+| `/debug` | Connection diagnostics, dev builds only (see [Debug](#debug)) |
+
+`/staff` still has a route file but no entry point: the product has only the OWNER and ADMIN roles.
+
+## Try order recognition
+
+The “Nhập tên hàng + giá” field on the `/voice` screen runs a rule-based recognizer. Examples:
+
+- `2 ly cà phê sữa 50 nghìn, thêm 1 trà đá`
+- `bán 3 bánh mì 45k, 2 coca`
+- `lấy 1 chục trứng với 2 gói mì`
+- `bán 1 hộp sữa chua nếp cẩm 12k` → the item does not exist yet, so the app asks whether to add it to the catalog
+- `bánh mì 20k cà phê 20k` or saying “bánh mì hai mươi nghìn cà phê hai mươi nghìn” → two items, each with its own price
+
+Text from the mic (or typed) goes through the same rule-based recognizer; the app does not call AI to recognize orders yet. The speech model outputs one run-on sentence with no punctuation and numbers spoken as words, so the recognizer reads amounts written as digits (`20k`, `20.000đ`, `1,5tr`) as well as words (`hai mươi nghìn`, `hai lăm ca`) and splits items in three ways: (1) punctuation and connecting words (`và`, `với`, `thêm`, `kèm`, `cùng`, `rồi`, `nha`, `nhé`); (2) each spoken price ends an item (“bánh mì 20k cà phê 20k” → two priced items; an item not in stock prompts to add it to the catalog with the price prefilled); (3) a run-on sentence with several items in stock is cut before each item name, stepping back over the quantity and unit right before it (“hai cà phê sữa một bánh mì thịt”). Limits: several items not in stock, with no price and no connecting word, are still merged into one; a price spoken before the item name and a price without a currency unit (“bánh mì hai mươi”) are not recognized; an item in stock always takes the stock price, and a spoken price is only used to split items. “Chi”, “mua”, “trả”, “nộp”… open an expense only at the start of a clause, after a price or after an item in stock (so “trà sữa 30k”, “chị lấy bánh mì 20k”, “bánh mì ba chỉ 20k” are items, not expenses).
+
+### Speech recognition on Android
+
+The Đọc đơn screen recognizes speech on Android with a Vietnamese streaming Zipformer model that runs on the device (the `react-native-sherpa-onnx` library, with native mic capture).
+
+- **Needs a new dev client:** the library has a native module, so the dev client must be rebuilt (`npx eas-cli build --profile dev-client --platform android`) after installing it. An older build without the module shows “chưa hỗ trợ ghi âm giọng nói” on the Đọc đơn screen instead of crashing.
+- **The model is not in git** (49 MB). The files go in `assets/models/` (see `assets/models/README.md`); the app downloads them into app storage from `EXPO_PUBLIC_STT_MODEL_URL` the first time the Đọc đơn screen opens. During development, run `node scripts/serve-stt-model.js` to serve that folder, then set `EXPO_PUBLIC_STT_MODEL_URL=http://10.0.2.2:8090/` (emulator) or `http://<computer IP>:8090/` (a real phone; port 8090 must be open in the firewall).
+- **Embed the model in the APK (offline):** the plugin `plugins/withBundledSttModel.js` copies the model into `android/app/src/main/assets/models/stt-model-<version>/` on `expo prebuild`; if the `android/` folder is already generated, run `node plugins/withBundledSttModel.js`. The app detects the embedded model (`listAssetModels`) and skips the download; the library copies it into app storage on first launch. If the build machine has no model, the plugin only warns and the APK falls back to the download above. The folder name comes from `STT_MODEL_VERSION` in `src/lib/speech/core.ts`.
+- **Library patch:** `react-native-sherpa-onnx` 0.4.4 hard-codes `modelType = "zipformer"` for every transducer model, so a `zipformer2` model (like the one in use) crashes the app on load. `patches/react-native-sherpa-onnx+0.4.4.patch` (applied automatically by `postinstall` through `patch-package`, including on EAS build machines) leaves this value empty so sherpa-onnx detects the type from metadata. When upgrading the library, review the patch, and any patch change requires rebuilding the dev client.
+- **Microphone permission:** the app asks for permission when the Đọc đơn screen opens. While the mic button is held, a “Mức mic” bar measures the real microphone; when no text comes out, the app says “micro không thu được âm thanh” or “có tiếng nhưng chưa nhận ra chữ”.
+- **FFmpeg and libarchive are off:** `plugins/withAndroidApkSize.js` sets `sherpaOnnxDisableFfmpeg` and `sherpaOnnxDisableLibarchive` because the app only recognizes PCM from the mic and downloads the model file by file. The library's `convertAudio*`, `decodeAudioFileToFloatSamples` (for non-WAV files) and `extractTarBz2` therefore fail; to use them, remove the flags in the plugin and remove the matching `.so` files from `packagingOptions.exclude` in `app.json`.
+- **Not checked / not done:** iOS; menu hotwords (`bpe.model`); tuning the sentence-end timeout; Android 15+ requires native libraries aligned to 16 KB for Google Play (the sherpa-onnx `.so` files need checking).
+
+### Android APK size
+
+Release builds use these settings (measured on `arm64-v8a`, same commit: 95.2 MB → 40.3 MB; see [CI/CD](../../../docs/development/ci-cd.md#android-build)):
+
+- `expo-build-properties` in `app.json`: `useLegacyPackaging` compresses the `.so` files in the APK (previously stored uncompressed, taking 62 MB); `enableMinifyInReleaseBuilds` and `enableShrinkResourcesInReleaseBuilds` enable R8 and drop unused resources; `packagingOptions.exclude` drops the FFmpeg and libarchive `.so` files.
+- `extraProguardRules` keeps the `com.k2fsa.sherpa.onnx.**` and `com.sherpaonnx.**` classes intact: sherpa-onnx native code reads them by name and the library ships no R8 rules for them. If another native library crashes in release (but not in debug), suspect R8 first and add a `-keep` rule here.
+- `plugins/withAndroidApkSize.js`: disables FFmpeg and libarchive in sherpa-onnx (see Speech recognition on Android) and keeps only the `vi` and `en` strings of the libraries.
+- Remeasure from the repository root: `scripts/release/apk-contents.sh <file.apk>` prints the size by ABI, dex, resources, assets and the 40 largest files; `scripts/release/android-release.sh` (run locally and in CI) calls it after every APK build.
+- Trade-off: native libraries are extracted onto the device at install, so the installed size is larger than the APK file; installs from Google Play (AAB) are not affected.
+
+## Structure
+
+```
+app/                    routes (expo-router)
+src/
+  theme.ts              colors, fonts, radii, shadows (per the prototype)
+  config.ts             EXPO_PUBLIC_API_ENDPOINT, EXPO_PUBLIC_USE_MOCK
+  data/types.ts         shared data types
+  data/mock.ts          sample data + invoice/expense generators based on the current date
+  store/AppStore.tsx    app-wide state (context) + every action, calls Core through lib/*Api.ts
+  lib/                  money/date formatting, statistics, rule-based order recognizer
+  lib/auth/             sign-in: the AuthClient interface, mock, Firebase (native + web)
+  lib/api.ts            Core client (Bearer Firebase ID token, X-Shop-Id, Idempotency-Key, standard errors); USE_MOCK → mockCore
+  lib/*Api.ts           session, catalog, customer, sales, debt, expense, agent
+  lib/mockCore.ts       in-memory simulation of the Core endpoints
+  lib/useCoreData.ts    loads orders, products, debts, expenses from Core for Home, Management, Analytics, Best sellers, Notifications
+  lib/usePagedList.ts   infinite list, 20 rows at a time (Orders); lib/usePagedPage.ts paged list (Sales)
+  lib/checkoutSession.ts keeps the draft between payment taps so a retry does not record a duplicate sale
+  lib/speech/           on-device speech recognition (Android): model download, mic capture, sherpa-onnx; core.ts is the pure part
+  sst/                  old speech recognition skeleton (never ran a real model), not used by any screen
+  components/           UI kit, charts, logo, toast, illustrative QR
+```
+
+## Set up Firebase (email, Facebook and Google sign-in)
+
+The app already follows the [session contract](../../../docs/contracts/api-contracts.md#1-auth-and-shop): Firebase signs the owner in, the app opens a Core session with the Firebase ID token and receives the role, the shops and whether shop setup is still needed. With `EXPO_PUBLIC_USE_MOCK=true` the app runs simulated (no Firebase calls); real Firebase/Core integration requires all three mock flags to be explicitly `false`. You only need to install packages and fill in configuration:
+
+1. **Firebase Console** → Authentication → Sign-in method → enable **Email/Password** (and **Facebook**, **Google** if used; see the sections below). The app no longer signs in with a phone number.
+   - Templates → *Email address verification* and *Password reset*: set the sender name and subject; set *Reply-to* to the project's support email (Firebase sends from `noreply@…firebaseapp.com`; sending from your own address needs custom SMTP).
+   - Settings → *Authorized domains*: add the web build's domain (localhost is already there).
+2. **Add apps** in Project settings → Your apps:
+   - **Web** → take the 4 values for `.env` (`EXPO_PUBLIC_FIREBASE_API_KEY`, `_AUTH_DOMAIN`, `_PROJECT_ID`, `_APP_ID`).
+   - **Android** (package `vn.teamhexa.songheloi`) → download `google-services.json`; add the **SHA-1 and SHA-256** of the build keystore (`npx eas-cli credentials -p android`).
+   - **iOS** (bundle `vn.teamhexa.songheloi`) → download `GoogleService-Info.plist`. APNs/SMS-provider setup is separate from this app's email flow; do not infer phone sign-in support.
+   - Put both files in `frontend/mobile/`.
+3. **Install dependencies** with `npm install` in `frontend/mobile`: `package.json` already lists the Firebase JS SDK, `@react-native-firebase/app`, `@react-native-firebase/auth` and `expo-build-properties`. Use `npx expo install <package>` only when adding or updating a native package, so Expo picks a compatible version.
+4. **`app.json`** already configures `googleServicesFile` for `android`/`ios` and the plugins:
+   ```json
+   ["@react-native-firebase/app", { "ios": { "disableSPM": true } }],
+   "@react-native-firebase/auth",
+   ["expo-build-properties", { "ios": { "useFrameworks": "static", "usePrecompiledModules": false } }]
+   ```
+   `disableSPM` avoids a `pod install` error when Firebase installs through SPM together with static frameworks; `usePrecompiledModules: false` avoids a launch crash from a missing `FirebaseCoreInternal.framework`. The `ios/` folder is generated from `app.json` (gitignored), so do not edit it by hand.
+5. **`.env`** (copied from `.env.example`): `EXPO_PUBLIC_USE_MOCK=false`, `EXPO_PUBLIC_MOCK_CORE=false`, `EXPO_PUBLIC_MOCK_SHOPS=false`, `EXPO_PUBLIC_API_ENDPOINT=<Core URL>`, plus the 4 Firebase web variables. To try Firebase alone without Core, set `EXPO_PUBLIC_MOCK_CORE=true` (simulates `/auth/session`, `/me`, `/shops`). After changing `.env`, rerun `npx expo start --clear` (Metro caches old values).
+6. **Run**:
+   - Web: `npm run web` — uses the Firebase JS SDK for the configured email/provider flows.
+   - Android/iOS: **does not run in Expo Go** (React Native Firebase needs native code). Create a development build: `npx eas-cli build --profile dev-client --platform android` (the `development` profile does not receive `GOOGLE_SERVICES_JSON`, see below), install it and run `npx expo start --dev-client`. iOS needs an Apple Developer account.
+
+Profiles in `eas.json`:
+
+- `development`: development client, internal install.
+- `dev-client`: extends `development` but uses the `preview` environment to receive the `GOOGLE_SERVICES_JSON` file variable and produce an APK. Use it to try Firebase sign-in and call the real Core from the Android emulator: install the APK on the emulator, set `EXPO_PUBLIC_API_ENDPOINT` in `.env` per [Connect to the real Core](#connect-to-the-real-core) with `EXPO_PUBLIC_USE_MOCK`, `EXPO_PUBLIC_MOCK_CORE` and `EXPO_PUBLIC_MOCK_SHOPS` all `false`, then run `npx expo start --dev-client --android`. JS loads from Metro, so changing the Core address only needs an `.env` edit and a Metro restart, not an APK rebuild. It shares the `phone-test` keystore, so it installs over that build and uses the same SHA registered in Firebase.
+- `preview`: internal install build, an APK on Android.
+- `phone-test`: extends `preview`, real Firebase with a simulated Core session (`MOCK_CORE`, `MOCK_SHOPS`) to isolate Firebase (email) sign-in on a real device without calling Core session/shop APIs; the business screens still call the real API, so they show network errors when Core is unreachable.
+- `production`: auto-increments the build number.
+
+`google-services.json` is gitignored, so EAS builds cannot see it. `app.config.js` reads the path from the file-type environment variable `GOOGLE_SERVICES_JSON` (`eas env:create --type file`, currently set in the `preview` environment); local machines still use `./google-services.json`. `.env` does not reach EAS either, so each profile must set its own `EXPO_PUBLIC_*` variables. Every build keystore needs its SHA-1/SHA-256 added to Firebase before sign-in works.
+
+Sign-in has a mock, a native and a web Firebase client behind one interface. Every Core call carries the Firebase token and the current shop; a `401` signs the owner out, and startup waits for Firebase to restore the session.
+
+### Connect to the real Core
+
+Flow: Firebase authenticates through the exposed email/Google paths → FE sends the **Firebase ID token** (`Authorization: Bearer …`) to Core → Core verifies it with the Firebase Admin SDK, creates/finds the account and returns the session.
+
+1. First sign-in: Core requires a display name for a new account, so the app asks “Bạn tên gì?” before opening the session. Later sign-ins skip it.
+2. Reopening the app: Firebase restores the session and the app reloads the Core profile. Signed in to Firebase without a Core account returns to the name screen; an invalid token signs out; a locked account signs out with a message.
+3. No shop yet: the shop creation screen creates the shop in Core; several chosen industries are saved as one comma-separated text.
+
+The business APIs (catalog/products, customers, POS/checkout creating a draft then confirming, orders, debts, expenses, assistant) all need the `X-Shop-Id` header; the contract is in [API contracts](../../../docs/contracts/api-contracts.md). With the real Core, mobile uses the `src/lib/*Api.ts` clients, including report endpoints for Home/Analytics totals (see [Home/Analytics metrics](#homeanalytics-metrics)). Confirming a draft accepts any paid amount from 0 to the order total. When underpaid, Core records a debt for the customer, so the order needs an existing customer or a customer name for Core to create one; the [draft and confirmation contract](../../../docs/contracts/api-contracts.md#draft-and-confirmation) owns the fields and the error. This matches the mobile credit payment screen. `EXPO_PUBLIC_USE_MOCK=true` enables a preview mode without the real Core — `src/lib/mockCore.ts` simulates those endpoints in memory.
+
+Checkout supports catalog items and temporary custom items. A custom item is sent with its name, unit, quantity and price but no product; Core does not create a Product or deduct stock for that line. Saving a new item to the catalog is a separate choice.
+
+For an authorized integration test, obtain the intended Core endpoint from the private operations knowledge base and check the delivery workflow (see [CI/CD](../../../docs/development/ci-cd.md)), so a frontend-only machine need not run Core or Docker. Confirm the current endpoint and build before testing; the example below is not a live availability check. `.env`:
+
+```
+EXPO_PUBLIC_USE_MOCK=false
+EXPO_PUBLIC_MOCK_CORE=false
+EXPO_PUBLIC_MOCK_SHOPS=false
+EXPO_PUBLIC_API_ENDPOINT=https://<authorized-core-host>
+```
+
+- Confirm the intended environment and data-handling approval before creating shared test data.
+- The app calls the Core merged into `staging`; unmerged APIs cannot be called yet.
+- The app's Firebase (`google-services.json`, the `EXPO_PUBLIC_FIREBASE_*` variables) must be the same project as the staging Core's `FIREBASE_PROJECT_ID`, otherwise Core returns `401`.
+
+Run Core locally only when changing the backend (see [Local development](../../../docs/development/local-development.md#run-each-service)); then set `EXPO_PUBLIC_API_ENDPOINT=http://<LAN IP of the machine running Core>:8000` (Android emulator: `http://10.0.2.2:8000`, port `8000` when running with Compose). Core needs a `FIREBASE_PROJECT_ID` matching the project of `google-services.json` and a service account file (see `backend/core/.env.example`). The phone and the machine running Core must be on the same network.
+
+### Home/Analytics metrics
+
+Home requests Core period totals, filtered sales totals, top products and products needing restock. Analytics requests Core period totals, estimated profit from sale-time cost snapshots and filtered sales totals; an estimated-profit failure is shown separately rather than replaced by a guessed cost.
+
+Analytics charts and best-seller rows still aggregate the orders the app has loaded, and its debt balance aggregates the loaded debts. These list-derived displays are not the same projection as the Core report totals and require separate reconciliation, including pagination, period boundaries and voided sales. The Core profit total never uses a guessed cost.
+
+The canonical event-time and money definitions are in [API contract — Period overview](../../../docs/contracts/api-contracts.md#period-overview). This source review does not establish integrated `FR-006`/`AC-031` acceptance.
+
+### Email and password sign-in
+
+The first screen is a sign-in card: Google and Zalo buttons, an **Địa chỉ email** field with a **Tiếp tục** button to the email screen (email prefilled), **Quên mật khẩu?** and the card footer **Chưa có tài khoản? Tạo tài khoản**; the most recent successful sign-in method on the device has a **Lần trước dùng** label. There is no Facebook button any more; Zalo is clickable when the build has Zalo configuration (Android: `EXPO_PUBLIC_ZALO_NATIVE_CLIENT_ID`, web: `EXPO_PUBLIC_ZALO_LOGIN=true`), otherwise it shows the “Sắp có” label; the app no longer signs in with a phone number.
+
+- **Tạo tài khoản** self-registers through Firebase (nobody needs to add the user in the Console), sends a verification email, then moves to the verification screen. Only when the user taps **Tôi đã xác minh** and Firebase reports the email verified does the app open the Core session. Reopening the app before verification returns to this screen. This is an app-side block; Core does not check `email_verified` yet.
+- **Signing in** with an unverified email also goes through the verification screen (it does not resend the email by itself; tap **Gửi lại thư xác minh**, with 60 seconds between sends). A wrong email or password shows a “tạo tài khoản” or “đặt lại mật khẩu” suggestion instead of an error.
+- **Forgot password** sends a reset email (`sendPasswordResetEmail`); an unregistered email also reports that it was sent, so it does not reveal which emails have accounts.
+- Email/Password must be enabled in Firebase Console → Authentication → Sign-in method; set *Reply-to* of both email templates under Templates. The optional variable `EXPO_PUBLIC_SUPPORT_EMAIL` shows the “Cần hỗ trợ?” line on the verification screen.
+
+### Facebook sign-in
+
+The current sign-in screen does not expose Facebook. Its native/web adapters and optional SDK configuration remain in source, but this is not a supported UI sign-in path or device-acceptance claim.
+
+Different Firebase sign-in methods can create separate identities unless accounts are linked. A provider email already used by another method can produce `account-exists-with-different-credential`; Core does not merge users by name or email.
+
+### Google sign-in
+
+The Google button uses `@react-native-google-signin/google-signin` on phones: Google returns an ID token, the app exchanges it for a Firebase account, then continues through the same Core session flow (new accounts go through the "Bạn tên gì?" screen). The web uses Firebase's Google popup; the mock build signs in as the sample user `google.demo@example.com`. Signing out also signs out of Google so the account picker shows again next time. Core needs no change.
+
+Use the private operations knowledge base for provider-project, signing-certificate and authorized-domain mappings. The build must target the intended Firebase project, whose Google provider and signing fingerprints must match; a mismatch can produce `DEVELOPER_ERROR`. Never authorize the repository's public debug key for production. Refresh the build's provider configuration after an authorized change and rebuild native code.
+
+The library has native code, so the APK must be rebuilt. The `@react-native-google-signin/google-signin` plugin in `app.json` attaches the iOS client from `GoogleService-Info.plist` on iOS prebuild; on iOS the library uses that client by itself, so the Web client ID is not required there (it is on Android). Not checked: iOS. The account-linking limitation described above applies to Google as well.
+
+## UI tests with Playwright
+
+Tests in `e2e/` run the Expo web build with mock data on port 8090 and need no Firebase or Core. Playwright starts the server and stops it when done; the first Metro build takes a few minutes.
+
+```bash
+npx playwright install chromium
+npm run test:e2e
+```
+
+Add `-- --headed` to watch the browser, `-- --ui` to step through. The report is in `e2e-report/`, screenshots and traces of failing tests in `e2e-results/`.
+
+## Debug
+
+- **Logs:** only in dev builds (`__DEV__`), everything prefixed with `[api]`, `[auth]`, `[session]`. The app's own messages leave out tokens and passwords and mask phone numbers and emails, but SDK and network error messages are logged as received and may contain personal data, so review and redact a log before sharing it. View them in the terminal running `npx expo start --dev-client` (press `j` to open React Native DevTools), or:
+  ```bash
+  adb logcat -s ReactNativeJS
+  ```
+- **The “Chẩn đoán kết nối” screen** (`/debug`, internal use in dev builds only): shows the mode (mock/real), `API_ENDPOINT`, Firebase status, a **Kiểm tra kết nối Core** button (calls `/v3/api-docs` without a token), **Xem token** (aud/iss/expiry; Core needs `FIREBASE_PROJECT_ID` to match `aud`), **Gọi GET /me**, and the recent log. This screen is not in the Quản lý tab.
+- **Run the web build for a quick try (no APK build needed):** `npm run web` and sign in with email. Core accepts only origins in `CORS_ALLOWED_ORIGINS` (see [CI/CD](../../../docs/development/ci-cd.md)), so an unlisted local origin is blocked; for authorized development, run the dev proxy in another terminal and point the app at it:
+  ```bash
+  CORE_URL=https://<authorized-core-host> node scripts/dev-cors-proxy.js
+  ```
+  and set `EXPO_PUBLIC_API_ENDPOINT=http://127.0.0.1:8010` in `.env` (rerun `npm run web -- --clear` after the change). Without `CORE_URL` the proxy points at the local Core (`http://localhost:8000`). For Firebase alone without Core, set `EXPO_PUBLIC_MOCK_CORE=true` and skip the proxy. The web cannot test native adapters, phone sign-in on a real device or Android networking.
+- **Timeout:** a Core call stops after 15 seconds by default, and assistant chat and streaming after 45 seconds, instead of spinning forever on a wrong IP or a blocking firewall.
+- **Common errors:** `network` = Core unreachable (IP, firewall, Android blocking HTTP); `timeout` = the firewall drops packets; `401 unauthorized` = the token does not match Core's project; `400 validation_failed` on `/auth/session` = a new account needs `displayName` (normal); `provider-disabled` = the sign-in method is not enabled in Firebase Console.
+
+Unimplemented client paths in this source review include Apple sign-in and Zalo on iOS; AI order recognition is not the rule-based `parseOrder()` path. Provider/device acceptance remains unverified.
+
+Note: the bank transfer QR code is illustrative only and does not confirm a bank transaction.
+
+## Vercel browser preview
+
+`vercel.json` configures the Expo export to `dist/` and routes Expo Router paths to the SPA entry. CD builds the web app and uploads it to Vercel (the `deploy-web` job in `cd.yml`, called by CI after the `mobile-web` job passes): `staging` has a fixed alias and `main` is production; pull requests have no preview for now because of the Vercel Hobby limit of 100 deploys per day. The `EXPO_PUBLIC_*` variables are set in the GitHub Environments `vercel-preview`/`vercel-staging`/`vercel-production`, not on Vercel; see [CI/CD](../../../docs/development/ci-cd.md#mobile-web-on-vercel).
+
+`EXPO_PUBLIC_*` variables are baked into the browser bundle, so never put service-account keys there. The web preview helps check the responsive UI and flows against the staging Core; it does not replace native testing on iOS/Android.

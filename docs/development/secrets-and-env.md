@@ -1,134 +1,31 @@
 ---
 type: Runbook
 title: "Secrets and env files"
-description: "Env files per environment kept in Dopbase, their format, onboarding, changing a secret and managing access."
+description: "Safe local secret handling and the boundary between repository configuration and private operations."
 owner: Technical owner
 status: stable
-generated: { by: human:miphu2804, at: 2026-11-03T14:52:23+07:00 }
+author: miphu2804
 stale_after: 2027-01-02T14:52:23+07:00
 ---
 # Secrets and env files
 
-Every credential the team shares (local `.env` files, VPS service env files, GitHub Actions variables) lives in Dopbase, the team's secrets manager at `https://secrets.songheloi.id.vn` ([setup](ci-cd.md)). Each env file is one Dopbase project and each environment is a Dopbase environment of that project. `scripts/secrets/dopbase-sync.sh pull <environment>` writes them into `secrets/<environment>/env/`, which git ignores; tools read most files there directly, and `scripts/secrets/apply.sh dev dev` copies the few that a tool reads at a fixed path, pointing them at a local database.
+Environment/domain mappings, credential inventories, access grants and rotation/recovery procedures belong to the private operations knowledge base. Do not copy them into repository documentation or pull requests.
 
-## 1. Layout
+## Local development
 
-```text
-smart-ledger/
-├── secrets/
-│   ├── staging/
-│   │   ├── env/               # pulled from Dopbase, one per service; ignored
-│   │   │   ├── .env.ai
-│   │   │   ├── .env.core
-│   │   │   ├── ...
-│   │   │   └── github/        # one per GitHub Actions environment
-│   │   └── targets            # files apply.sh writes; in git
-│   ├── production/
-│   │   └── env/               # pulled from Dopbase; ignored
-│   ├── templates/             # groups and comments of every env file, no values; in git
-│   └── local.env.core, local.env.ai   # local database keys apply.sh puts over staging; in git
-└── scripts/secrets/
-    ├── dopbase-sync.sh        # Dopbase <-> env/
-    ├── check-templates.sh     # templates vs Dopbase and the .env.example files
-    ├── apply.sh               # staging env/ -> backend/core/.env and the other targets
-    ├── github.sh              # env/ -> GitHub Actions secrets
-    └── lib.sh                 # helpers
-```
+Use each service's `.env.example` to identify required settings and the [local setup guide](local-development.md) to start dependencies. For authorized team values and the local helper commands, see [secrets](../../secrets/README.md).
 
-A file maps to a project by its name: `env/.env.core` is `core/<environment>` and a GitHub environment file `env/github/.env.<service>-<stage>` is `github-<service>/<stage>`, so `.env.vercel-staging` is `github-vercel/staging` and `.env.android-dev` (kept in the staging folder) is `github-android/dev`. A file whose name holds `.` or `_` cannot be a Dopbase project and is skipped.
+The default development source uses a local database; staging values require deliberate selection and authorization. Generated exports, `.env` files and backups are plaintext files, not encrypted local storage. Keep them out of Git, restrict filesystem access and follow the private procedure for cleanup.
 
-## 2. Env file format
+## Handling rules
 
-Dopbase stores only `KEY=value`, so the groups and comments below live in `secrets/templates/.env.<name>` (`secrets/templates/github/.env.<service>` for a GitHub environment, shared by its stages). `dopbase-sync.sh pull` lays each export out by its template, so staging, production and the copies `apply.sh` writes all keep the same format. A template holds every key of every environment of its project with empty values, and a group none of whose keys an environment holds is left out of that environment's file. A key Dopbase has and its template lacks lands under `### Ungrouped ###` and is named on stderr; add it to the template, and run `scripts/secrets/check-templates.sh` to find such keys without pulling. Each file's first line names it; keys are grouped:
+- Never put a secret value in a command-line argument, committed example, screenshot, issue, PR description or log.
+- Use the authorized secret-management UI or an approved non-logging input mechanism to change values.
+- Frontend public-prefixed variables are bundled into the application and cannot hold secrets.
+- A service token authenticates a service caller; it is not automatically a user or tenant authorization claim.
+- Documentation removal does not erase Git history or revoke a credential. Suspected exposure requires the owner's incident and rotation process.
+- Shared-environment changes require explicit authorization; local setup commands do not grant deployment or migration permission.
 
-```
-# Core for local development
+## Configuration changes
 
-### Database ###
-DATABASE_URL=...
-DATABASE_USERNAME=...
-
-### Zalo ###
-# Explanation of the group, when it needs one.
-ZALO_APP_ID=...
-```
-
-| Line | Meaning |
-|---|---|
-| `# <title>` | First line: what the file is for |
-| `## <section> ##` | Only in `github/`: starts the Variables or the Secrets section, which hold groups |
-| `### <group> ###` | Starts a group of related keys |
-| `# <text>` | Explanation for the group or key below it |
-| one blank line | Between groups |
-
-### 2.1 What each environment holds
-
-| File in `env/` | Used by | staging | production |
-|---|---|---|---|
-| `.env.core`, `.env.ai` | Core and AI: the env files the Ansible playbook uploads to the VPS, plus settings left at their code default; staging copies go to `backend/core/.env` and `backend/ai/.env` with `local.env.*` put over them | yes | yes (read in place) |
-| `.env.bifrost` | Bifrost model gateway: the provider key and the virtual key AI uses, uploaded to the VPS as `bifrost.env` ([CI/CD](ci-cd.md#service-variables)) | yes | yes |
-| `.env.mobile` | mobile app; copied to `frontend/mobile/.env` | yes | no |
-| `.env.release` | Android APK release: R2 bucket, keystore | no | yes |
-| `.env.loadtest`, `.env.monitor` | load test and the read-only `grafana_reader` login of the product dashboard in `.env.monitor`, which `scripts/infra/run.sh` loads ([CI/CD](ci-cd.md#monitoring)); staging copies go to `scripts/loadtest/.env.staging` and `scripts/monitor/.env` | yes | `.env.loadtest`, and `.env.monitor` with `GRAFANA_PG_*` only |
-| `.env.vps` | the VPS of that environment: `VPS_HOST`, `VPS_KNOWN_HOSTS`, the CI deploy key (`VPS_SSH_KEY` in base64, `VPS_SSH_PUBLIC_KEY`), `CLOUDFLARE_TUNNEL_TOKEN` and, for [monitoring](ci-cd.md#monitoring), `MONITOR_DOMAIN`, `GRAFANA_ADMIN_PASSWORD`, `MONITOR_DISCORD_WEBHOOK_URL`, `MONITOR_TELEGRAM_BOT_TOKEN` and `MONITOR_TELEGRAM_CHAT_ID`; read by the Ansible playbook and `github.sh` ([VPS](ci-cd.md#vps)) | yes | yes |
-| `github/.env.<environment>` | copy of a GitHub Actions environment | 4 environments | 3 environments |
-
-Files are named `.env.<name>`, like `.env.local` and `.env.production` in Next.js; the folder already says which environment they belong to. `targets` lists the copied files. Everything else is read in place, for example `docker compose --env-file secrets/production/env/.env.core --env-file secrets/production/env/.env.ai`, so there is no second copy to drift.
-
-`.env.core` and `.env.ai` hold plain values that can be read anywhere. `github/.env.*` have two sections, `## Variables ##` and `## Secrets (write-only in GitHub, values not pulled) ##`, each grouped by topic like the other files. Secrets are listed as `# NAME` lines, by name only, because GitHub never returns a secret's value.
-
-Not in `secrets/`: `.env.example` files (committed templates), and generated files such as `supabase/.temp` and `frontend/mobile/ios/.xcode.env`.
-
-## 3. Set up a machine
-
-1. Install the Dopbase CLI from the release page of `github.com/dopbase/dopbase`, then connect it and log in with the account the maintainer created for you:
-
-   ```bash
-   dopbase client connect https://secrets.songheloi.id.vn
-   dopbase login
-   ```
-
-2. Pull the dev environment, start the local database and write the service env files:
-
-   ```bash
-   scripts/secrets/dopbase-sync.sh pull dev
-   scripts/local-db.sh
-   scripts/secrets/apply.sh dev dev --apply
-   ```
-
-   `scripts/local-db.sh` runs PostgreSQL with pgvector in Docker at `127.0.0.1:54322`, applies Core's Flyway migrations, then the AI migrations in `supabase/migrations`, and creates the read-only `ai_reader` login. Every step is safe to re-run, and data stays in the `smartledger-local-db` volume.
-
-## 4. Daily use
-
-- `scripts/secrets/dopbase-sync.sh pull <environment>` replaces each file in `secrets/<environment>/env/` with its Dopbase project. It asks for your Dopbase password once and types it into the confirmation of every export with `expect`; a failed export leaves that file as it was.
-- `scripts/secrets/apply.sh dev dev` is a dry run: per file in `targets` it builds the file of the `dev` environment with the keys of `secrets/local.<name>` (the local database) put over it, and lists keys that would be added (`+`), changed (`~`) or dropped (`-`), or `(comments or layout only)`. Values are never printed. `--use-staging KEY` keeps the source value of one local key. Use `staging` as the source (`apply.sh staging dev`) only to test deliberately against staging values. A target the source does not hold, such as `.env.loadtest` and `.env.monitor` in `dev`, is skipped.
-- `scripts/secrets/apply.sh dev dev --apply` writes the files and keeps each replaced one as `<file>.bak` (`--no-backup` skips it). A key you added only on your machine shows as `-` and is lost on apply; add it to Dopbase first.
-- Copying runs one way, from `dev` (or `staging`) to this machine. The `dev` environment (`core/dev`, `ai/dev`, `mobile/dev`) holds localhost URLs, `ZALO_ENABLED=false` and no Zalo credentials, so a dev machine needs no staging access, and copying to or from production is not supported.
-- Dopbase keeps the history of every secret: `dopbase secret history <project>/<environment> <KEY>` and `dopbase secret rollback`.
-
-## 5. Change a secret
-
-Change it in the Dopbase web UI or with `dopbase secret set <project>/<environment> KEY=value`, then pull. Dopbase is the only place to change a value: the backend deploy reads `core` and `ai` from it, and `scripts/infra/run.sh` reads every VPS file from it, so an edit in `secrets/<environment>/env/` reaches nothing. For a new service, write its file and run `scripts/secrets/dopbase-sync.sh seed <environment>`, which loads only files whose Dopbase environment does not exist yet; every value must stay on its key's line.
-
-## 6. Add or remove a person
-
-The maintainer creates or removes the person's Dopbase account and grants access per project. When someone leaves, rotate every secret they could read, because they may still hold a pulled copy.
-
-## 7. CI reads Dopbase
-
-Workflows read shared values from Dopbase at run time, so a value changed in Dopbase reaches the next run without a GitHub copy to update.
-
-- **Runner token.** One Dopbase runner token per group, stored as a GitHub environment secret named `DOPBASE_TOKEN_<GROUP>`: `CORE`, `AI`, `VPS`, `BIFROST`, `MONITOR` and `RELEASE`. A token reads one `<group>/<environment>`, so a leaked token reads only that group. `DOPBASE_TOKEN` is the fallback that a script reads when a group has none.
-- **Load.** `scripts/ci/load-dopbase.sh <project>/<environment> '<regex>'` writes the matching keys to the later steps of the job under their Dopbase names and masks each value in the log. Steps then read them as shell variables; a `${{ secrets.* }}` reference to the same name is no longer needed.
-- **Names.** A GitHub name matches its Dopbase key, so the same variable has one name in both places.
-
-| Group | Dopbase keys read by CI | Read by | Environment |
-|---|---|---|---|
-| `vps/<environment>` | `VPS_HOST`, `VPS_KNOWN_HOSTS`, `VPS_SSH_KEY` | `deploy-backend.yml` | `backend-staging`, `backend-production` |
-| `vps/<environment>` | `VPS_HOST`, `VPS_KNOWN_HOSTS` | `infra-run.yml` | GitHub environment of the run |
-| `ai/production` | `HH_API_KEY`, `HH_API_URL`, `HH_CONTROL_PLANE_URL`, `HH_DATA_PLANE_API_KEY`, `HH_CONTROL_PLANE_API_KEY` | `honeyhive-sync.yml`, `honeyhive-dashboards.yml` | `backend-production` |
-| `release/production` | `ANDROID_KEYSTORE_BASE64`, `ANDROID_KEYSTORE_PASSWORD` | `mobile-release.yml` (`android-production` only) | `android-production` |
-
-`VPS_USER` is no longer a variable: `start-ssh-agent.sh` defaults to `deploy`. `SMARTLEDGER_VPS_USER` (the admin login of Ansible) and `SSH_PRIVATE_KEY` (its key) stay in GitHub until Dopbase holds that key; see [CI/CD](ci-cd.md#github-environments).
-
-Note: `release/production` keeps `RELEASE_KEYSTORE`, a file path, for the local release script `scripts/release/android-release.sh`. CI needs the base64 content under a different name, so the two sets live side by side.
+Keep code, templates and non-secret examples consistent when a setting changes. Actual environment inventories and credential maps stay in the private knowledge base; do not commit generated environment snapshots. The [credential-map boundary](credential-map/README.md) explains the repository policy.

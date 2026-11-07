@@ -1,16 +1,16 @@
 // =====================================================
-// SMART LEDGER — PHASE 1 ERD
+// SMART LEDGER — CHECKED-IN SCHEMA
 // =====================================================
 //
 // ID: BIGINT IDENTITY → Java Long
 // Money: BIGINT VND
 // Time: TIMESTAMPTZ, UTC internally; Core JSON displays +07:00
-// Core schema: checked-in Flyway V1-V19; 23 Core tables including daily activity (CORE-018, 2026-10-29).
+// Core schema: Flyway V1-V20, 25 Core tables; reviewed against staging a2766ee.
 // Core schema re-checked against feat/admin-dashboard-growth at 3e93dd1, 2026-10-26; this is not shared-DB deployment evidence.
-// AI sections retain their separately dated review; Core audit does not re-approve AI scope or planned tables.
+// AI tables come from the checked-in Supabase migrations; source presence is not product approval.
 // AI schema: supabase/migrations AI baseline (chat_conversations, chat_messages, vector extension, ai_read views, ai_sql_reader role),
 // ledger views (v_debts, v_payments, v_expenses) and agent memory (agent_memories, agent_memory_settings; ADR-0002, off by default).
-// V15 implements OWNER notifications/thresholds on feat/app-notifications; ai_requests remains planned.
+// V15 implements OWNER notifications/thresholds; unimplemented tables are excluded.
 // CORE-015 #238: V17 on feat/zalo-login adds external Zalo identities and OAuth sessions; not shared-DB rollout.
 // CORE-016 #276 on feat/zalo-android: V18 adds Android handoff; checked in, not shared-DB rollout.
 // Existing sessions default WEB. Native defaults OFF; reviewed staging variables are applied only after merge/V18.
@@ -88,25 +88,6 @@ Enum DraftSourceType {
 Enum ExpenseStatus {
   ACTIVE
   ARCHIVED
-}
-
-Enum AiInputType {
-  TEXT
-  AUDIO
-  IMAGE
-}
-
-Enum AiMode {
-  SALE
-  EXPENSE
-  INSIGHT
-  REPLENISHMENT
-}
-
-Enum AiRequestStatus {
-  PENDING
-  SUCCEEDED
-  FAILED
 }
 
 Enum ChatRole {
@@ -358,7 +339,7 @@ Table sale_drafts {
   initial_payment_method PaymentMethod
 
   source_type DraftSourceType [not null, default: 'MANUAL']
-  source_ai_request_id bigint [note: 'Column and index exist in Flyway V4; no foreign key until ai_requests exists']
+  source_ai_request_id bigint [note: 'Column and index exist in Flyway V4; no foreign key or backing request table']
 
   status DraftStatus [not null, default: 'DRAFT']
 
@@ -561,7 +542,7 @@ Table expenses {
   expense_at timestamptz [not null]
 
   // AI origin
-  source_ai_request_id bigint [note: 'Column and index exist in Flyway V6; no foreign key until ai_requests exists']
+  source_ai_request_id bigint [note: 'Column and index exist in Flyway V6; no foreign key or backing request table']
 
   status ExpenseStatus [not null, default: 'ACTIVE']
   archived_at timestamptz
@@ -574,39 +555,6 @@ Table expenses {
     (shop_id, expense_at)
     (shop_id, status)
     source_ai_request_id
-  }
-}
-
-
-// =====================================================
-// AI TRACE
-// =====================================================
-
-// Planned (target design): no migration creates ai_requests yet. Runtime traces go to HoneyHive.
-Table ai_requests {
-  id bigint [pk, increment]
-  shop_id bigint [not null]
-  user_id bigint [not null]
-
-  input_type AiInputType [not null]
-  mode AiMode [not null]
-  status AiRequestStatus [not null, default: 'PENDING']
-
-  model varchar(150)
-  model_version varchar(150)
-
-  input_object_key varchar(1000)
-  result_json jsonb
-  error_message varchar(1000)
-
-  delete_input_after timestamptz
-
-  created_at timestamptz [not null, default: `now()`]
-  updated_at timestamptz [not null, default: `now()`]
-
-  indexes {
-    (shop_id, user_id, created_at)
-    (shop_id, status)
   }
 }
 
@@ -654,7 +602,7 @@ Table chat_messages {
   content text [not null]
 
   // Link to AI processing when the message comes from AI
-  ai_request_id bigint [note: 'Column and index exist in the AI baseline; no foreign key until ai_requests exists.']
+  ai_request_id bigint [note: 'Column and index exist in the AI baseline; no foreign key or backing request table.']
 
   created_at timestamptz [not null, default: `now()`]
 
@@ -899,7 +847,6 @@ Ref: users.id < customers.archived_by_user_id
 Ref: shops.id < sale_drafts.shop_id
 Ref: users.id < sale_drafts.created_by_user_id
 Ref: customers.id < sale_drafts.customer_id
-// Planned, add when ai_requests exists: Ref: ai_requests.id < sale_drafts.source_ai_request_id
 
 // DBML short-form one-to-one: the second column is the FK (V4).
 Ref: sales.id - sale_drafts.confirmed_sale_id
@@ -937,13 +884,10 @@ Ref: users.id < sale_refunds.refunded_by_user_id
 Ref: shops.id < expenses.shop_id
 Ref: users.id < expenses.created_by_user_id
 Ref: users.id < expenses.archived_by_user_id
-// Planned, add when ai_requests exists: Ref: ai_requests.id < expenses.source_ai_request_id
 
 
 // ---------- AI ----------
 
-Ref: shops.id < ai_requests.shop_id
-Ref: users.id < ai_requests.user_id
 
 
 // ---------- CHAT ----------
@@ -952,7 +896,6 @@ Ref: users.id < chat_conversations.user_id
 Ref: shops.id < chat_conversations.shop_id
 
 Ref: chat_conversations.id < chat_messages.conversation_id
-// Planned, add when ai_requests exists: Ref: ai_requests.id < chat_messages.ai_request_id
 
 Ref: shops.id < agent_memories.shop_id [delete: restrict]
 Ref: users.id < agent_memories.user_id [delete: restrict]
@@ -1013,7 +956,6 @@ TableGroup payment_and_expense {
 }
 
 TableGroup ai_and_chat {
-  ai_requests
   chat_conversations
   chat_messages
   agent_memories

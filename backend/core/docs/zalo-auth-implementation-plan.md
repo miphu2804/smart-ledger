@@ -1,42 +1,37 @@
 ---
-type: Plan
-title: "CORE-015: Zalo authentication implementation plan"
-description: "Design and implementation plan for Zalo web sign-in in Core."
+type: Guide
+title: "CORE-015: Zalo authentication handoff"
+description: "Implemented Zalo web sign-in boundaries, consumer handoff and dated verification evidence."
 owner: Core owner
 status: stable
-generated: { by: human:thaonguyen1909, at: 2026-10-16T20:00:02+07:00 }
+author: thaonguyen1909
 stale_after: 2026-12-15T20:00:02+07:00
 ---
-# CORE-015: Zalo authentication implementation plan
+# CORE-015: Zalo authentication handoff
 
-Status: design and V17/document preparation approved on 2026-10-16; Core implementation locally verified, not
-enabled or accepted on staging. The user confirmed real LOGIN through the local helper, not LINK/FE acceptance. This file is a consumer handoff, not a replacement for the canonical
-[API contract](../../../docs/contracts/api-contracts.md).
+Current source: WEB authentication and V17 are present in audited `staging` revision `a2766ee3a37e23c0f03fd43383b608c1b2fac898`. Runtime enablement, deployment and integrated acceptance were not audited. Historical evidence on 2026-10-16 confirmed local LOGIN through the helper, not LINK/FE acceptance. This consumer handoff does not replace the [API contract](../../../docs/contracts/api-contracts.md).
 
 Issue: [CORE-015 #238](https://github.com/miphu2804/smart-ledger/issues/238).
-Branch: `feat/zalo-login`.
+Historical implementation branch: `feat/zalo-login`.
 
-## Approved boundaries
+## Historical approval boundaries
 
 - Initial implementation was Core-only/no migration. The user subsequently approved
   preparing V17, canonical API/BRD/PRD/AC/design/ERD and an append-only progress entry.
 - Run migrations/tests on disposable PostgreSQL schemas only. Do not apply this
   feature branch to a business, staging or production DB; no deploy/runtime setting changes.
 - Support login and explicit, safe linking to an existing Firebase account.
-- Do not commit, push implementation changes, open a PR or deploy until asked.
 - Keep Firebase ID tokens as the only Bearer credential for Core APIs, with the
   existing database role/status/shop checks. Zalo OAuth does not create a Core
   profile or shop; the client still opens `/auth/session` after Firebase sign-in.
 
 Traceability is [BR-009 / BR-022](../../../docs/product/business-requirements.md) →
 [FR-010 / NFR-003 / AC-081–086](../../../docs/product/product-requirements.md).
-UI remains forthcoming until FE implements and accepts the canonical
-[Zalo contract](../../../docs/contracts/api-contracts.md#zalo-core-015). This plan does not claim staging/consumer acceptance.
+Consumer behavior follows the [Zalo contract](../../../docs/contracts/api-contracts.md#zalo-core-015). Current Mobile integration is separate from the historical Core-only slice; this source review does not establish consumer acceptance.
 
-## Local Core consumer contract (not deployed)
+## Core consumer contract
 
-Initial target: web popup flow. Native Android/iOS integration and deep links
-are not implied by passing a web test. No frontend implementation in this slice.
+This section describes the WEB popup flow. Native Android handoff has its [own guide](zalo-android-preparation.md); passing a web test does not establish device or deep-link acceptance.
 
 | Operation | Request | Result |
 | --- | --- | --- |
@@ -135,7 +130,7 @@ data. Cleanup is feature-gated and must not query nonexistent tables when Zalo
 - Enabled configuration needs app ID, app secret, exact HTTPS callback URL,
   allowlisted frontend origins and a separate 32-byte session encryption key.
   Environment variable names are defined in Core configuration/tests and
-  [Core README](../README.md#zalo-authentication-core-015-local-backend-implementation),
+  [runtime configuration](#runtime-configuration),
   not inferred from the smoke helper's file.
 - Missing/unapproved schema is fail-closed, not auto-DDL. The feature must not be
   enabled on an application database until V17 from merged code is applied and rollout is approved.
@@ -151,6 +146,25 @@ data. Cleanup is feature-gated and must not query nonexistent tables when Zalo
 - Add abuse controls for public authorization/exchange and TTL cleanup; document
   per-instance versus shared limits honestly. They are not a substitute for
   deployment-level rate limiting.
+
+## Runtime configuration
+
+Zalo web and Android remain disabled by runtime default and require their reviewed V17/V18 rollout before activation. The canonical implementation plan owns the web contract and safeguards; the [Android runbook](zalo-android-preparation.md) owns V18 activation/recovery; the [manual guide](zalo-manual-login.md) is isolated local tooling only. Do not copy `ZALO_MANUAL_*` settings to a VPS.
+
+The host/IntelliJ configuration names are:
+
+| Variable | Meaning |
+|---|---|
+| `ZALO_ENABLED` / `ZALO_NATIVE_ENABLED` | Feature flags; both default `false` |
+| `ZALO_APP_ID`, `ZALO_APP_SECRET` | Provider ID and server-only secret; never FE/Git/logs/chat |
+| `ZALO_CALLBACK_URL` | Exact public HTTPS `/api/v1/auth/zalo/callback` |
+| `ZALO_CLIENT_ORIGINS` | Exact HTTPS FE origins, no path/trailing slash/wildcard |
+| `ZALO_SESSION_ENCRYPTION_KEY` | Standard Base64 of a separate random 32-byte AES key; not app/Firebase credentials |
+| `ZALO_SESSION_TTL_SECONDS`, `ZALO_PROOF_TTL_SECONDS` | Defaults 300/90; allowed 60–600 and 15–90, proof ≤ session |
+| `ZALO_HTTP_TIMEOUT_SECONDS` | Default 10; allowed 1–30 per provider request |
+
+No provider tokens, callback query/body, proof, verifier, cookies or credentials belong in logs. Configure trusted proxy handling and edge throttling before any hosted activation. Local Zalo tests use only disposable PostgreSQL and do not establish FE, real-provider, staging, APK or production acceptance.
+
 
 ## Local implementation checklist
 

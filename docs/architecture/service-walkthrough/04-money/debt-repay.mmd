@@ -1,0 +1,24 @@
+sequenceDiagram
+    box rgb(238,244,255) Core API
+    participant C as DebtController
+    end
+    box rgb(255,233,214) Core services
+    participant D as DebtServiceImpl
+    participant I as IdempotencyService
+    end
+    box rgb(239,230,255) Data
+    participant DB as Repositories
+    end
+    C->>D: repay(token, shopId, debtId, key, req)
+    D->>D: requireOwnedActiveShop
+    D->>I: execute("DEBT_REPAYMENT", key, [id, req])
+    I->>D: repayOnce()
+    D->>DB: findSaleIdByIdAndShopId (no lock)
+    D->>DB: lock Sale before Debt (same order as void)
+    Note over D: Sale must be CONFIRMED, else SALE_ALREADY_VOIDED
+    D->>DB: lock Debt
+    D->>D: debt.repay(amount): OPEN, 0 < amount ≤ outstanding
+    D->>D: sale.recordRepayment(amount): PAID or PARTIAL
+    D->>DB: save Payment.debtRepayment()
+    D->>D: audit DEBT_REPAYMENT_RECORDED
+    D-->>C: DebtRepaymentResponse(debt, payment)

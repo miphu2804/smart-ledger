@@ -4,7 +4,7 @@ title: "Local development"
 description: "Setup, run commands, pre-PR checks, local Compose, the local database and the shared-database migration workflow."
 owner: Technical owner
 status: stable
-generated: { by: human:miphu2804, at: 2026-11-04T23:08:04+07:00 }
+author: miphu2804
 stale_after: 2027-01-03T23:08:04+07:00
 ---
 # Local development
@@ -13,13 +13,13 @@ How to install, run and check each service on a developer machine, how the local
 
 ## Prerequisites
 
-JDK 21, Python 3.11+ with [uv](https://docs.astral.sh/uv/), Node.js 20+, and Docker for the Compose stack and the local database. Frontends default to mock data and need no backend.
+JDK 21, Python 3.11+ with [uv](https://docs.astral.sh/uv/), and Docker for the Compose stack and the local database. For frontend work, use Node.js 22.18 or later in the 22.x line. CI uses Node.js 22, and Mobile unit tests need native TypeScript support. Offline frontend demos can use mock data without a backend. Mobile requires explicit API endpoint and mock flags; configure them using the [Mobile guide](../../frontend/mobile/README.md) rather than assuming defaults.
 
-Get the team's credentials by following [`secrets/README.md`](../../secrets/README.md): it pulls them encrypted and writes `backend/core/.env`, `backend/ai/.env` and `frontend/mobile/.env`, with the staging database credentials. Without access, fill those files from their `.env.example` (the install commands below copy them when missing).
+Follow [`secrets/README.md`](../../secrets/README.md) for authorized credential access. The default `dev` source uses local database URLs; staging values are used only when deliberately selected. The scripts write local plaintext `.env` files and backups, protected by filesystem permissions, not application-level encryption. Without access, fill those files from their `.env.example` (the install commands below copy them when missing).
 
 ## Run each service
 
-Each service has three steps: install once, run, and check before a pull request (the same checks CI runs).
+Each service has three steps: install once, run, and a quick check. The quick check skips the PostgreSQL suites, and a skipped suite is not a pass, so run the [full check](#full-check-before-pushing) before pushing.
 
 ### AI (Python, :8001)
 
@@ -32,7 +32,7 @@ cd backend/ai && uv run python -m src.main
 cd backend/ai && uv run uvicorn src.main:app --reload --port 8001   # or this one: restarts on each code change
 ```
 
-Scripts run the same way, without `python` in front: `uv run evaluation/run.py agent_chat --dry-run`. The [AI README](../../backend/ai/README.md#scripts) lists them.
+Scripts run the same way, without `python` in front: `uv run evaluation/run.py agent_chat --dry-run`. The [Evaluation guide](../../backend/ai/evaluation/README.md) owns evaluation commands and options.
 
 ```bash
 cd backend/ai && uv run ruff check && uv run ruff format --check && uv run pytest
@@ -92,15 +92,39 @@ Core is published on :8000 and AI on :8001. Neither command changes the database
 docker compose --env-file backend/core/.env --env-file backend/ai/.env up --build
 ```
 
+## Full check before pushing
+
+CI runs the AI tests and Core `verify` against a disposable PostgreSQL and then requires the Core PostgreSQL suites to have run. Do the same on your machine with one throwaway container that holds a database for each service; never point a test URL at Supabase or the local development database. Run the four blocks in order from the repository root; the test blocks run in a subshell, so the shell stays at the root.
+
+```bash
+docker run -d --rm --name smartledger-test-db -p 127.0.0.1:55433:5432 -e POSTGRES_DB=smartledger_test -e POSTGRES_USER=smartledger -e POSTGRES_PASSWORD=smartledger pgvector/pgvector:pg17
+until docker exec smartledger-test-db pg_isready -h 127.0.0.1 -U smartledger -d smartledger_test >/dev/null 2>&1; do sleep 1; done
+docker exec smartledger-test-db createdb -U smartledger core_test
+```
+
+```bash
+(cd backend/ai && POSTGRES_TEST_URL=postgresql://smartledger:smartledger@127.0.0.1:55433/smartledger_test uv run pytest)
+```
+
+```bash
+(cd backend/core && CORE_TEST_POSTGRES_URL=jdbc:postgresql://127.0.0.1:55433/core_test CORE_TEST_POSTGRES_USERNAME=smartledger CORE_TEST_POSTGRES_PASSWORD=smartledger bash ./mvnw clean verify && python3 scripts/verify_postgres_tests.py target/surefire-reports)
+```
+
+```bash
+docker rm -f smartledger-test-db
+```
+
+The last Core command is the report gate: it fails when the PostgreSQL suites were skipped. The [Core test guide](../../backend/core/README.md#run-tests) explains the variables and focused runs.
+
 ## Local Compose
 
-Dev and staging share the staging Supabase project; production uses a separate Supabase project. There is no local PostgreSQL container. Credentials live in each service's Git-ignored env file: `backend/core/.env` defines `DATABASE_URL` (JDBC), `DATABASE_USERNAME`, `DATABASE_PASSWORD`, and `backend/ai/.env` defines `POSTGRES_URL` and the optional `AI_SQL_READER_URL` for the shop-data tool. Production values are in `secrets/production/env/`. Service settings stay in each service's own file: `backend/core/.env` supplies `FIREBASE_PROJECT_ID` and `GOOGLE_APPLICATION_CREDENTIALS` (absolute host path of the service-account key, mounted read-only into the container), and Compose loads `backend/ai/.env` for model and API keys. Core calls AI at `AI_BASE_URL` (Compose sets `http://ai:8001`) with the shared `INTERNAL_API_TOKEN`: put the same value in `backend/ai/.env` and `backend/core/.env`; a missing or mismatched value makes every Agent call fail (`401` from AI, `503 ai_unavailable` from Core). Default stack is Core and AI. AI sends HoneyHive traces, with the redacted chat content, only when `HH_API_KEY` is set in `backend/ai/.env`.
+Compose uses the database that each service's env file names. The default `dev` source points at the [local database](#develop-against-the-local-database); staging values are a deliberate choice, not the default, and production uses a separate Supabase project. The default Compose stack has no PostgreSQL service; use the opt-in [local database script](#develop-against-the-local-database) for a separate disposable development database. Credentials live in each service's Git-ignored env file: `backend/core/.env` defines `DATABASE_URL` (JDBC), `DATABASE_USERNAME`, `DATABASE_PASSWORD`, and `backend/ai/.env` defines `POSTGRES_URL` and the optional `AI_SQL_READER_URL` for the shop-data tool. Production values are in `secrets/production/env/`. Service settings stay in each service's own file: `backend/core/.env` supplies `FIREBASE_PROJECT_ID` and `GOOGLE_APPLICATION_CREDENTIALS` (absolute host path of the service-account key, mounted read-only into the container), and Compose loads `backend/ai/.env` for model and API keys. Core calls AI at `AI_BASE_URL` (Compose sets `http://ai:8001`) with the shared `INTERNAL_API_TOKEN`: put the same value in `backend/ai/.env` and `backend/core/.env`; a missing or mismatched value makes every Agent call fail (`401` from AI, `503 ai_unavailable` from Core). Default stack is Core and AI. AI sends HoneyHive traces, with the redacted chat content, only when `HH_API_KEY` is set and `HH_SOURCE` is `production`; the local default sends none.
 
 ```bash
 docker compose --env-file backend/core/.env --env-file backend/ai/.env up --build
 ```
 
-Do not run the app with the production bootstrap credentials; production values belong in the `production` environment's secret store. Automated tests use a disposable PostgreSQL (CI service containers), never Supabase: AI integration tests read `POSTGRES_TEST_URL`, Core PostgreSQL tests read `CORE_TEST_POSTGRES_URL` (see [Core README](../../backend/core/README.md#run-tests)).
+Do not run the app with the production bootstrap credentials; production values belong in the `production` environment's secret store. Automated tests use a disposable PostgreSQL, never Supabase; see [Full check before pushing](#full-check-before-pushing).
 
 ## Chat-history cache
 
@@ -116,14 +140,14 @@ The Redis client tests run against it with `REDIS_TEST_URL=redis://127.0.0.1:637
 
 ## Database migrations
 
-Dev and staging share one database, so a migration that runs from a developer machine changes the schema for everyone. Core runs Flyway at startup when `FLYWAY_ENABLED=true` (the Core default); the commands above set it to `false`, and Core then only checks that the schema matches its entities.
+Development defaults to the local database. A deliberately selected shared database is a separate operational target; a migration there affects other users. Core runs Flyway at startup when `FLYWAY_ENABLED=true` (the Core default); the commands above set it to `false`, and Core then only checks that the schema matches its entities.
 
 - **Never migrate the shared database from a feature branch.** A migration applied there and later edited, or a second branch that uses the same version number, makes Flyway reject the checksum and stops Core for everyone. A column change that is not merged yet breaks the code running on `staging`.
 - **Never edit a migration that has run on staging**; add a new version instead. Production follows the same steps after the release is approved.
 
 ### Develop against the local database
 
-`scripts/local-db.sh` starts a local PostgreSQL with the Core and AI migrations applied; the second command points Core and AI at it. See [Secrets and env files](secrets-and-env.md#3-set-up-a-machine).
+`scripts/local-db.sh` starts a local PostgreSQL with the Core and AI migrations applied; the second command points Core and AI at it. See [Secrets and env files](secrets-and-env.md#local-development).
 
 ```bash
 scripts/local-db.sh
@@ -135,29 +159,8 @@ scripts/secrets/apply.sh dev dev --apply
 
 ### Develop a migration on a disposable database
 
-CI repeats this on every pull request. A branch whose entities need a migration that staging lacks cannot start against the shared database, because the schema check fails.
-
-1. Start a disposable PostgreSQL:
-
-   ```bash
-   docker run --rm -p 5432:5432 -e POSTGRES_DB=smartledger -e POSTGRES_USER=smartledger -e POSTGRES_PASSWORD=smartledger pgvector/pgvector:pg17
-   ```
-
-2. Point `DATABASE_URL=jdbc:postgresql://localhost:5432/smartledger` (and `POSTGRES_URL` for AI) at it.
-3. Run Core with `FLYWAY_ENABLED=true`.
+CI verifies fresh migrations on an isolated database. For local verification, create a disposable, loopback-only PostgreSQL instance through the approved local setup, point only test connections at it and run Core with Flyway enabled. Never use shared business data or deployment credentials for this check.
 
 ### Migrate staging after a merge
 
-After a pull request with a Core or AI migration merges, one person checks out `origin/staging`, runs both steps, and tells the team. This manual step stands in for the staging deploy until one exists.
-
-1. Run Core once with Flyway on:
-
-   ```bash
-   FLYWAY_ENABLED=true docker compose --env-file backend/core/.env --env-file backend/ai/.env up --build core
-   ```
-
-2. Push the AI migrations, as in the [AI README](../../backend/ai/README.md#schema-and-migrations):
-
-   ```bash
-   npx supabase@2.119.0 db push --db-url "$POSTGRES_URL"
-   ```
+Shared migrations require merged code, explicit owner authorization, a verified backup/recovery plan and the approved operational window. Check the actual target and migration history before applying anything; do not infer them from local defaults. The private operations knowledge base owns access and execution procedures. Keep Core-before-AI ordering and never repair, baseline, delete migration history or edit an applied migration to bypass a failure.
