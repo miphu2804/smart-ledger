@@ -10,6 +10,14 @@
 
 Check: each changed claim was checked with grep, `ls` and a read of the cited code at `f2be945`; no build or script was run. Left alone: `backend/core/**` (Core is out of scope under AGENTS.md) and the `github.sh` step in ci-cd. Commit: the one that adds this entry.
 
+### 2026-11-07 — Align quick-navigation test labels with the app
+
+| Area | Change |
+|---|---|
+| Mobile | • Update the quick-navigation label expectations to Tạo đơn and Trợ lý Bobi; keep runtime labels, routes and behavior unchanged |
+
+Check: `npm ci`, `npm test` (196 passed, 0 failed), `npm run typecheck`, mock-mode `npm run export:web` and `git diff --check` passed. Native Firebase files were not supplied; native and GA4 device verification were not performed. Commit: the commit that adds this entry.
+
 ### 2026-11-06 — Mobile usage analytics in GA4 behind a consent prompt
 
 | Area | Change |
