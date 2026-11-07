@@ -96,7 +96,7 @@ Use the Conventional Commit format for pull request titles so the title can serv
 
 ### Pull request description
 
-GitHub pre-fills the description from [`.github/pull_request_template.md`](.github/pull_request_template.md) (GitHub reads templates from the default branch `main`, so this starts working after the release that carries it); keep every section and write `None` instead of deleting one. Use tables for Changes, Validation, and Risks so a reviewer can scan them, and keep the Summary short.
+GitHub pre-fills the description from [`.github/pull_request_template.md`](.github/pull_request_template.md) (GitHub reads templates from the default branch `main`, so this starts working after the release that carries it); keep every section and write `None` instead of deleting one. Keep the section headings in English and write their content in Vietnamese, keeping technical terms, identifiers and paths in English (see the [language policy](AGENTS.md#language)). Use tables for Changes, Validation, and Risks so a reviewer can scan them, and keep the Summary short.
 
 ```markdown
 ## Summary
