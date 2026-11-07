@@ -15,7 +15,7 @@ The landing page and admin pages. Built with Vite, React 19, TypeScript and reac
 
 ## Run
 
-Requires Node.js 20.19 or later, or 22.12 or later, as Vite 8 needs; CI uses Node.js 22.
+Use the Node.js version in the [local development prerequisites](../../docs/development/local-development.md#prerequisites). CI uses Node.js 22.
 
 ```bash
 cd frontend/web

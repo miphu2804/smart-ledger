@@ -13,7 +13,7 @@ How to install, run and check each service on a developer machine, how the local
 
 ## Prerequisites
 
-JDK 21, Python 3.11+ with [uv](https://docs.astral.sh/uv/), Node.js 20+, and Docker for the Compose stack and the local database. Offline frontend demos can use mock data without a backend. Mobile requires explicit API endpoint and mock flags; configure them using the [Mobile guide](../../frontend/mobile/README.md) rather than assuming defaults.
+JDK 21, Python 3.11+ with [uv](https://docs.astral.sh/uv/), and Docker for the Compose stack and the local database. For frontend work, use Node.js 22.18 or later in the 22.x line. CI uses Node.js 22, and Mobile unit tests need native TypeScript support. Offline frontend demos can use mock data without a backend. Mobile requires explicit API endpoint and mock flags; configure them using the [Mobile guide](../../frontend/mobile/README.md) rather than assuming defaults.
 
 Follow [`secrets/README.md`](../../secrets/README.md) for authorized credential access. The default `dev` source uses local database URLs; staging values are used only when deliberately selected. The scripts write local plaintext `.env` files and backups, protected by filesystem permissions, not application-level encryption. Without access, fill those files from their `.env.example` (the install commands below copy them when missing).
 

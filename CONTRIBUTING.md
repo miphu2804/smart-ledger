@@ -131,6 +131,7 @@ New environment variables, secrets, or migrations, or None.
 - **Summary** with more than one point is a numbered list, one point per line, so each can be referenced in review ("point 2").
 - **Validation** records what was actually run. **Status** is `Verified` (run, with output), `Inferred` (reasoned from code or docs, not run), or `Not verified` (not checked; give the reason in Result, for example a real device or a production run).
 - Link related documentation, API contracts, and issues (`Closes #123`), and state assumptions.
+- When code changes behavior, a contract, the schema, setup, or a decision, update the [owning document](docs/README.md#which-document-to-update) in the same pull request. Update affected local indexes when documents or their titles or descriptions change.
 - Add screenshots or a recording for a visible UI change.
 
 #### Release pull requests (`staging` → `main`)

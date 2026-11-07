@@ -11,7 +11,7 @@ PR #368's approved ADMIN growth implementation is merged; its historical excepti
 ## Before changing anything
 
 1. Check the working tree with `git status --short`.
-2. Read [`docs/index.md`](docs/index.md) to pick the documents for the task, and [`docs/README.md`](docs/README.md) for reading paths and source-of-truth rules.
+2. Read [`docs/index.md`](docs/index.md) to pick the documents for the task, and [`docs/README.md`](docs/README.md) for reading paths and source-of-truth rules. Before editing code, read the affected service's README and the guides it links for that task; the [repository service map](README.md#system-boundaries) locates them.
 3. Read the relevant documents in [`docs/product/`](docs/product/) before changing scope or requirements.
 4. Read scoped `AGENTS.md` files on the path to affected files, including [`frontend/mobile/AGENTS.md`](frontend/mobile/AGENTS.md) before Mobile work. Root policy applies everywhere; scoped instructions add relevant rules and must not override it. If a harness does not auto-load nested instructions, read them explicitly. AI has no scoped instruction file and uses this root policy plus the service guide.
 5. Audit the actual tracked structure and the exact `staging` revision before moving documentation; do not infer DDD from Java packages or Next.js from Expo Router routes.
@@ -20,6 +20,8 @@ PR #368's approved ADMIN growth implementation is merged; its historical excepti
 ## Documentation rules
 
 - Documents in `docs/` are the source of truth; link to existing content instead of duplicating it.
+- For agent instructions or skill changes, read [writing-for-agents](.agents/skills/writing-for-agents/SKILL.md). The `technical-writing` skill remains user-invoked through `/technical-writing`.
+- When changing a flow covered by the [AI statecharts](docs/architecture/statecharts/README.md), update its model and chart using that guide. Report model checks and rendering separately from runtime tests; TLC checks the model, not the implementation.
 - Keep docs in sync with code in the same change: when a change alters behavior, a contract, the schema, setup or a decision, update the document that owns it (see [Which document to update](docs/README.md#which-document-to-update)) in the same pull request, never in a later one.
 - English is the default for technical/operational docs, READMEs, indexes, architecture, contracts, ADRs, agent instructions and comments. Vietnamese is for actual business/product requirements, scope, acceptance and related product decisions/audits. Apply this by purpose: [`docs/product/userflow/README.md`](docs/product/userflow/README.md) is an English technical guide. Preserve quoted Vietnamese UI/legal copy, examples and code identifiers.
 - Follow [OKF v0.2](https://github.com/GoogleCloudPlatform/open-knowledge-format/blob/main/SPEC.md) and [project conventions](docs/README.md#conventions). Concept frontmatter requires `type`; retain useful title, description, owner and status. Use plain `author: <GitHub login>` for the document's writer, not its latest editor, normally omitting optional `generated`; retain genuine provenance and standard `human:<id>` actor notation if `generated.by` is needed. Do not mass-edit untouched metadata.
