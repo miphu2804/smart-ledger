@@ -40,13 +40,14 @@ import { applyToolEvent } from '../src/lib/toolSteps';
 import { useApp } from '../src/store/AppStore';
 import { colors, shadow } from '../src/theme';
 
-// Trợ lý đọc hồ sơ tiệm, sản phẩm và đơn bán; chi phí và công nợ xem ở màn khác.
+// Mỗi câu ghép hai ý hoặc hai kỳ để trả lời bằng một thẻ biểu đồ (rule 11 của prompt AI), không chỉ một con số.
 const QUICK = [
+  { label: 'Doanh thu và chi phí từng ngày 7 ngày qua', icon: 'trending-up' },
+  { label: 'Tỷ trọng doanh thu của 5 món lớn nhất tháng này', icon: 'pie-chart' },
+  { label: 'Doanh thu 4 tuần gần đây so với 4 tuần trước', icon: 'bar-chart-2' },
+  { label: 'Khung giờ nào bán chạy nhất 7 ngày qua?', icon: 'clock' },
+  { label: 'Món sắp hết nào đang bán chạy?', icon: 'package' },
   { label: 'Gợi ý nhập hàng 7 ngày qua', icon: 'shopping-cart' },
-  { label: 'Doanh thu 7 ngày qua?', icon: 'trending-up' },
-  { label: 'Món nào sắp hết hàng?', icon: 'package' },
-  { label: 'Năm món đắt nhất?', icon: 'award' },
-  { label: 'Tiệm có bao nhiêu mặt hàng?', icon: 'grid' },
 ] as const;
 
 /** Lỗi khi xem/đổi tên/xoá lịch sử → câu báo tiếng Việt. */

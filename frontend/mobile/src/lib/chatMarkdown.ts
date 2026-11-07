@@ -2,11 +2,15 @@
  * Đọc câu trả lời của Trợ lý AI thành các khối hiển thị, dùng chung cho chữ đang stream và câu đã lưu.
  *
  * Chỉ nhận tập markdown mà prompt của AI cho phép (backend/ai/src/prompt_templates/shop_agent.py):
- * `**đậm**`, `` `mã` ``, tiêu đề `#`, danh sách `-`/`1.`, bảng `|`, khối ``` và khối ```chart (JSON).
+ * `**đậm**`, `` `mã` ``, tiêu đề `#`, danh sách `-`/`1.`, bảng `|`, khối ```, khối ```chart (JSON) và
+ * khối ```ui (thẻ hiển thị, xem `chatUi.ts`).
  * Khối ```actions do AI service tự gắn cuối câu trả lời (backend/ai/src/agent/service.py), không phải model.
  * Ký hiệu khác giữ nguyên chữ. Khi `streaming` là true, phần đuôi chưa trọn được tự đóng hoặc giữ lại
  * để bong bóng không nháy ký hiệu thô rồi đổi dạng khi chữ tới đủ.
  */
+
+import { SCREEN_LINKS, type AppScreen } from './chatScreens.ts';
+import { readUi, type UiNode } from './chatUi.ts';
 
 export type Inline = { text: string; bold?: boolean; code?: boolean };
 
@@ -19,18 +23,7 @@ export type ChartSpec = {
   data: ChartPoint[];
 };
 
-/** Màn hình mà nút dưới câu trả lời mở được; khoá trùng `Screen` trong backend/ai/src/agent/tools.py. */
-export const SCREEN_LINKS = {
-  sales: { label: 'Mở Bán hàng', route: '/pos' },
-  voice_order: { label: 'Mở Đọc đơn', route: '/voice' },
-  orders: { label: 'Mở Đơn hàng', route: '/(tabs)/invoices?from=chat' },
-  products: { label: 'Mở Hàng hoá', route: '/products' },
-  debts: { label: 'Mở Công nợ', route: '/debts' },
-  expenses: { label: 'Mở Chi phí', route: '/expenses' },
-  reports: { label: 'Mở Báo cáo', route: '/analytics' },
-} as const;
-
-export type AppScreen = keyof typeof SCREEN_LINKS;
+export { SCREEN_LINKS, type AppScreen } from './chatScreens.ts';
 
 export type ChatBlock =
   | { kind: 'paragraph' | 'heading' | 'bullet'; inlines: Inline[] }
@@ -39,9 +32,10 @@ export type ChatBlock =
   | { kind: 'code'; text: string }
   | { kind: 'table'; header: Inline[][]; rows: Inline[][][] }
   | { kind: 'chart'; spec: ChartSpec }
+  | { kind: 'ui'; node: UiNode }
   | { kind: 'actions'; screens: AppScreen[] }
-  // Khối ```chart chưa đóng khi đang stream, hoặc JSON không hợp lệ ở câu đã xong.
-  | { kind: 'chartPending' | 'chartInvalid' };
+  // Khối ```chart hoặc ```ui chưa đóng khi đang stream, hoặc JSON không hợp lệ ở câu đã xong.
+  | { kind: 'chartPending' | 'chartInvalid' | 'uiPending' | 'uiInvalid' };
 
 // Bảng cột/vùng trong bong bóng chat chỉ đọc được tới khoảng một tháng theo ngày.
 const MAX_CHART_POINTS = 31;
@@ -93,7 +87,7 @@ export function parseChatMarkdown(text: string, streaming = false): ChatBlock[] 
   return trimGaps(blocks);
 }
 
-/** Khối ``` hoặc ```chart; trả chỉ số dòng ngay sau khối. */
+/** Khối ```, ```chart hoặc ```ui; trả chỉ số dòng ngay sau khối. */
 function readFence(lines: string[], start: number, lang: string, streaming: boolean, blocks: ChatBlock[]) {
   let end = start + 1;
   while (end < lines.length && !FENCE_CLOSE.test(lines[end])) end++;
@@ -111,6 +105,12 @@ function readFence(lines: string[], start: number, lang: string, streaming: bool
     else {
       const spec = readChart(body.join('\n'));
       blocks.push(spec ? { kind: 'chart', spec } : { kind: 'chartInvalid' });
+    }
+  } else if (lang === 'ui') {
+    if (!closed && streaming) blocks.push({ kind: 'uiPending' });
+    else {
+      const node = readUi(body.join('\n'));
+      blocks.push(node ? { kind: 'ui', node } : { kind: 'uiInvalid' });
     }
   } else {
     const code = body.join('\n').replace(/\n+$/, '');

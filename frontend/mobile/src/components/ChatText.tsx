@@ -6,6 +6,7 @@ import { parseChatMarkdown, SCREEN_LINKS, type AppScreen, type ChartSpec, type C
 import { useSmoothText } from '../lib/smoothText';
 import { colors, font } from '../theme';
 import { AreaChart, BarChart } from './charts';
+import { UiBlock } from './ChatUi';
 import { Button, T } from './ui';
 
 const SIZE = 13.5;
@@ -169,21 +170,25 @@ function BlockView({ block, color }: BlockProps) {
     }
     case 'chart':
       return <ChartCard spec={block.spec} />;
+    case 'ui':
+      return <UiBlock node={block.node} />;
     case 'actions':
       return <ScreenButtons screens={block.screens} />;
     case 'chartPending':
+    case 'uiPending':
       return (
         <View style={[styles.card, styles.chartNote]}>
           <T size={12.5} color={colors.muted}>
-            Đang vẽ biểu đồ…
+            {block.kind === 'uiPending' ? 'Đang dựng thẻ…' : 'Đang vẽ biểu đồ…'}
           </T>
         </View>
       );
     case 'chartInvalid':
+    case 'uiInvalid':
       return (
         <View style={[styles.card, styles.chartNote]}>
           <T size={12.5} color={colors.muted}>
-            Không hiện được biểu đồ này.
+            {block.kind === 'uiInvalid' ? 'Không hiện được thẻ này.' : 'Không hiện được biểu đồ này.'}
           </T>
         </View>
       );

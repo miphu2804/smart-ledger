@@ -194,6 +194,8 @@ jobs:
       # Without the secret the build keeps the template's debug keystore, which is public: fine for a test build, never
       # for a published one. The keystore is PKCS12, so the key shares the store password.
       - name: Write the release keystore
+        env:
+          ANDROID_ENVIRONMENT: ${{ inputs.environment }}
         run: scripts/ci/write-release-keystore.sh
 
       # scripts/release/android-release.sh does what a local build does (npm ci, expo prebuild --clean, Gradle, APK report), so

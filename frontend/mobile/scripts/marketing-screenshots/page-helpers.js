@@ -1,5 +1,5 @@
-// Chạy trong trang trước mọi script của app: camera giả (canvas dọc 720×1280 vẽ gói hàng có mã EAN-13, đổi bằng window.__cam)
-// và các hàm tiện ích window.__h để bấm, gõ, cuộn theo chữ hiển thị hoặc aria-label.
+// Runs in the page before any app script: a fake camera (a portrait 720×1280 canvas that draws a package with an EAN-13 code, changed through window.__cam)
+// and the helper functions window.__h to click, type, and scroll by visible text or aria-label.
 (() => {
   // ---------- EAN-13 ----------
   const L = ['0001101', '0011001', '0010011', '0111101', '0100011', '0110001', '0101111', '0111011', '0110111', '0001011'];
@@ -19,7 +19,7 @@
   window.__cam = { code: '8935049500544', label: 'Nước ngọt CocaCola', tint: '#d62828' };
   function drawScene(ctx, w, h, t) {
     const cam = window.__cam;
-    // kệ hàng mờ phía sau (khung dọc 720×1280 như camera điện thoại)
+    // faded shelves behind (a portrait 720×1280 frame, like a phone camera)
     const bg = ctx.createLinearGradient(0, 0, 0, h);
     bg.addColorStop(0, '#4a4752');
     bg.addColorStop(1, '#1e1d24');
@@ -27,7 +27,7 @@
     ctx.fillRect(0, 0, w, h);
     ctx.fillStyle = 'rgba(255,255,255,0.06)';
     for (let i = 0; i < 7; i++) ctx.fillRect(0, 140 + i * 170, w, 8);
-    // gói hàng trong tay, lắc nhẹ
+    // package in hand, swaying slightly
     const sway = Math.sin(t / 700) * 3;
     ctx.save();
     ctx.translate(w / 2 + sway, h / 2 + 10);
@@ -46,7 +46,7 @@
     ctx.textAlign = 'center';
     ctx.font = 'bold 40px sans-serif';
     ctx.fillText(cam.label, 0, -ph / 2 + 92);
-    // nhãn trắng mặt sau
+    // white label on the back
     const lw = 460, lh = 430, ly = -ph / 2 + 180;
     ctx.fillStyle = '#fff';
     roundRect(ctx, -lw / 2, ly, lw, lh, 18);
@@ -106,7 +106,7 @@
     navigator.mediaDevices.enumerateDevices = async () => [{ kind: 'videoinput', deviceId: 'fake', label: 'Camera', groupId: 'g' }];
   } catch {}
 
-  // ---------- tiện ích ----------
+  // ---------- utilities ----------
   const visible = (el) => {
     const r = el.getBoundingClientRect();
     if (r.width < 1 || r.height < 1) return false;
@@ -120,7 +120,7 @@
     find(text, { exact = true, within = document } = {}) {
       const els = [...within.querySelectorAll('*')].filter((e) => e.children.length === 0 || e.childElementCount < 4);
       const hits = els.filter((e) => visible(e) && (exact ? textOf(e) === text : textOf(e).includes(text)));
-      // phần tử sâu nhất
+      // deepest element
       hits.sort((a, b) => textOf(a).length - textOf(b).length);
       return hits[0] || null;
     },

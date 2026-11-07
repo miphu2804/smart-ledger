@@ -282,8 +282,8 @@ function Statement() {
 /* ------------------------------------------------------------------ */
 
 const FEATURES: { icon: string; title: string; text: string }[] = [
-  { icon: 'chon-hang', title: 'Chọn hàng nhanh', text: 'Lưới hàng có ảnh, chạm là thêm vào đơn.' },
-  { icon: 'quet-ma', title: 'Quét mã vạch', text: 'Quét mã vạch hoặc QR bằng camera.' },
+  { icon: 'pick-items', title: 'Chọn hàng nhanh', text: 'Lưới hàng có ảnh, chạm là thêm vào đơn.' },
+  { icon: 'scan-code', title: 'Quét mã vạch', text: 'Quét mã vạch hoặc QR bằng camera.' },
   { icon: 'products', title: 'Hàng hoá, tồn kho', text: 'Giá bán, số tồn, cảnh báo sắp hết.' },
   { icon: 'debts', title: 'Công nợ', text: 'Ai còn nợ bao nhiêu, ghi từng lần thu.' },
   { icon: 'expenses', title: 'Chi phí', text: 'Nhập hàng, điện nước, mặt bằng để tính lãi gộp.' },
@@ -302,7 +302,7 @@ function Features() {
         {/* Cột trái: tính năng AI (đọc đơn, Bobi); cột phải: các tính năng sổ sách */}
         <div className="bento">
           <article className="bento-tile is-hero" data-reveal>
-            <img src="/brand/icons/doc-don.webp" alt="" width={96} height={96} loading="lazy" />
+            <img src="/brand/icons/read-order.webp" alt="" width={96} height={96} loading="lazy" />
             <h3>Đọc đơn bằng giọng nói</h3>
             <p>Giọng nói được nhận dạng ngay trên điện thoại. Bạn xem lại danh sách món trước khi lưu.</p>
             <div className="bento-chips">

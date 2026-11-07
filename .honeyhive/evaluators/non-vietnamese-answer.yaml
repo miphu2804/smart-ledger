@@ -23,6 +23,6 @@ criteria: |
       re.IGNORECASE,
   )
 
-  # Chart and button blocks are JSON written for the app, not words for the owner.
+  # Chart, ui and button blocks are JSON written for the app, not words for the owner.
   answer = BLOCK.sub("", outputs.get("answer") or "").strip()
   result = bool(answer) and not VIETNAMESE.search(answer)

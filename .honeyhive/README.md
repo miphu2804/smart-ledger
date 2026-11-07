@@ -11,8 +11,8 @@ Bobi answers one shop owner in Vietnamese, from tool results only, and cannot ch
 | `evaluators/query-error.yaml` | each `execute_tool query_shop_data` event | the tool answered `Error[CODE]`, so the model wrote SQL the guard or the database refused |
 | `evaluators/internal-leak.yaml` | each `agent-chat` session | the answer shows a view name, SQL, an id column, a tool name or a tool error code (rule 8) |
 | `evaluators/unsupported-figure.yaml` | each `agent-chat` session | the turn called no tool and answers with an amount, a quantity with a unit or a percentage the question does not contain (rules 2 to 4) |
-| `evaluators/format-violation.yaml` | each `agent-chat` session | the answer uses bullets, headings, quotes or a code block other than `chart` and the service's `actions` (rule 10) |
-| `evaluators/invalid-chart.yaml` | each `agent-chat` session | a chart block fails the checks of `readChart` in `frontend/mobile/src/lib/chatMarkdown.ts`, is not closed, or is not the only one (rule 11) |
+| `evaluators/format-violation.yaml` | each `agent-chat` session | the answer uses bullets, headings, quotes or a code block other than `chart`, `ui` and the service's `actions` (rule 10) |
+| `evaluators/invalid-chart.yaml` | each `agent-chat` session | a chart or ui block fails the checks of `readChart` in `frontend/mobile/src/lib/chatMarkdown.ts` or `readUi` in `frontend/mobile/src/lib/chatUi.ts`, is not closed, or is not the only one (rule 11) |
 | `evaluators/non-vietnamese-answer.yaml` | each `agent-chat` session | the answer has text but no Vietnamese letter with a diacritic |
 | `evaluators/sql-parse-check.yaml` | each `execute_tool query_shop_data` event | the SQL in `inputs.tool_arguments.sql` parses as PostgreSQL, by HoneyHive's SQL Parse Check template; false means a syntax error before the guard or the database saw it |
 
