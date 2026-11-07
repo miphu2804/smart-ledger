@@ -9,7 +9,7 @@ stale_after: 2027-01-02T14:52:23+07:00
 ---
 # Secrets and env files
 
-Environment/domain mappings, credential inventories, access grants and rotation/recovery procedures belong to the [private operations knowledge base](https://app.notion.com/p/M-i-tr-ng-v-domain-407f1ce5c3ac80249cd0c2a28c259436). Do not copy them into repository documentation or pull requests.
+Environment/domain mappings, credential inventories, access grants and rotation/recovery procedures belong to the private operations knowledge base. Do not copy them into repository documentation or pull requests.
 
 ## Local development
 

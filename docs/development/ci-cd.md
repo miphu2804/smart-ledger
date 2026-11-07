@@ -9,7 +9,7 @@ stale_after: 2027-01-05T22:18:48+07:00
 ---
 # CI/CD
 
-This guide explains repository-controlled delivery behavior. Its diagrams show the topology drawn from the tracked `deploy/` and workflow files; environment addresses, domains, credential inventories and deployment access procedures belong to the [private operations knowledge base](https://app.notion.com/p/M-i-tr-ng-v-domain-407f1ce5c3ac80249cd0c2a28c259436), not this repository.
+This guide explains repository-controlled delivery behavior. Its diagrams show the topology drawn from the tracked `deploy/` and workflow files; environment addresses, domains, credential inventories and deployment access procedures belong to the private operations knowledge base, not this repository.
 
 Branch and review rules are in [CONTRIBUTING](../../CONTRIBUTING.md). Workflow definitions are implementation evidence, not proof of a successful deployment or product acceptance.
 

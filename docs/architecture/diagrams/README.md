@@ -9,7 +9,7 @@ stale_after: 2027-01-05T22:18:48+07:00
 ---
 # Diagram guide
 
-Repository diagrams explain logical responsibilities, data relationships, code paths and the delivery/runtime topology drawn from tracked `deploy/` and workflow files. Environment addresses, domains, IPs, server paths, credential values and access procedures belong to the [private operations knowledge base](https://app.notion.com/p/M-i-tr-ng-v-domain-407f1ce5c3ac80249cd0c2a28c259436) and must not appear in a diagram source or export; use generic labels such as `private host` instead.
+Repository diagrams explain logical responsibilities, data relationships, code paths and the delivery/runtime topology drawn from tracked `deploy/` and workflow files. Environment addresses, domains, IPs, server paths, credential values and access procedures belong to the private operations knowledge base and must not appear in a diagram source or export; use generic labels such as `private host` instead.
 
 ## Reading scope
 

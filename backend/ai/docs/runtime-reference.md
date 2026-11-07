@@ -179,7 +179,7 @@ FastAPI requests are not instrumented because that would record the unredacted m
 
 URLs must use `postgresql://` or `postgres://`; libpq keyword strings are rejected. Connections are lazy, with a 3-second connect timeout and a 5-second pool wait. An unavailable database does not stop startup but makes dependent routes unavailable. The service never creates tables.
 
-AI migrations live in [`supabase/migrations/`](../../../supabase/migrations/) and create chat history, the vector extension, read views, the reader group and memory tables. Core migrations must be applied first. Use the [local database guide](../../../docs/development/local-development.md#develop-against-the-local-database) for development. Creating a reader login or applying shared migrations requires the authorized [private operations procedure](https://app.notion.com/p/M-i-tr-ng-v-domain-407f1ce5c3ac80249cd0c2a28c259436); credential provisioning and shared execution commands are not published here. Never edit an applied migration.
+AI migrations live in [`supabase/migrations/`](../../../supabase/migrations/) and create chat history, the vector extension, read views, the reader group and memory tables. Core migrations must be applied first. Use the [local database guide](../../../docs/development/local-development.md#develop-against-the-local-database) for development. Creating a reader login or applying shared migrations requires the authorized private operations procedure; credential provisioning and shared execution commands are not published here. Never edit an applied migration.
 
 ## Configuration
 

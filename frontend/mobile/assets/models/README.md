@@ -55,7 +55,7 @@ To skip the server, point straight at R2: `EXPO_PUBLIC_STT_MODEL_URL=https://pub
 
 The release helper in `.github/scripts/stt-model.mjs` checks the required versioned model files and can publish missing files during an explicitly authorized release. A download build needs a valid public model base URL; local/native embedding is a separate path below.
 
-Destinations, publication credentials, access policy and retention configuration belong to the [private operations knowledge base](https://app.notion.com/p/M-i-tr-ng-v-domain-407f1ce5c3ac80249cd0c2a28c259436). Keep older model versions available while supported APKs reference them; never apply a build-artifact cleanup rule to active model files.
+Destinations, publication credentials, access policy and retention configuration belong to the private operations knowledge base. Keep older model versions available while supported APKs reference them; never apply a build-artifact cleanup rule to active model files.
 
 ## Embed the model in the APK
 

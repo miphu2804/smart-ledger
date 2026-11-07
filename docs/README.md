@@ -50,7 +50,7 @@ Documentation follows business capabilities and accountable owners, not a mechan
 
 Canonical contracts and implementation evidence stay in `docs/`. Core and AI setup, service-specific tests and rollout runbooks stay beside their services; deployment and cross-service operations stay in `docs/development/`. [Local development](development/local-development.md) links the service guides, [CI/CD](development/ci-cd.md) owns delivery behavior, and [Secrets and env files](development/secrets-and-env.md) owns credential handling. The [AI service guide](../backend/ai/README.md) separates the architecture overview from its detailed runtime reference; do not copy configuration tables or trace schemas into overview pages.
 
-Environment/domain mappings, infrastructure topology, credential inventories and access/rotation procedures belong to the [private operations knowledge base](https://app.notion.com/p/M-i-tr-ng-v-domain-407f1ce5c3ac80249cd0c2a28c259436), not repository docs or diagram metadata. Keep local setup, logical boundaries and privacy safeguards here; do not remove redaction or external-data-exposure warnings to make a document appear safer.
+Environment/domain mappings, infrastructure topology, credential inventories and access/rotation procedures belong to the private operations knowledge base, not repository docs or diagram metadata. Keep local setup, logical boundaries and privacy safeguards here; do not remove redaction or external-data-exposure warnings to make a document appear safer.
 
 ## Which document to update
 

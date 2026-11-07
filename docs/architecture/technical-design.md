@@ -203,7 +203,7 @@ The additional API needs no field/entity/index/migration or Redis and does not c
 
 The service guides and `.env.example` files own developer-facing settings and defaults. This architecture overview does not enumerate credentials or environment values.
 
-Actual domains, network placement, provider-project mappings, access grants and rollout procedures belong to the [private operations knowledge base](https://app.notion.com/p/M-i-tr-ng-v-domain-407f1ce5c3ac80249cd0c2a28c259436). Local dependencies and disposable test databases are described in [local development](../development/local-development.md). Shared migrations still require the [authorized migration process](../development/local-development.md#database-migrations); no environment state is inferred here.
+Actual domains, network placement, provider-project mappings, access grants and rollout procedures belong to the private operations knowledge base. Local dependencies and disposable test databases are described in [local development](../development/local-development.md). Shared migrations still require the [authorized migration process](../development/local-development.md#database-migrations); no environment state is inferred here.
 
 ## 7. Pre-merge verification
 

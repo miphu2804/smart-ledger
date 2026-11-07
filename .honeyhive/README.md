@@ -43,7 +43,7 @@ The two scripts sit at the repository root and the workflows `.github/workflows/
 
 ## Apply
 
-Applying these files changes an external service. Use the [private operations knowledge base](https://app.notion.com/p/M-i-tr-ng-v-domain-407f1ce5c3ac80249cd0c2a28c259436) for approved access, credential scopes, target selection and execution; this repository does not publish environment mappings or provisioning commands.
+Applying these files changes an external service. Use the private operations knowledge base for approved access, credential scopes, target selection and execution; this repository does not publish environment mappings or provisioning commands.
 
 Review configuration changes against the installed CLI schema before applying. A newly created evaluator needs its returned ID recorded in `state.json`; the workflow refuses to sync an evaluator without that ID. Repository configuration and passing tests do not establish live ingestion, access controls or retention approval.
 

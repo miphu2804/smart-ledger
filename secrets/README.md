@@ -9,7 +9,7 @@ stale_after: 2027-01-01T19:08:01+07:00
 ---
 # secrets
 
-This directory contains tracked templates and local helper inputs, not a publishable environment inventory. Environment addresses, domains, credential ownership and access instructions belong to the [private operations knowledge base](https://app.notion.com/p/M-i-tr-ng-v-domain-407f1ce5c3ac80249cd0c2a28c259436).
+This directory contains tracked templates and local helper inputs, not a publishable environment inventory. Environment addresses, domains, credential ownership and access instructions belong to the private operations knowledge base.
 
 ## Local use
 

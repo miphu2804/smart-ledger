@@ -139,4 +139,4 @@ CI verifies fresh migrations on an isolated database. For local verification, cr
 
 ### Migrate staging after a merge
 
-Shared migrations require merged code, explicit owner authorization, a verified backup/recovery plan and the approved operational window. Check the actual target and migration history before applying anything; do not infer them from local defaults. The [private operations knowledge base](https://app.notion.com/p/M-i-tr-ng-v-domain-407f1ce5c3ac80249cd0c2a28c259436) owns access and execution procedures. Keep Core-before-AI ordering and never repair, baseline, delete migration history or edit an applied migration to bypass a failure.
+Shared migrations require merged code, explicit owner authorization, a verified backup/recovery plan and the approved operational window. Check the actual target and migration history before applying anything; do not infer them from local defaults. The private operations knowledge base owns access and execution procedures. Keep Core-before-AI ordering and never repair, baseline, delete migration history or edit an applied migration to bypass a failure.

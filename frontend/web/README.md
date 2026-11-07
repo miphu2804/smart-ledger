@@ -99,7 +99,7 @@ Recapture the images when the app UI changes: run a dev build on the simulator i
 
 **Legal pages** (`src/pages/legal/`) are public text. When a provider, the data collected or the deletion handling commitment (`DELETION_DAYS`) changes, update the content and `POLICY_UPDATED` in `legalConfig.ts`.
 
-**Deployment:** the repository [delivery workflows](../../docs/development/ci-cd.md#workflows) build and deliver this application. Provider projects, domains, environment mappings and publication access are maintained in the [private operations knowledge base](https://app.notion.com/p/M-i-tr-ng-v-domain-407f1ce5c3ac80249cd0c2a28c259436), not this README. PR previews are disabled; deployment does not establish integrated acceptance.
+**Deployment:** the repository [delivery workflows](../../docs/development/ci-cd.md#workflows) build and deliver this application. Provider projects, domains, environment mappings and publication access are maintained in the private operations knowledge base, not this README. PR previews are disabled; deployment does not establish integrated acceptance.
 
 `rewrites` in `vercel.json` sends every path to `index.html` so `/privacy` and `/data-deletion` open directly.
 

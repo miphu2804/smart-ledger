@@ -28,7 +28,7 @@ V18 adds channel/client/target/reference/expiry fields to the existing OAuth ses
 
 ## Deployment-specific configuration
 
-Each deployment binds one Android client to an exact return target and signing certificate. Actual domain/client/package/certificate mappings and activation access belong to the [private operations knowledge base](https://app.notion.com/p/M-i-tr-ng-v-domain-407f1ce5c3ac80249cd0c2a28c259436), not this guide. Check source declarations for field names and defaults; a sample configuration is not approval or evidence of activation.
+Each deployment binds one Android client to an exact return target and signing certificate. Actual domain/client/package/certificate mappings and activation access belong to the private operations knowledge base, not this guide. Check source declarations for field names and defaults; a sample configuration is not approval or evidence of activation.
 
 The return URL must be exact HTTPS on the same origin as `ZALO_CALLBACK_URL`, with path `/mobile/auth/zalo/complete`, no query/fragment/userinfo. App Link association is served at `GET /.well-known/assetlinks.json` once explicit association configuration is valid, even while native login stays OFF; it does not query DB or call providers. Only configured certificates are published. Do not add the staging certificate to production automatically. The app must capture only the return path, not the Zalo provider callback or all Core routes. Android manifest/path enforcement and actual certificate/domain verification remain APK acceptance work.
 
