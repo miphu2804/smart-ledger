@@ -9,39 +9,39 @@ stale_after: 2027-01-05T22:18:48+07:00
 ---
 # AI runtime reference
 
-This AI-owned reference contains implementation details and operational settings; start with the [architecture overview](architecture.md) for responsibilities and trust boundaries. Its settings are backed by `src/app_config.py` and composition in `src/main.py`. Source review: `staging` commit `a2766ee3a37e23c0f03fd43383b608c1b2fac898`; measured numbers retain their original evaluation context and were not remeasured. An implemented code path, a default-off flag, a configured environment and an accepted or deployed feature are different states; this page does not infer deployment or product acceptance.
+This AI-owned reference contains implementation details and operational settings; start with the [architecture overview](architecture.md) for responsibilities and trust boundaries. Source review: `staging` commit `a2766ee3a37e23c0f03fd43383b608c1b2fac898`; measured numbers retain their original evaluation context and were not remeasured. An implemented code path, a default-off flag, a configured environment and an accepted or deployed feature are different states; this page does not infer deployment or product acceptance.
 
 ## Service composition
 
-`src/main.py` builds the application, PostgreSQL history repository, optional Redis history cache, model factory, optional tier router, read-only shop-data repository, calculation service, Monty sandbox, optional memory service and observability. Core supplies the user/shop context after authenticating the OWNER and verifying shop access. AI validates the shared internal token but does not independently verify user-to-shop ownership or bind that token to tenant IDs. A caller holding the token can supply IDs; network isolation and Core authorization are part of the trust boundary. The model cannot change the context IDs.
+The service combines a PostgreSQL history store, an optional Redis history cache, model selection, an optional tier router, read-only shop data, a calculator, a Monty sandbox, optional memory and tracing. Core supplies the user/shop context after authenticating the OWNER and verifying shop access. AI validates the shared internal token but does not independently verify user-to-shop ownership or bind that token to tenant IDs. A caller holding the token can supply IDs; network isolation and Core authorization are part of the trust boundary. The model cannot change the context IDs.
 
 ## Chat history and context
 
 - History is never summarized: older messages than `AGENT_HISTORY_TURNS` (default 30 exchanges) simply do not reach the model. The input-character cap is not a guarantee of total context size because saved assistant answers also consume context.
 - The current shop time (`Asia/Ho_Chi_Minh`) follows the new message after a cache breakpoint and is never stored, so instructions and history stay a cacheable prefix.
-- `AgentConversationRepository.recent_messages` checks in the database that the conversation belongs to the user and shop on a cache miss; the Redis key carries the user and shop, so a hit only follows an earlier passed check.
-- With `REDIS_URL` set, the repository keeps each conversation's latest messages in Redis for 24 hours, keyed by conversation, user and shop, so a repeat turn skips the database read; `save_exchange` updates a cached entry after it commits, `delete_conversation` removes it, and an unset or unreachable Redis makes every turn read PostgreSQL. Start a local one with `docker run -d --rm --name smartledger-local-redis -p 127.0.0.1:6379:6379 redis:7-alpine redis-server --maxmemory 64mb --maxmemory-policy allkeys-lru` and set `REDIS_URL=redis://127.0.0.1:6379/0`.
+- On a cache miss, the history read checks in the database that the conversation belongs to the user and shop; the Redis key carries the user and shop, so a hit only follows an earlier passed check.
+- With `REDIS_URL` set, the repository keeps each conversation's latest messages in Redis for 24 hours, keyed by conversation, user and shop, so a repeat turn skips the database read; saving an exchange updates the cached entry after it commits, deleting a conversation removes it, and an unset or unreachable Redis makes every turn read PostgreSQL. Start a local one with `docker run -d --rm --name smartledger-local-redis -p 127.0.0.1:6379:6379 redis:7-alpine redis-server --maxmemory 64mb --maxmemory-policy allkeys-lru` and set `REDIS_URL=redis://127.0.0.1:6379/0`.
 - `chat_conversations.summary` and `summary_through_message_id` are unused and kept only so the previous release can roll back.
 
 
 ## Model provider and routing
 
-`LLMFactory.create_model(alias)` reads `MODEL_ALIASES`. Each alias has a `protocol`, `model`, optional reasoning `effort` and optional OpenAI `service_tier`:
+`MODEL_ALIASES` maps each alias to a `protocol`, `model`, optional reasoning `effort` and optional OpenAI `service_tier`:
 
-| Protocol | Provider | API |
-|---|---|---|
-| `openai_responses` | `OpenAIResponsesProvider` | `/v1/responses` |
-| `openai_chat` | `OpenAIChatProvider` | `/chat/completions` |
+| Protocol | API |
+|---|---|
+| `openai_responses` | `/v1/responses` |
+| `openai_chat` | `/chat/completions` |
 
 The code default is `chat` → `gpt-6-luna` over `openai_responses` with `effort: medium`. An alias without an effort uses `MODEL_REASONING_EFFORT` (default `low`). `MODEL_FALLBACKS` is a JSON list of `protocol:model`; each fallback is built with the global reasoning effort (`low` by default), not the primary alias's effort. Fallbacks are mainly for direct-provider environments; Bifrost routing and fallback rules remain in `deploy/vps/bifrost.json`.
 
-`session_settings` sends `x-bf-session-id` (`conversation-<id>` for each turn of a saved conversation; a one-off ID for the first turn of a new conversation and for drafts/memory) and `x-bf-lh-shop-id` for log grouping. Alias `effort` and `service_tier` map to `openai_reasoning_effort` and `openai_service_tier`; supported efforts depend on the model, while service tiers are `auto`, `default`, `flex` or `priority`. An omitted tier leaves the provider default. Fallback attempts use the remaining turn timeout, so they mainly cover fast failures.
+Each model request sends `x-bf-session-id` (`conversation-<id>` for each turn of a saved conversation; a one-off ID for the first turn of a new conversation and for drafts/memory) and `x-bf-lh-shop-id` for log grouping. Alias `effort` and `service_tier` map to `openai_reasoning_effort` and `openai_service_tier`; supported efforts depend on the model, while service tiers are `auto`, `default`, `flex` or `priority`. An omitted tier leaves the provider default. Fallback attempts use the remaining turn timeout, so they mainly cover fast failures.
 
 `OPENAI_API_KEY` is the shared provider or Bifrost virtual key. `OPENAI_BASE_URL` selects the OpenAI-compatible API and defaults to `https://api.openai.com/v1` when blank. Provider clients also send the key as `x-bf-vk`; OpenAI ignores that header. Through Bifrost, model IDs have no provider prefix. `mercury-3` is served by Inception through `/chat/completions`, so its alias must use `openai_chat`.
 
 ### Model tiers
 
-When `MODEL_TIERING_ENABLED=true` and all required aliases and `TIER_CLASSIFIER_URL` are present, `LLMRouterService` classifies the request through Bifrost `/v1/decisions` and selects one alias per turn:
+When `MODEL_TIERING_ENABLED=true` and all required aliases and `TIER_CLASSIFIER_URL` are present, the router classifies the request through Bifrost `/v1/decisions` and selects one alias per turn:
 
 | Tier | Alias | Intended model |
 |---|---|---|
@@ -66,7 +66,7 @@ If tiering is off, the classifier URL is blank, or any tier alias is missing, ev
 
 `query_shop_data` and `suggest_restock` exist only when `AI_SQL_READER_URL` is configured. The separate login is a member of the `NOLOGIN` `ai_sql_reader` role, which has `SELECT` only on the eight `ai_read` views. The `security_barrier` views filter on the transaction setting `smartledger.shop_id`; an unset setting returns no rows and the views omit customer contact and transfer-reference fields, but `v_shop_profile` exposes the shop's phone and address. Those shop contacts can reach model providers and enabled traces.
 
-The SQL guard rejects statements over 4000 characters, accepts exactly one `SELECT` over the allowlisted views/functions through `sqlglot`, re-renders it with `LIMIT`, and the repository runs it in one `READ ONLY` transaction with a bound shop ID, statement timeout, row cap and 200-character text-cell cap. A rejected query returns an `Error[CODE]` for the model to correct; connection and other operational failures fail the turn with `503 ai_unavailable`. Refunds, stock-in history and customer contacts are not exposed.
+The SQL guard accepts exactly one bounded `SELECT` over the allowlisted views and functions and adds a row limit; the query runs in one `READ ONLY` transaction with a bound shop ID, a statement timeout and row and text-cell caps. A rejected query returns an `Error[CODE]` for the model to correct; connection and other operational failures fail the turn with `503 ai_unavailable`. Refunds, stock-in history and customer contacts are not exposed.
 
 ## Restock suggestions
 
@@ -74,13 +74,13 @@ The SQL guard rejects statements over 4000 characters, accepts exactly one `SELE
 
 - Only `CONFIRMED` sales in the period count.
 - Suggested quantity is `ceil(sold_qty / days * COVER_DAYS - max(stock_qty, 0))`, shown only when positive.
-- `COVER_DAYS` (7, in `src/restock/policy.py`) and the periods `last_7_days` and `last_30_days` are provisional.
+- The cover of 7 days and the periods `last_7_days` and `last_30_days` are provisional.
 - It runs one fixed `SELECT` through the same guard and pool as `query_shop_data` and flags a list cut by the row cap.
 
 
 ## Guardrails and answer safety
 
-`GuardrailService` applies deterministic checks around each run:
+Deterministic checks run around each turn:
 
 | Check | Setting (default) | Result |
 |---|---|---|
@@ -89,7 +89,7 @@ The SQL guard rejects statements over 4000 characters, accepts exactly one `SELE
 | Turn tokens | `AGENT_TURN_TOKEN_LIMIT` (200000) | `422 answer_unavailable` |
 | Turn time | `AGENT_TURN_TIMEOUT_SECONDS` (35) | `422 answer_timeout` |
 | Tool calls | `AGENT_TOOL_CALL_LIMIT` (3) | Further calls are refused; the model answers with available data |
-| Answer screen | `answer_screen.py` | Empty/leaking output is retried; persistent failure is `422 answer_unavailable` |
+| Answer screen | — | Empty/leaking output is retried; persistent failure is `422 answer_unavailable` |
 
 Input redaction masks keys, tokens, private keys, JWTs, IBANs, Luhn-valid cards and emails as `[redacted:<kind>]`; phone numbers are not masked. The answer screen blocks internal view names, settings, error codes and SQL. Limits are implementation defaults, not approved product requirements. Core maps other AI failures to `503 ai_unavailable`.
 
@@ -114,37 +114,37 @@ The wrapper passes tool names and resource limits to Code Mode; it adds no expli
 
 `AGENT_MEMORY_ENABLED` defaults to `false`; this is not product behavior until ADR-0002 is approved. When enabled, memory recall and writes are scoped to the same `shop_id` and `user_id`. Recall takes up to ten `preference` memories and five best cosine/BM25 matches. After a saved turn, a background task extracts up to five allowed facts and reconciles older memories; memory failures do not fail the turn. Deleting a conversation deletes memories sourced by it. The owner's switch is stored in `agent_memory_settings`.
 
-The code default is `AGENT_MEMORY_EMBEDDING_PROVIDER=onnx` and `AGENT_MEMORY_EMBEDDING_MODEL=models/static-mrl-int8`. `OnnxEmbeddingModel` loads `model.onnx` and `tokenizer.json` with CPU `onnxruntime`, one thread per call, no torch, and stores 384-dimensional normalized vectors. The Docker image's pinned int8 export is the static multilingual model; it adds roughly 330 MB of memory and its measured memory-evaluation recall is lower than the comparison embeddinggemma result (0.753 versus 0.861 at 384 dimensions). A missing/unreadable model turns memory off while chat remains available.
+The code default is `AGENT_MEMORY_EMBEDDING_PROVIDER=onnx` and `AGENT_MEMORY_EMBEDDING_MODEL=models/static-mrl-int8`. The ONNX embedder runs the model on CPU without torch and stores 384-dimensional normalized vectors. The Docker image's pinned int8 export is the static multilingual model; it adds roughly 330 MB of memory and its measured memory-evaluation recall is lower than the comparison embeddinggemma result (0.753 versus 0.861 at 384 dimensions). A missing/unreadable model turns memory off while chat remains available.
 
-Other providers are `cloudflare` (Workers AI, sending owner text/facts outside the service) and `sentence-transformers` (requires `uv sync --group memory`, omitted from the Docker image). Memory needs `20261014000000_agent_memories.sql` and `20261015000000_agent_memory_visibility.sql`; the migration's `vector(384)` dimension must match the embedder. A failed search answers without memories, the stream emits `memory` before its first `delta`, and extracted facts containing a Vietnamese phone number are dropped. The owner's switch defaults on when no row exists; switching it off suppresses subsequent recall and background extraction without deleting data. An already-recalled turn can still update usage metadata because `remember()` marks recalled memories used before checking the switch; switch-off is not a guarantee of zero writes.
+Other providers are `cloudflare` (Workers AI, sending owner text/facts outside the service) and `sentence-transformers` (requires `uv sync --group memory`, omitted from the Docker image). Memory needs `20261014000000_agent_memories.sql` and `20261015000000_agent_memory_visibility.sql`; the migration's `vector(384)` dimension must match the embedder. A failed search answers without memories, the stream emits `memory` before its first `delta`, and extracted facts containing a Vietnamese phone number are dropped. The owner's switch defaults on when no row exists; switching it off suppresses subsequent recall and background extraction without deleting data. An already-recalled turn can still update usage metadata because recalled memories are marked as used before the switch is checked; switch-off is not a guarantee of zero writes.
 
 Vectors from different models cannot be compared. An authorized environment change must set the new embedding values and deploy before re-embedding, so memories written in between cannot keep old-model vectors. From `backend/ai` with that environment's `POSTGRES_URL` and new settings, run `uv run python -m src.memory.reembed` first as a dry run, then with `--apply`. Recall is off-target between deployment and completion; the script writes all vectors in one transaction, and rerunning with the old settings restores old-model vectors. This procedure is retained operational guidance, not authorization to change Dopbase or a shared database.
 
 ## Draft parser boundary
 
-`DraftService.parse(shop_id, mode, text)` in `src/drafts/service.py` turns owner text or an STT transcript into a `DraftResult`. It writes nothing and is not exposed by any HTTP endpoint; it is not the Mobile rule-based order parser.
+The draft parser turns owner text or an STT transcript into a draft. It writes nothing and is not exposed by any HTTP endpoint; it is not the Mobile rule-based order parser.
 
-- Each line's `product_id` is the `BIGINT` of `products.id` from the Core catalog (`CatalogProduct.id` is an `int`), never a UUID, or `null` when no catalog product matches.
+- Each line's product ID is the numeric ID of the Core catalog product, never a UUID, or empty when no catalog product matches.
 - `SALE` matches lines against the shop's ACTIVE catalog; an unknown id, ambiguous line or `confidence` below 0.7 leaves the product empty with a Vietnamese warning, and a line with quantity 0 or less is dropped with one. Price always comes from the catalog.
 - `EXPENSE` makes one line per expense with the amount in `unit_price`.
-- Any model or catalog failure raises `DraftUnavailableError`; this helper has no HTTP error contract.
+- Any model or catalog failure makes the parser report itself unavailable; it has no HTTP error contract.
 
 ## Streaming and persistence
 
 The [stream contract](../../../docs/contracts/api-contracts.md#chat-answer-stream) defines the events. How the service produces them:
 
 - History and input checks run before the first byte, so a pre-stream failure is a normal JSON error; a later failure ends the stream with an `error` event carrying the same code.
-- The run uses `agent.iter()` with `stream_text(delta=True)`; `run_stream` would stop at the first final-looking output and skip later tool calls.
-- `AnswerScreen.screened_prefix` releases only text no continuation can turn into a leak, holding back a short tail (up to 400 characters after a `select`).
+- The run streams text deltas while it continues through tool calls, instead of stopping at the first output that looks final.
+- The answer screen releases only text that no continuation can turn into a leak, holding back a short tail.
 - `reset` discards shown text when a data tool call or a retry follows it. The text after the last `reset` always equals the stored answer.
-- Closing the stream cancels the producer. Cancellation before persistence prevents saving, but the database transaction may still commit if the worker thread has already entered `save_exchange`; a missing `done` event does not prove that nothing was stored.
+- Closing the stream cancels the producer. Cancellation before persistence prevents saving, but the database transaction may still commit if saving has already started; a missing `done` event does not prove that nothing was stored.
 
 ## Observability
 
-- **Logs:** records at `LOG_LEVEL` below `ERROR` go to stdout and `ERROR` and above to stderr. At `INFO` and `WARNING`, `src/agent/tool_events.py` logs each tool call with its name, call id and the size of its arguments and result, and a rejected query, a turn without an answer or a failed memory step logs its code or error type, so these normal-level messages omit tool payloads; this is not a guarantee that every application, dependency or infrastructure log contains no shop data; tool arguments and results, each cut to 1000 characters, rejection reasons and memory tracebacks log at `DEBUG` only. A tool retry logs at `WARNING`.
+- **Logs:** records at `LOG_LEVEL` below `ERROR` go to stdout and `ERROR` and above to stderr. At `INFO` and `WARNING`, the service logs each tool call with its name, call id and the size of its arguments and result, and a rejected query, a turn without an answer or a failed memory step logs its code or error type, so these normal-level messages omit tool payloads; this is not a guarantee that every application, dependency or infrastructure log contains no shop data; truncated tool arguments and results, rejection reasons and memory tracebacks log at `DEBUG` only. A tool retry logs at `WARNING`.
 ### Trace activation and data exposure
 
-With `HH_API_KEY` set and `HH_SOURCE=production`, `src/observability.py` sends one [HoneyHive](https://docs.honeyhive.ai/v2) span per turn, model request, tool call and memory embedding, with timing, model, tokens, tool names, errors, `shop_id` and the content, grouped into one HoneyHive session per turn. The content is the prompts, the redacted question, tool arguments, tool results and the answer, so customer names and phone numbers the owner types reach HoneyHive (`NFR-008`); raw media does not, and `InputRedaction` removes keys, tokens, card numbers, IBANs and emails before the session opens. `tests/unit_tests/test_observability.py` checks both.
+With `HH_API_KEY` set and `HH_SOURCE=production`, the service sends one [HoneyHive](https://docs.honeyhive.ai/v2) span per turn, model request, tool call and memory embedding, with timing, model, tokens, tool names, errors, `shop_id` and the content, grouped into one HoneyHive session per turn. The content is the prompts, the redacted question, tool arguments, tool results and the answer, so customer names and phone numbers the owner types reach HoneyHive (`NFR-008`); raw media does not, and input redaction removes keys, tokens, card numbers, IBANs and emails before the session opens. Unit tests check both.
 
 ### Session fields and timing
 
@@ -162,7 +162,7 @@ Only the chat agent opens sessions; memory runs inside the chat turn's session w
 
 ### Lifecycle and failure behavior
 
-FastAPI requests are not instrumented because that would record the unredacted message. The turn waits on HoneyHive only once, before its first span, until the session exists, up to five seconds: a span that reaches HoneyHive first makes it create the session itself with source `api`, start time 0 and no inputs, which the later start does not fix. The session start goes out before the history read, so the read hides part of that wait, and `history_ms` reaches the session as a later update; a slow or down HoneyHive costs a turn at most that wait and loses only the session fields and the spans. The session fields go out through HoneyHive's sessions API with the turn's start time, because the SDK's `acreate_session` sends none and HoneyHive would then time the session from 1970 to its last span. On shutdown the app waits up to ten seconds for memory writes, cancels any still running before the database pool closes, waits up to ten seconds for session updates, flushes queued spans for up to five seconds, then shuts the tracer down; `deploy/vps/compose.yaml` gives the container 60 seconds to stop, enough for an open stream to finish first. Tracing starts in `lifespan`, not at import, and the tests clear `HH_API_KEY`, so a test run sends nothing to HoneyHive.
+FastAPI requests are not instrumented because that would record the unredacted message. The turn waits on HoneyHive only once, before its first span, until the session exists, up to five seconds: a span that reaches HoneyHive first makes it create the session itself with source `api`, start time 0 and no inputs, which the later start does not fix. The session start goes out before the history read, so the read hides part of that wait, and `history_ms` reaches the session as a later update; a slow or down HoneyHive costs a turn at most that wait and loses only the session fields and the spans. The session fields go out through HoneyHive's sessions API with the turn's start time, because the SDK's session call sends none and HoneyHive would then time the session from 1970 to its last span. On shutdown the app waits up to ten seconds for memory writes, cancels any still running before the database pool closes, waits up to ten seconds for session updates, flushes queued spans for up to five seconds, then shuts the tracer down; `deploy/vps/compose.yaml` gives the container 60 seconds to stop, enough for an open stream to finish first. Tracing starts with the application, not at import, and the tests clear `HH_API_KEY`, so a test run sends nothing to HoneyHive.
 ### Online evaluators
 
  HoneyHive scores every new `query_shop_data` call for a refused query and every turn's answer, on its session, for leaked internals, figures no tool supports, forbidden Markdown, a chart the app cannot draw and a reply not in Vietnamese, with Python evaluators kept as config as code in [`.honeyhive`](../../../.honeyhive/README.md) at the repository root, together with the charts and the alerts on a slow p95 turn, on the query error rate and on failed turns, all on `production` traffic only; `sync-evaluators.sh` and `sync-dashboards.sh` there apply them, by hand or from the workflows on a push to `main` that changes their configured paths.
@@ -183,7 +183,7 @@ AI migrations live in [`supabase/migrations/`](../../../supabase/migrations/) an
 
 ## Configuration
 
-`src/app_config.py` reads the environment or `.env`; blank values use defaults. The following list is the canonical volatile setting map.
+The service reads the environment or `.env`; blank values use defaults. The following list is the canonical volatile setting map.
 
 | Group | Variable | Default |
 |---|---|---|
