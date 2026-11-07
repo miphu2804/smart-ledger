@@ -21,6 +21,7 @@ Repository diagrams explain logical responsibilities, data relationships, code p
 | [Service walkthrough](../service-walkthrough/README.md) | Source-reading and transaction diagrams with their own verification boundaries |
 | [Target architecture](images/architecture.svg) ([source](src/architecture.drawio), [PNG](images/architecture.png)) | Target components including future services; [technical design §1](../technical-design.md#1-scope) records code status |
 | [CI/CD and runtime](images/ci-cd.svg) ([source](src/ci-cd.drawio)) | Delivery pipeline, VPS setup and request flow; explained in [CI/CD](../../development/ci-cd.md#delivery-and-runtime-topology) |
+| [VPS setup with Ansible](images/ansible-flow.svg) ([source](src/ansible-flow.drawio)) | Infra workflow, `run.sh`, role order and handlers; explained in [CI/CD](../../development/ci-cd.md#vps) |
 | [VPS networks](images/vps-network.svg) ([source](src/vps-network.drawio)) | Docker networks, container aliases and in-network ports from the tracked Compose files |
 | [Dopbase secrets and backup](images/dopbase-secrets-and-backup.svg) ([source](src/dopbase-secrets-and-backup.drawio)) | Secret distribution and nightly encrypted backup flow, without hosts or values |
 | [Sign-in request flow](images/auth-request-flow.svg) ([source](src/auth-request-flow.drawio)) | Firebase browser sign-in, CORS and project matching; not the Zalo flow, see the [Zalo contract](../../contracts/api-contracts.md#zalo-core-015) |

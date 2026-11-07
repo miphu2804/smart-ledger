@@ -42,6 +42,16 @@ drawio -x -f svg -e --embed-svg-images --svg-theme light -b ffffff -o docs/archi
 
 Source: [`vps-network.drawio`](../architecture/diagrams/src/vps-network.drawio), drawn from `deploy/*/compose.yaml` and the Caddy sites the playbook writes. Each dashed region is one Docker network and each container is drawn in its main network; a card that says `on edge as <alias>` or `also on edge` also joins `edge`. Each `name:port` is what another container dials inside that network. Only Caddy publishes public host ports (Dozzle binds a loopback port only); Core, Bifrost, Grafana, Alloy and Dopbase also join `edge`, and AI joins only its own project network, so only that environment's Core can call it.
 
+## VPS
+
+![VPS setup with Ansible](../architecture/diagrams/images/ansible-flow.svg)
+
+Source: [`ansible-flow.drawio`](../architecture/diagrams/src/ansible-flow.drawio), drawn from [`infra.yml`](../../.github/workflows/infra.yml), [`scripts/infra/run.sh`](../../scripts/infra/run.sh) and [`deploy/ansible`](../../deploy/ansible/vps.yml). A pull request gets lint only; a push to `staging` plans then applies staging in scope `app`, and a push to `main` plans then applies production in scope `all` after a reviewer approves the plan (1–5). `run.sh` runs in the image of `deploy/ansible/Dockerfile`, exports the environment's Dopbase groups to a private temporary directory and starts `ansible-playbook` (6). Scope `all` runs every role in order and sets up the shared host, so it runs for production only; scope `app` runs only the `app` role for one environment (7). The roles prepare the host and write the stack files; the handlers that a changed file notifies then start the stack, Dopbase, monitoring and the edge, in that order (8). The apply shares the `vps-<environment>` lock with the backend deploy. Edit the source and re-export:
+
+```bash
+drawio -x -f svg -e --embed-svg-images --svg-theme light -b ffffff -o docs/architecture/diagrams/images/ansible-flow.svg docs/architecture/diagrams/src/ansible-flow.drawio
+```
+
 ## Steps
 
 1. Submit the change to `staging` through a pull request and required review.
