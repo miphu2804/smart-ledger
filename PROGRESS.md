@@ -1,3 +1,12 @@
+### 2026-11-07 — English file names for product images and icons
+
+| Area | Change |
+|---|---|
+| Docs | • Recaptured the 21 marketing screenshots from the mock web build at staging `a1245a1c` under English file names; renamed 14 user flow screenshots without recapture, since they come from staging and not the mock<br>• Translated the Vietnamese comments in the marketing capture scripts |
+| Mobile and Web | • Renamed the Vietnamese-named overview icons in `assets/tab1-overview` and `public/brand/icons` to English and updated their references |
+
+Check: Web lint, typecheck and build passed; Mobile typecheck passed and `npm test` 196 passed; every renamed image reference resolves to a file; the recaptured images were inspected. The landing page and the app were not opened after the icon rename. Commit: the commit that adds this entry.
+
 ### 2026-11-07 — Link onboarding to owned guides and local checks
 
 | Area | Change |
@@ -186,12 +195,3 @@ Check: `uv run pytest -q` (535 passed, 79 skipped), `ruff check` and `ruff forma
 | Docs | • The AI README describes the field |
 
 Check: `uv run pytest -q tests/unit_tests/test_llm_factory.py` (21 passed), `ruff check` and `ruff format --check`. Not verified: that Bifrost forwards `service_tier` to OpenAI, and no Dopbase alias sets it yet. Commit: the one that adds this entry.
-
-### 2026-11-05 — Re-embed stored agent memories after a provider change
-
-| Area | Change |
-|---|---|
-| AI | • New `src/memory/reembed.py`: `uv run python -m src.memory.reembed` embeds every stored memory with the configured provider as a dry run, and `--apply` writes all vectors in one transaction; it refuses a vector of the wrong size, a zero vector or a non-finite one |
-| Docs | • The AI README gives the order for switching an environment: set the provider in Dopbase, deploy, then re-embed; and no longer calls `sentence-transformers` the default |
-
-Check: `uv run pytest -q` (535 passed, 79 skipped), `ruff check` and `ruff format --check`. On `smartledger-local-db` (5 memories) a dry run wrote nothing, `--apply` with `cloudflare` changed every vector (cosine about 0 against the onnx ones) and `--apply` with `onnx` restored the original vectors exactly. Not verified: a run on staging. Commit: the one that adds this entry.
