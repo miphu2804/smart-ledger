@@ -35,6 +35,7 @@ Use JDK 21 and the Maven wrapper; a separate Maven install is unnecessary. Sprin
 Run from `backend/core` against an already compatible schema; preserve the shared-database migration boundary:
 
 ```bash
+cp .env.example .env   # first run only, then fill in the values
 set -a && source .env && set +a
 FLYWAY_ENABLED=false ./mvnw spring-boot:run
 ```
