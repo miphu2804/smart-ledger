@@ -112,7 +112,7 @@ The wrapper passes tool names and resource limits to Code Mode; it adds no expli
 
 ## Long-term memory and ONNX embeddings
 
-`AGENT_MEMORY_ENABLED` defaults to `false`; this is not product behavior until ADR-0002 is approved. When enabled, memory recall and writes are scoped to the same `shop_id` and `user_id`. Recall takes up to ten `preference` memories and five best cosine/BM25 matches. After a saved turn, a background task extracts up to five allowed facts and reconciles older memories; memory failures do not fail the turn. Deleting a conversation deletes memories sourced by it. The owner's switch is stored in `agent_memory_settings`.
+The product owner approved long-term memory on 2026-11-07 ([ADR-0002](../../../docs/architecture/adr/0002-agent-long-term-memory.md), `FR-039`), and production runs with `AGENT_MEMORY_ENABLED` on. The code default stays `false`, so any environment that does not set it has memory off. When enabled, memory recall and writes are scoped to the same `shop_id` and `user_id`. Recall takes up to ten `preference` memories and five best cosine/BM25 matches. After a saved turn, a background task extracts up to five allowed facts and reconciles older memories; memory failures do not fail the turn. Deleting a conversation deletes memories sourced by it. The owner's switch is stored in `agent_memory_settings`.
 
 The code default is `AGENT_MEMORY_EMBEDDING_PROVIDER=onnx` and `AGENT_MEMORY_EMBEDDING_MODEL=models/static-mrl-int8`. The ONNX embedder runs the model on CPU without torch and stores 384-dimensional normalized vectors. The Docker image's pinned int8 export is the static multilingual model; it adds roughly 330 MB of memory and its measured memory-evaluation recall is lower than the comparison embeddinggemma result (0.753 versus 0.861 at 384 dimensions). A missing/unreadable model turns memory off while chat remains available.
 
@@ -205,7 +205,7 @@ The service reads the environment or `.env`; blank values use defaults. The foll
 | Calculation | `CALC_ENABLED`, `CALC_MAX_OPERATIONS`, `CALC_MAX_OPERAND_VALUE` | `true`, `20`, `1e15` |
 | Sandbox | `SANDBOX_ENABLED`, `SANDBOX_MAX_MEMORY_BYTES`, `SANDBOX_MAX_DURATION_SECS` | `true`, `67108864`, `5` |
 |  | `SANDBOX_MAX_TOOL_CALLS`, `SANDBOX_MAX_SUSPENSIONS` | `3`, `1000` |
-| Memory | `AGENT_MEMORY_ENABLED`, `AGENT_MEMORY_TYPES` | `false`, `preference,procedural,semantic` |
+| Memory | `AGENT_MEMORY_ENABLED`, `AGENT_MEMORY_TYPES` | `false` in code (production sets it on), `preference,procedural,semantic` |
 |  | `AGENT_MEMORY_EMBEDDING_PROVIDER`, `AGENT_MEMORY_EMBEDDING_MODEL` | `onnx`, `models/static-mrl-int8` |
 |  | `CLOUDFLARE_ACCOUNT_ID`, `CLOUDFLARE_API_TOKEN` | unset |
 | Tracing | `HH_API_KEY`, `HH_API_URL`, `HH_SOURCE`, `HH_SAMPLE_RATE`, `GIT_SHA` | unset, unset, `local`, `1`, unset |

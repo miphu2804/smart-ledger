@@ -29,7 +29,7 @@ stale_after: 2027-01-05T22:18:48+07:00
 | Component | Implemented boundary |
 |---|---|
 | Core | Firebase session/profile; shops/catalog/customers; drafts, confirmation, sales, payments, debt, void/refund and expenses; stock-in/decrease, barcode and list pagination; reports; media, audit, notifications; ADMIN support/growth; Zalo WEB/ANDROID and the Agent proxy |
-| AI | Internal chat/stream, conversation management, deterministic guardrails, optional scoped shop-data tools, calculation/sandbox and default-off long-term memory |
+| AI | Internal chat/stream, conversation management, deterministic guardrails, optional scoped shop-data tools, calculation/sandbox and long-term memory behind `AGENT_MEMORY_ENABLED` (code default off; PO-approved and enabled in production, [ADR-0002](adr/0002-agent-long-term-memory.md)) |
 | Mobile | Expo Router client with explicit mock flags; Core-backed Home/Analytics totals; Android on-device STT and a separate rule-based order parser |
 | Web ADMIN | Firebase-to-Core ADMIN access and real support pages through `adminApi.ts`; legacy tasks/AI-support pages use a separate mock model |
 
@@ -63,7 +63,7 @@ ANDROID browser handoff and V18 are checked in, default-off. The service binds c
 
 - Core authorizes the user/shop pair. AI authenticates a shared service token but does not independently verify that ownership; the token and restricted network access are part of the trust boundary.
 - AI has no HTTP draft parser and does not implement a text/voice/image-to-sale workflow. Its internal parser helper is not Mobile's rule-based parser.
-- Conversation and memory repositories filter by user and shop. Default-off memory still has an in-flight usage-metadata write caveat after switch-off.
+- Conversation and memory repositories filter by user and shop. Memory still has an in-flight usage-metadata write caveat after switch-off.
 - Stream disconnect cancels production, but an already-running database write can commit. Missing completion is not proof that nothing was saved.
 - Read views exclude customer contacts but expose shop phone/address. Enabled tracing can export personal data remaining after redaction.
 - Mobile totals use Core report APIs; some Analytics charts/best-seller displays still aggregate loaded invoices. See [current report boundaries](../../frontend/mobile/docs/operations.md#homeanalytics-metrics).
@@ -79,7 +79,7 @@ The CORE-012 barcode work does not change component boundaries or add Redis: Cor
 | Mobile/FE | OWNER interface: collects input, shows the draft, requires the user to confirm, calls only Core |
 | Web dashboard | ADMIN interface: looks up OWNERs and the customer base and views the support overview; does not edit the business ledger |
 | Core | Currently has auth, shop/catalog/customer, draft/sale/payment/debt/refund, expense, summary, audit and the Agent proxy to AI; ADMIN reads overview/profile/support history and changes shop status, all audited. The audited source includes cumulative stock-in, cost snapshots, advanced reports and Product/Shop/User media; client acceptance and live provider configuration are separate checks |
-| AI | Implemented: Agent chat (history, guardrails, data read tool and restock suggestions when a reader is configured; long-term memory behind a flag, off by default). No HTTP draft parsing or image-analysis route exists; returns answers/suggestions without writing the ledger |
+| AI | Implemented: Agent chat (history, guardrails, data read tool and restock suggestions when a reader is configured; long-term memory behind `AGENT_MEMORY_ENABLED`, off by default in code and on in production per [ADR-0002](adr/0002-agent-long-term-memory.md)). No HTTP draft parsing or image-analysis route exists; returns answers/suggestions without writing the ledger |
 | PostgreSQL | Core business data, idempotency and audit_logs; V15 stores Core inbox/read-state/threshold. AI: chat history, the `ai_read` views and memory tables in `supabase/migrations/` (migration list in [§1](#1-scope)); the `vector` extension is enabled per [ADR-0001](adr/0001-vector-store-pgvector.md), and the only table with embeddings is `agent_memories` (long-term memory, [ADR-0002](adr/0002-agent-long-term-memory.md)); no migration creates an `ai_requests` table; runtime traces live in HoneyHive, not PostgreSQL |
 | Bifrost | Self-hosted model gateway on the VPS, replacing LiteLLM: holds the OpenAI and Inception keys, and AI calls `http://bifrost:8080` with a virtual key. Gateway definitions exist in source; actual routing and enablement were not verified |
 | HoneyHive | Traces each Agent chat turn: duration, model, tokens, tool names, errors, `shop_id`, and content including the question after `InputRedaction`, SQL, tool results and the answer (`NFR-008`); raw media is not sent. Each turn is a session carrying `user_id`, model and `prompt_version`. Activation also depends on the source/sampling configuration; see [ADR-0009](adr/0009-end-to-end-tracing.md) and the [AI service architecture](../../backend/ai/docs/architecture.md#observability) |

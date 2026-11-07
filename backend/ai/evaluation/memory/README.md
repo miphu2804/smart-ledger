@@ -51,4 +51,4 @@ How the ranking was chosen is in [ADR-0002](../../../../docs/architecture/adr/00
 - **Changed the ranking:** just rerun; the evaluation calls the real service.
 - **New embedding model:** set it in `.env` and rerun; the cache is per model.
 - **Changed `generate.py`:** run `uv run evaluation/memory/generate.py`, commit the new `cases.jsonl` and update the table above, because the old numbers no longer compare.
-- The data is synthetic. These numbers are not product behaviour until the PO approves long-term memory.
+- The data is synthetic. These numbers measure retrieval quality on synthetic data, not production behaviour.
