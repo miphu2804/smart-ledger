@@ -7,6 +7,14 @@
 
 Check: `npm run typecheck` passes; `npm test` 194 of 196 pass, and the two failures (`parseOrder` shared names, quick navigation labels) fail the same way on a clean `staging` checkout. Not verified: a native build, the consent dialog on a device, and events in DebugView. Commit: the one that adds this entry.
 
+### 2026-11-06 — Add shared documentation skills for agents
+
+| Area | Change |
+|---|---|
+| Agent tooling | • Add project-scoped `technical-writing`, `writing-for-agents` and `retro` skills with pinned hashes in `skills-lock.json`; expose Claude links through `.claude/skills` symlinks to `.agents/skills` |
+
+Check: `npx skills list --json` shows all three project skills for Claude Code, Codex, GitHub Copilot, Pi and Zed; `git diff --check`. No runtime changes. Commit: the one that adds this entry.
+
 ### 2026-11-06 — Docs describe SmartLedger as running in production, are in English outside product and carry OKF frontmatter
 
 | Area | Change |
@@ -187,12 +195,3 @@ Check: `uv run ruff check`, `ruff format --check` and `uv run pytest tests/unit_
 | AI | • The First words wait, Tool calls per turn and Unsupported figure rate charts in `.honeyhive/charts/` filter on `event_type` `session` instead of `event_name` `agent-chat`; with the old filter HoneyHive searched events other than sessions for these session metrics and drew nothing |
 
 Check: the live chart list shows HoneyHive's own session charts filter on `event_type` `session`. Not verified: the three charts drawing data, since `sync-dashboards.sh` applies them only on a merge into `main` or a manual run. Commit: the one that adds this entry.
-
-### 2026-11-04 — Bifrost prices mercury-3
-
-| Area | Change |
-|---|---|
-| CI | • `deploy/vps/bifrost.json` adds a `governance.pricing_overrides` entry for `mercury-3` on provider `inception` at the launch price from Inception's models page, because Bifrost's synced catalog prices it only under OpenRouter and logged its requests without cost |
-| Docs | • ADR-0009 §5 and the AI README say why HoneyHive shows no cost: its session Cost sums the `metadata.cost` the app sets on events, and Bifrost writes the cost it computes only to its own log, not to the response; embeddings on Cloudflare have no cost record |
-
-Check: `bifrost.json` passes `check-jsonschema` against the `transports/v2.4.0` config schema; the override-only path for a model missing from the catalog read in `cost.go` of that tag. Not verified: a non-zero cost in a live Bifrost log, since the override applies only after deploy. Commit: the one that adds this entry.
