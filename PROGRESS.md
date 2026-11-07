@@ -1,3 +1,11 @@
+### 2026-11-07 — Move HoneyHive sync scripts and trim redundant script branches
+
+| Area | Change |
+|---|---|
+| CI | • `sync-evaluators.sh` and `sync-dashboards.sh` move from the repository root to `scripts/honeyhive/`, beside the other script groups; workflows, CODEOWNERS and docs point at the new paths<br>• The Vercel build and deploy scripts build one argument list instead of repeating the command per target, and `apply.sh` drops its undocumented no-op `--keep-all` and `--backup` flags |
+
+Check: `actionlint`, `shellcheck --severity=warning` on every tracked script, `check-evaluator-ids.sh`, `check-provider-coupling.sh` and Ruff passed; the Vercel scripts ran against a stub CLI on bash 3.2 for both targets and still fail when the deploy fails. The HoneyHive and Vercel scripts were not run against the real services. Commit: the commit that adds this entry.
+
 ### 2026-11-07 — Link onboarding to owned guides and local checks
 
 | Area | Change |
@@ -177,21 +185,3 @@ Check: `uv run pytest -q` (595 passed, 13 skipped) with `POSTGRES_TEST_URL` on a
 | Docs | • The AI README says why the session bypasses `acreate_session` |
 
 Check: `uv run pytest -q` (535 passed, 79 skipped), `ruff check` and `ruff format --check`; the production session `d5af044c` read back from HoneyHive had `start_time`, `end_time` and `duration` 0 on its session event while every span was timed. Not verified: a production session after deploy. Commit: the one that adds this entry.
-
-### 2026-11-05 — Set an OpenAI service tier per model alias
-
-| Area | Change |
-|---|---|
-| AI | • An alias in `MODEL_ALIASES` takes an optional `service_tier` (`auto`, `default`, `flex` or `priority`), sent as `openai_service_tier` by both OpenAI providers, so a `gpt-6-luna` alias can run on the priority tier; an alias without one sends no tier |
-| Docs | • The AI README describes the field |
-
-Check: `uv run pytest -q tests/unit_tests/test_llm_factory.py` (21 passed), `ruff check` and `ruff format --check`. Not verified: that Bifrost forwards `service_tier` to OpenAI, and no Dopbase alias sets it yet. Commit: the one that adds this entry.
-
-### 2026-11-05 — Re-embed stored agent memories after a provider change
-
-| Area | Change |
-|---|---|
-| AI | • New `src/memory/reembed.py`: `uv run python -m src.memory.reembed` embeds every stored memory with the configured provider as a dry run, and `--apply` writes all vectors in one transaction; it refuses a vector of the wrong size, a zero vector or a non-finite one |
-| Docs | • The AI README gives the order for switching an environment: set the provider in Dopbase, deploy, then re-embed; and no longer calls `sentence-transformers` the default |
-
-Check: `uv run pytest -q` (535 passed, 79 skipped), `ruff check` and `ruff format --check`. On `smartledger-local-db` (5 memories) a dry run wrote nothing, `--apply` with `cloudflare` changed every vector (cosine about 0 against the onnx ones) and `--apply` with `onnx` restored the original vectors exactly. Not verified: a run on staging. Commit: the one that adds this entry.

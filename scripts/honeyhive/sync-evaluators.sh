@@ -2,7 +2,7 @@
 # Upserts every evaluator under .honeyhive/evaluators/ on the project of
 # HH_PROJECT_API_KEY and keeps their IDs in .honeyhive/state.json (commit it).
 # Follows https://docs.honeyhive.ai/v2/cli-reference/config-as-code-evaluators-datasets
-# Usage, from the repo root: HH_PROJECT_API_KEY=... bash sync-evaluators.sh
+# Usage, from the repo root: HH_PROJECT_API_KEY=... bash scripts/honeyhive/sync-evaluators.sh
 set -euo pipefail
 
 STATE_FILE="${STATE_FILE:-.honeyhive/state.json}"
