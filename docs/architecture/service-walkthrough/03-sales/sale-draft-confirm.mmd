@@ -9,6 +9,7 @@ flowchart LR
     subgraph Cust["Customer for Debt"]
         CU{"paid < total?"}
         CN{"customer<br/>source?"}
+        LOCKC["lock Customer by id<br/>refresh, must be ACTIVE"]
         NEWC["Customer.create()"]
     end
 
@@ -33,9 +34,10 @@ flowchart LR
     ED -->|no| X1["DRAFT_NOT_EDITABLE"]
     CU -->|yes| CN
     CU -->|no| CHK
-    CN -->|active id| CHK
+    CN -->|id| LOCKC --> CHK
+    LOCKC -.->|"missing / archived"| X5["CUSTOMER_NOT_FOUND"]
     CN -->|name only| NEWC --> CHK
-    CN -->|none| X2["CUSTOMER_REQUIRED_FOR_DEBT<br/>CUSTOMER_NOT_FOUND"]
+    CN -->|none| X2["CUSTOMER_REQUIRED_FOR_DEBT"]
     CHK --> STK --> ALERT --> SALE --> P1
     STK -.->|"short stock"| X3["PRODUCT_STOCK_INSUFFICIENT"]
     STK -.->|"missing / inactive / foreign"| X4["DRAFT_ITEM_INVALID"]
@@ -50,7 +52,7 @@ flowchart LR
     classDef store fill:#efe6ff,stroke:#8a63d2,color:#3d2a6b
     classDef shared fill:#ffe9d6,stroke:#e07b24,color:#6b3500
     class REP,ED,CU,CN,P1,D1 decision
-    class X1,X2,X3,X4 error
+    class X1,X2,X3,X4,X5 error
     class ALERT shared
     class S,RET,DONE terminal
     style Guard fill:#f3f8ff,stroke:#9dbcf5

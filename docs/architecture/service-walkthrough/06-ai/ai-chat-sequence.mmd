@@ -29,7 +29,7 @@ sequenceDiagram
     end
     opt AGENT_MEMORY_ENABLED and the owner's switch is on
         A->>Mem: with_memories(): embed the question
-        Mem->>DB: up to 10 preference memories, then cosine search, 5 best re-ranked
+        Mem->>DB: up to 10 preference memories, then cosine + BM25 candidates, hybrid ranking, top 5
         Mem-->>A: question led by "Earlier facts from this owner"
         opt POST /chat/stream and memories were used
             A-->>R: memory event, before the first delta
