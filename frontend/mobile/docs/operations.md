@@ -94,7 +94,7 @@ Release builds use these settings (measured on `arm64-v8a`, same commit: 95.2 MB
 - `expo-build-properties` in `app.json`: `useLegacyPackaging` compresses the `.so` files in the APK (previously stored uncompressed, taking 62 MB); `enableMinifyInReleaseBuilds` and `enableShrinkResourcesInReleaseBuilds` enable R8 and drop unused resources; `packagingOptions.exclude` drops the FFmpeg and libarchive `.so` files.
 - `extraProguardRules` keeps the `com.k2fsa.sherpa.onnx.**` and `com.sherpaonnx.**` classes intact: sherpa-onnx native code reads them by name and the library ships no R8 rules for them. If another native library crashes in release (but not in debug), suspect R8 first and add a `-keep` rule here.
 - `plugins/withAndroidApkSize.js`: disables FFmpeg and libarchive in sherpa-onnx (see Speech recognition on Android) and keeps only the `vi` and `en` strings of the libraries.
-- Remeasure: `scripts/release/apk-contents.sh <file.apk>` prints the size by ABI, dex, resources, assets and the 40 largest files; `scripts/release/android-release.sh` (run locally and in CI) calls it after every APK build.
+- Remeasure from the repository root: `scripts/release/apk-contents.sh <file.apk>` prints the size by ABI, dex, resources, assets and the 40 largest files; `scripts/release/android-release.sh` (run locally and in CI) calls it after every APK build.
 - Trade-off: native libraries are extracted onto the device at install, so the installed size is larger than the APK file; installs from Google Play (AAB) are not affected.
 
 ## Structure
@@ -228,7 +228,7 @@ Add `-- --headed` to watch the browser, `-- --ui` to step through. The report is
 
 ## Debug
 
-- **Logs:** only in dev builds (`__DEV__`), everything prefixed with `[api]`, `[auth]`, `[session]`. Tokens, passwords and full phone numbers/emails are never logged. View them in the terminal running `npx expo start --dev-client` (press `j` to open React Native DevTools), or:
+- **Logs:** only in dev builds (`__DEV__`), everything prefixed with `[api]`, `[auth]`, `[session]`. The app's own messages leave out tokens and passwords and mask phone numbers and emails, but SDK and network error messages are logged as received and may contain personal data, so review and redact a log before sharing it. View them in the terminal running `npx expo start --dev-client` (press `j` to open React Native DevTools), or:
   ```bash
   adb logcat -s ReactNativeJS
   ```
