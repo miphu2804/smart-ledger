@@ -4,7 +4,7 @@ title: "Admin dashboard: daily creation counts"
 description: "Core handoff for the ADMIN daily creation API: verification steps and history."
 owner: Core owner
 status: stable
-author: miphu2804
+generated: { by: human:miphu2804, at: 2026-11-06T22:18:48+07:00 }
 stale_after: 2027-01-05T22:18:48+07:00
 ---
 # Admin dashboard: daily creation counts

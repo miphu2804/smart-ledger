@@ -4,7 +4,7 @@ title: "Mobile wording review"
 description: "Proposed UI wording, icon and feedback mapping pending product approval."
 owner: Product owner
 status: draft
-author: miphu2804
+generated: { by: human:miphu2804, at: 2026-11-06T22:18:48+07:00 }
 stale_after: 2027-01-05T22:18:48+07:00
 ---
 # Mobile wording review
