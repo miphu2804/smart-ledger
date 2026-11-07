@@ -1,0 +1,74 @@
+sequenceDiagram
+    box rgb(223,245,227) Client
+    participant App as Mobile app
+    end
+    box rgb(238,244,255) Core
+    participant Core as Core AgentServiceImpl
+    end
+    box rgb(255,249,238) AI service
+    participant R as AI router
+    participant A as AgentService
+    participant G as Guardrails
+    participant T as Tools
+    participant Mem as Memory
+    end
+    box rgb(240,240,240) Model gateway
+    participant M as Model
+    end
+    box rgb(239,230,255) Data
+    participant DB as Postgres
+    end
+
+    App->>Core: POST /api/v1/agent/chat or /chat/stream
+    Core->>Core: requireOwnedActiveShop gives owner user_id, shop_id
+    Core->>R: POST /internal/v1/agent/chat or /chat/stream (40s read timeout, X-Internal-Token)
+    R->>A: chat() or stream_chat(user_id, shop_id, message, conversation_id)
+    opt conversation_id given
+        A->>DB: recent_messages(): owner-scoped, latest AGENT_HISTORY_TURNS exchanges
+    end
+    A->>G: input length check (input_too_long), then redaction
+    opt AGENT_MEMORY_ENABLED and the owner's switch is on
+        A->>Mem: with_memories(): embed the question
+        Mem->>DB: up to 10 preference memories, then cosine search, 5 best re-ranked
+        Mem-->>A: question led by "Earlier facts from this owner"
+        opt POST /chat/stream and memories were used
+            A-->>R: memory event, before the first delta
+            R-->>Core: SSE memory
+            Core-->>App: relayed memory
+        end
+    end
+    Note over A,M: turn limits (config defaults): 4 model requests, 200000 tokens, 3 tool calls, 35 s
+    loop model requests and tool calls
+        A->>M: instructions, history, redacted message, then the current time
+        M-->>A: text or tool call
+        opt POST /chat/stream
+            A-->>R: delta or reset
+            R-->>Core: SSE delta or reset
+            Core-->>App: relayed delta or reset
+        end
+        A->>T: query_shop_data(sql), suggest_restock(period) or suggest_screen(screen)
+        T->>T: SqlGuard: one SELECT on ai_read views, LIMIT n+1
+        T->>DB: read-only txn scoped by smartledger.shop_id
+        T-->>A: JSON rows or Error[CODE] for the model to retry
+    end
+    A->>G: OutputGuardrail: retry empty or leaking answers
+    A->>A: append an actions block for up to 2 suggest_screen calls
+    alt POST /chat
+        A->>DB: save_exchange(redacted user message, answer)
+        opt memory on
+            A-)Mem: remember() in the background: extract up to 5 facts, merge memories older than 7 days
+        end
+        A-->>R: AgentChatResult
+        R-->>Core: conversation_id, message_id, request_id, answer, model, model_version
+        Core-->>App: AgentChatResponse (conversation_id, message_id, answer)
+    else POST /chat/stream
+        A-->>R: held-back tail as delta (reset first if the text shown is not a prefix of the answer)
+        A->>DB: save_exchange(redacted user message, answer)
+        opt memory on
+            A-)Mem: remember() in the background
+        end
+        A-->>R: Done with saved ids and answer
+        R-->>Core: SSE done
+        Core-->>App: done (conversation_id, message_id, answer)
+    end
+    Note over A,App: a guardrail stop or other failure after the stream opens is an error event

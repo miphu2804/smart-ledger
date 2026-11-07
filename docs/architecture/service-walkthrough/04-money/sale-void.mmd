@@ -1,0 +1,50 @@
+flowchart LR
+    S(["voidSale(saleId, key, req)"]) --> IDEM["Idempotency<br/>SALE_VOID"] --> LS["lock Sale"]
+
+    subgraph Check["Pre-checks"]
+        ST{"CONFIRMED?"}
+        SUM{"Σ payments<br/>== paidVnd?"}
+        RM{"received > 0 ⇔<br/>refundMethod?"}
+    end
+
+    subgraph Reverse["Reverse Effects"]
+        LD["lock Debt"]
+        RS{"restockItems?"}
+        SNAP["validate stockDeducted snapshots<br/>collect deducted product IDs"]
+        RP["lock products by id asc (1 query)<br/>same shop, including ARCHIVED<br/>skip if empty; restoreStock checks MAX_STOCK"]
+        ALERT["reconcile restored stock alerts (batch)<br/>1 open-alert read if nonempty"]
+        DV["debt.voidRemaining()"]
+    end
+
+    subgraph Close["Close Sale"]
+        RF{"received > 0?"}
+        REF["SaleRefund.record()"]
+        V["sale.voidSale(reason)<br/>audit SALE_VOIDED"]
+    end
+
+    LS --> ST -->|yes| SUM -->|yes| RM -->|yes| LD --> RS
+    RS -->|yes| SNAP --> RP --> ALERT --> DV
+    RS -->|no; empty group| ALERT
+    DV --> RF
+    RF -->|yes| REF --> V
+    RF -->|no| V
+
+    ST -->|no| X1["SALE_ALREADY_VOIDED"]
+    SUM -->|no| X2["SALE_PAYMENT_MISMATCH"]
+    RM -->|no| X3["SALE_REFUND_METHOD_<br/>REQUIRED / INVALID"]
+    SNAP -.->|"unknown / invalid snapshot"| X4["SALE_RESTOCK_UNAVAILABLE"]
+    RP -.->|"missing / unrestorable"| X4
+    RP -.->|"total exceeds MAX_STOCK"| X5["409 PRODUCT_STOCK_OVERFLOW<br/>rollback whole void + key"]
+    classDef default fill:#eef4ff,stroke:#5b8def,color:#1f2d3d
+    classDef decision fill:#fff4cc,stroke:#d4a017,color:#5c4400
+    classDef error fill:#fde2e1,stroke:#d9534f,color:#8a1f1b
+    classDef terminal fill:#dff5e3,stroke:#3c9d5d,color:#1e5631
+    classDef store fill:#efe6ff,stroke:#8a63d2,color:#3d2a6b
+    classDef shared fill:#ffe9d6,stroke:#e07b24,color:#6b3500
+    class ST,SUM,RM,RS,RF decision
+    class X1,X2,X3,X4,X5 error
+    class ALERT shared
+    class S,V terminal
+    style Check fill:#f3f8ff,stroke:#9dbcf5
+    style Reverse fill:#f4fbf2,stroke:#a8d5a2
+    style Close fill:#fff9ee,stroke:#f0c987

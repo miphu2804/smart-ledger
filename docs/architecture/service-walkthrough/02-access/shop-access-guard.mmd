@@ -1,0 +1,33 @@
+flowchart LR
+    START(["requireOwnedActiveShop<br/>(token, X-Shop-Id)"])
+
+    subgraph User["User Check"]
+        U{"user exists<br/>and not DISABLED?"}
+        O{"role == OWNER?"}
+    end
+
+    subgraph Shop["Shop Check"]
+        P{"X-Shop-Id<br/>valid?"}
+        F{"owned by user?"}
+        A{"ARCHIVED?"}
+        ACT{"INACTIVE?"}
+    end
+
+    START --> U -->|yes| O -->|yes| P -->|yes| F -->|yes| A -->|no| ACT -->|no| OK(["return Shop"])
+    U -->|no| E1["AUTH_PROFILE_NOT_FOUND<br/>ACCOUNT_DISABLED"]
+    O -->|no| E2["SHOP_ACCESS_DENIED"]
+    P -->|no| E3["invalid shopId"]
+    F -->|no| E2
+    A -->|yes| E5["SHOP_NOT_FOUND"]
+    ACT -->|yes| E6["SHOP_INACTIVE"]
+    classDef default fill:#eef4ff,stroke:#5b8def,color:#1f2d3d
+    classDef decision fill:#fff4cc,stroke:#d4a017,color:#5c4400
+    classDef error fill:#fde2e1,stroke:#d9534f,color:#8a1f1b
+    classDef terminal fill:#dff5e3,stroke:#3c9d5d,color:#1e5631
+    classDef store fill:#efe6ff,stroke:#8a63d2,color:#3d2a6b
+    classDef shared fill:#ffe9d6,stroke:#e07b24,color:#6b3500
+    class U,O,P,F,A,ACT decision
+    class E1,E2,E3,E5,E6 error
+    class START,OK terminal
+    style User fill:#f3f8ff,stroke:#9dbcf5
+    style Shop fill:#f4fbf2,stroke:#a8d5a2

@@ -1,0 +1,40 @@
+flowchart LR
+    W["ReportWindow.of(period)<br/>[from, to)"]
+
+    subgraph InWindow["Filtered by Period"]
+        Q1["sales by soldAt"]
+        Q2["VOIDED sales by voidedAt"]
+        Q3["payments by receivedAt"]
+        Q4["refunds"]
+        Q5["ACTIVE expenses"]
+    end
+
+    subgraph Metrics["Summary Metrics"]
+        GR["grossRevenue"]
+        VR["voidedRevenue"]
+        NR["netRevenue =<br/>gross − voided"]
+        COL["collected"]
+        RFD["refunded"]
+        EXP["expenseTotal"]
+        OUT["outstanding"]
+    end
+
+    ALL["all shop debts<br/>(not period-filtered)"]
+
+    W --> Q1 & Q2 & Q3 & Q4 & Q5
+    Q1 -->|"Σ total"| GR --> NR
+    Q2 -->|"Σ total"| VR --> NR
+    Q3 -->|"Σ amount"| COL
+    Q4 -->|"Σ amount"| RFD
+    Q5 -->|"Σ amount"| EXP
+    ALL -->|"Σ outstanding"| OUT
+    classDef default fill:#eef4ff,stroke:#5b8def,color:#1f2d3d
+    classDef decision fill:#fff4cc,stroke:#d4a017,color:#5c4400
+    classDef error fill:#fde2e1,stroke:#d9534f,color:#8a1f1b
+    classDef terminal fill:#dff5e3,stroke:#3c9d5d,color:#1e5631
+    classDef store fill:#efe6ff,stroke:#8a63d2,color:#3d2a6b
+    classDef shared fill:#ffe9d6,stroke:#e07b24,color:#6b3500
+    class ALL store
+    class NR terminal
+    style InWindow fill:#f3f8ff,stroke:#9dbcf5
+    style Metrics fill:#f4fbf2,stroke:#a8d5a2

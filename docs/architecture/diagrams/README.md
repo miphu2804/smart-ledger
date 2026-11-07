@@ -15,7 +15,7 @@ Repository diagrams explain logical responsibilities, data relationships, code p
 
 | Artifact | Meaning and boundary |
 |---|---|
-| [Logical architecture](#logical-architecture) | Current component responsibilities, not network placement or deployment evidence |
+| [Logical architecture](images/logical-architecture.svg) ([source](src/logical-architecture.mmd)) | Current component responsibilities, not network placement or deployment evidence |
 | [ERD source](src/erd.dbml) | Checked-in Core/AI table structure; SQL migrations own checks, policies, triggers and partial indexes |
 | [ERD layout](src/erd.dbdiagram) | Editor positions only, not a schema definition |
 | [Service walkthrough](../service-walkthrough/README.md) | Source-reading and transaction diagrams with their own verification boundaries |
@@ -31,36 +31,13 @@ The [technical design](../technical-design.md#1-scope) records source-level impl
 
 ## Logical architecture
 
-Component boundaries from checked-in source, rendered by GitHub and most Markdown viewers. It is not an environment, network, deployment or acceptance diagram; edit the Mermaid block here.
+Component boundaries from checked-in source. It is not an environment, network, deployment or acceptance diagram. Edit [`src/logical-architecture.mmd`](src/logical-architecture.mmd), then re-render it on a white background:
 
-```mermaid
-flowchart LR
-    mobile["Mobile app · OWNER"]
-    admin["Web admin · ADMIN"]
-    idp["Firebase Auth"]
-    core["Core · business rules and authorization"]
-    media["Cloudinary media"]
-    ledger[("Business ledger")]
-    ai["AI · Agent chat"]
-    cache[("Redis history cache")]
-    history[("Chat history and optional memory")]
-    views["Read-only ledger views"]
-    models["OpenAI-compatible model gateway"]
-    traces["HoneyHive tracing"]
-
-    mobile --> core
-    admin --> core
-    core -->|verify sign-in| idp
-    core --> media
-    core --> ledger
-    core -->|user and shop| ai
-    ai -.-> cache
-    ai --> history
-    ai --> views
-    views --> ledger
-    ai --> models
-    ai -.-> traces
+```bash
+npx -y -p @mermaid-js/mermaid-cli mmdc -i docs/architecture/diagrams/src/logical-architecture.mmd -o docs/architecture/diagrams/images/logical-architecture.svg -b white
 ```
+
+![Logical architecture](images/logical-architecture.svg)
 
 ## Editing
 

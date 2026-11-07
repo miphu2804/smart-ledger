@@ -1,0 +1,49 @@
+flowchart LR
+    IN["SaleDraftWriteRequest"]
+
+    subgraph Customer["Customer Check"]
+        CUS{"customerId<br/>given?"}
+        CF{"ACTIVE in shop?"}
+    end
+
+    subgraph Item["Per-item Check"]
+        PID{"productId?"}
+        CUSTOM{"name + unit<br/>given?"}
+        TXT{"client sent<br/>name/unit too?"}
+        DUP{"duplicate<br/>productId?"}
+        PR{"product ACTIVE?"}
+        LINE["lineTotal =<br/>round(price × qty)"]
+    end
+
+    subgraph Totals["Totals Check"]
+        TOT{"total = Σ line − discount<br/>total > 0?"}
+        PAY{"paid ≤ total and<br/>paid > 0 ⇔ method?"}
+        SAVE["save SaleDraft<br/>+ item snapshots"]
+    end
+
+    IN --> CUS
+    CUS -->|yes| CF -->|yes| PID
+    CUS -->|no| PID
+    PID -->|null| CUSTOM -->|yes| LINE
+    PID -->|set| TXT -->|no| DUP -->|no| PR -->|yes| LINE
+    LINE --> TOT -->|yes| PAY -->|yes| SAVE
+
+    CF -->|no| EC["CUSTOMER_NOT_FOUND"]
+    CUSTOM -->|no| EI["DRAFT_ITEM_INVALID"]
+    TXT -->|yes| EI
+    PR -->|no| EI
+    DUP -->|yes| ED["DRAFT_ITEM_DUPLICATE"]
+    TOT -->|no| ET["DRAFT_TOTAL_INVALID"]
+    PAY -->|no| EP["DRAFT_PAYMENT_INVALID"]
+    classDef default fill:#eef4ff,stroke:#5b8def,color:#1f2d3d
+    classDef decision fill:#fff4cc,stroke:#d4a017,color:#5c4400
+    classDef error fill:#fde2e1,stroke:#d9534f,color:#8a1f1b
+    classDef terminal fill:#dff5e3,stroke:#3c9d5d,color:#1e5631
+    classDef store fill:#efe6ff,stroke:#8a63d2,color:#3d2a6b
+    classDef shared fill:#ffe9d6,stroke:#e07b24,color:#6b3500
+    class CUS,CF,PID,CUSTOM,TXT,DUP,PR,TOT,PAY decision
+    class EC,EI,ED,ET,EP error
+    class SAVE terminal
+    style Customer fill:#f3f8ff,stroke:#9dbcf5
+    style Item fill:#f4fbf2,stroke:#a8d5a2
+    style Totals fill:#fff9ee,stroke:#f0c987
