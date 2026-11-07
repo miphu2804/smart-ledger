@@ -1,12 +1,3 @@
----
-type: Guide
-title: "Evaluation"
-description: "Scripts that run test cases against the real AI code, score the results and print a table."
-owner: AI owner
-status: stable
-generated: { by: human:miphu2804, at: 2026-11-05T13:45:47+07:00 }
-stale_after: 2027-01-04T13:45:47+07:00
----
 # Evaluation
 
 Scripts that check the AI service still behaves well: they run test cases against the real code, score the results and print a table.

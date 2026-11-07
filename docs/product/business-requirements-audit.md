@@ -9,11 +9,7 @@ stale_after: 2027-01-05T04:32:37+07:00
 ---
 # Kiểm định business requirements — 2026-11-06
 
-| Siêu dữ liệu | Giá trị |
-|---|---|
-| Trạng thái | Bằng chứng rà tĩnh và phát hiện; không phải nguồn duyệt phạm vi hoặc chứng nhận UAT |
-| Nền code | staging `494fa6c`; bản tài liệu được kiểm định ban đầu là PR #550 tại `2aeeae1` |
-| Phạm vi nguồn | Repo hiện tại, ADR/contract, nội dung chat có trong phiên làm việc và kết quả ba sub-agent chuyên trách |
+Phụ lục này là bằng chứng rà tĩnh và các phát hiện, không phải nguồn duyệt phạm vi hay chứng nhận UAT. Nền code là staging `494fa6c`; bản tài liệu được kiểm định ban đầu là PR #550 tại `2aeeae1`. Nguồn gồm repo hiện tại, ADR/contract, nội dung chat có trong phiên làm việc và kết quả ba sub-agent chuyên trách.
 
 [BRD](business-requirements.md) sở hữu mục tiêu/quy tắc và quyết định kinh doanh; [PRD](product-requirements.md) sở hữu hành vi/AC. Phụ lục này ghi bằng chứng và giới hạn của lần kiểm định, không thay nguồn trạng thái triển khai ở [thiết kế kỹ thuật §1](../architecture/technical-design.md#1-scope) hoặc [API contracts](../contracts/api-contracts.md).
 

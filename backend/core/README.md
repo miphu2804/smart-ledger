@@ -1,12 +1,3 @@
----
-type: Service Guide
-title: "SmartLedger Core — setup"
-description: "How to run, configure and test the Java Core service, with links to service-owned verification and rollout guides."
-owner: Core owner
-author: miphu2804
-status: stable
-stale_after: 2027-01-05T22:18:48+07:00
----
 # SmartLedger Core — setup
 
 Core is the Java 21 / Spring Boot public API for SmartLedger, which runs in production. It owns authenticated business transactions and shop access, and proxies Agent chat to the internal AI service. Code is predominantly layered (`controller/`, `service/`, `repository/`, `entity/`, `dto/`) with capability packages such as `zalo/`, `media/` and `ratelimit/`; this documentation cleanup does not reorganize code.

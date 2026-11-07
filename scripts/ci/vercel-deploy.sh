@@ -4,9 +4,7 @@
 set -euo pipefail
 . "$(dirname "$0")/lib.sh"
 
-if [ "$VERCEL_TARGET" = production ]; then
-  url=$(vercel deploy --prebuilt --prod --token="$VERCEL_TOKEN")
-else
-  url=$(vercel deploy --prebuilt --token="$VERCEL_TOKEN")
-fi
+args=(--prebuilt --token="$VERCEL_TOKEN")
+[ "$VERCEL_TARGET" = production ] && args+=(--prod)
+url=$(vercel deploy "${args[@]}")
 ci_output url "$url"

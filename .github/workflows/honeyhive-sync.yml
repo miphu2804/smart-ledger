@@ -7,7 +7,7 @@ name: Sync HoneyHive evaluators
 on:
   push:
     branches: [main]
-    paths: [".honeyhive/evaluators/**", ".honeyhive/state.json", "sync-evaluators.sh"]
+    paths: [".honeyhive/evaluators/**", ".honeyhive/state.json", "scripts/honeyhive/sync-evaluators.sh"]
 
 permissions:
   contents: read
@@ -43,8 +43,8 @@ jobs:
         run: scripts/ci/install-honeyhive.sh
       - name: Check every evaluator has a committed ID
         # An evaluator created here gets an ID this run cannot commit, so every later run would create it again.
-        # Create new evaluators locally with sync-evaluators.sh and commit state.json before merging.
+        # Create new evaluators locally with scripts/honeyhive/sync-evaluators.sh and commit state.json before merging.
         run: scripts/ci/check-evaluator-ids.sh
       - name: Apply evaluators
         # The CLI's names for the AI service's HH_API_KEY and HH_API_URL, loaded from Dopbase ai/production above.
-        run: HH_PROJECT_API_KEY="$HH_API_KEY" HH_DATA_PLANE_URL="$HH_API_URL" bash sync-evaluators.sh
+        run: HH_PROJECT_API_KEY="$HH_API_KEY" HH_DATA_PLANE_URL="$HH_API_URL" bash scripts/honeyhive/sync-evaluators.sh

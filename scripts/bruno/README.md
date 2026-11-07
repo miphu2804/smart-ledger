@@ -1,12 +1,3 @@
----
-type: Guide
-title: "Bruno API collection"
-description: "Bruno requests for the Core API and how to run them against an environment."
-owner: Core owner
-status: stable
-generated: { by: human:miphu2804, at: 2026-11-01T11:08:28+07:00 }
-stale_after: 2026-12-31T11:08:28+07:00
----
 # Bruno API collection
 
 [Bruno](https://www.usebruno.com/) requests for the Core API, grouped by controller and stored in the [OpenCollection YAML format](https://docs.usebruno.com/opencollection-yaml/overview), so it needs Bruno 3 or later. The behavior they exercise is defined in the [API contracts](../../docs/contracts/api-contracts.md). The collection has `local` and `staging` environments and deliberately no production environment, because most requests write data.

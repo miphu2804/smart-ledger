@@ -7,6 +7,21 @@
 
 Check: Web lint, typecheck and build passed; Mobile typecheck passed and `npm test` 196 passed; every renamed image reference resolves to a file; the recaptured images were inspected. The landing page and the app were not opened after the icon rename. Commit: the commit that adds this entry.
 
+### 2026-11-07 — Move HoneyHive sync scripts and trim redundant script branches
+
+| Area | Change |
+|---|---|
+| CI | • `sync-evaluators.sh` and `sync-dashboards.sh` move from the repository root to `scripts/honeyhive/`, beside the other script groups; workflows, CODEOWNERS and docs point at the new paths<br>• The Vercel build and deploy scripts build one argument list instead of repeating the command per target, and `apply.sh` drops its undocumented no-op `--keep-all` and `--backup` flags |
+
+Check: `actionlint`, `shellcheck --severity=warning` on every tracked script, `check-evaluator-ids.sh`, `check-provider-coupling.sh` and Ruff passed; the Vercel scripts ran against a stub CLI on bash 3.2 for both targets and still fail when the deploy fails. The HoneyHive and Vercel scripts were not run against the real services. Commit: the commit that adds this entry.
+### 2026-11-07 — Clean README front pages and old document metadata
+
+| Area | Change |
+|---|---|
+| Docs | • READMEs outside `docs/` no longer carry frontmatter, so GitHub opens them on the title instead of a metadata table; `AGENTS.md` and the docs conventions record the rule<br>• The root README reads as a production overview again: the course-scope paragraph is gone, the boundaries table regains a Runs on column, and the repository layout is a directory tree checked against `staging`<br>• Seven documents (the product set, technical design, API contracts and marketing) fold their metadata table under the title into one intro sentence; BRD, PRD and the product overview no longer label themselves as the EXE201 MVP |
+
+Check: every directory in the layout tree exists on `staging` `a1245a1`; relative links in the edited front pages resolve; `git diff --check` passed. Rendering on GitHub was not checked.
+
 ### 2026-11-07 — Link onboarding to owned guides and local checks
 
 | Area | Change |
@@ -177,21 +192,3 @@ Check: `uv run pytest tests/unit_tests -q` (493 passed, 1 skipped), `ruff check`
 | AI | • `PostgreDBClient.read_session()` opens a session on an autocommit connection, so a read sends no `BEGIN` or `COMMIT` and costs the pool pre-ping and the query instead of four round trips<br>• `recall_ready`, `search` and the database branch of `recent_messages` use it; writes, `lock=True` callers and every other read stay on `session()` |
 
 Check: `uv run pytest -q` (595 passed, 13 skipped) with `POSTGRES_TEST_URL` on a throwaway `pgvector/pgvector:pg17` container and `REDIS_TEST_URL` on a `redis:7-alpine`, both removed afterwards, `ruff check` and `ruff format --check`; a new integration test shows `read_session()` is autocommit and a later `session()` on the same pooled connection is not. A `select 1` through `PostgreDBClient` from Vietnam to the staging Supabase pooler took 167 ms p50 in `session()` and 83 ms in `read_session()`, and `session()` stayed at 164 ms afterwards. Not verified: the production gain on `memory ready`, `memory recall` and history misses. Commit: the one that adds this entry.
-
-### 2026-11-05 — Send each HoneyHive session's start time
-
-| Area | Change |
-|---|---|
-| AI | • The session opens through HoneyHive's sessions API with the turn's start time in milliseconds, because the SDK's `acreate_session` sends none: HoneyHive stored 0 and showed a turn's duration as the time from 1970 to its last span (498294 h) |
-| Docs | • The AI README says why the session bypasses `acreate_session` |
-
-Check: `uv run pytest -q` (535 passed, 79 skipped), `ruff check` and `ruff format --check`; the production session `d5af044c` read back from HoneyHive had `start_time`, `end_time` and `duration` 0 on its session event while every span was timed. Not verified: a production session after deploy. Commit: the one that adds this entry.
-
-### 2026-11-05 — Set an OpenAI service tier per model alias
-
-| Area | Change |
-|---|---|
-| AI | • An alias in `MODEL_ALIASES` takes an optional `service_tier` (`auto`, `default`, `flex` or `priority`), sent as `openai_service_tier` by both OpenAI providers, so a `gpt-6-luna` alias can run on the priority tier; an alias without one sends no tier |
-| Docs | • The AI README describes the field |
-
-Check: `uv run pytest -q tests/unit_tests/test_llm_factory.py` (21 passed), `ruff check` and `ruff format --check`. Not verified: that Bifrost forwards `service_tier` to OpenAI, and no Dopbase alias sets it yet. Commit: the one that adds this entry.

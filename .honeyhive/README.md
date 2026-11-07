@@ -1,12 +1,3 @@
----
-type: Guide
-title: "HoneyHive config as code"
-description: "Evaluators, charts and alerts that watch the shop agent, kept as files and how to apply them."
-owner: AI owner
-status: stable
-generated: { by: human:miphu2804, at: 2026-11-04T22:01:25+07:00 }
-stale_after: 2027-01-03T22:01:25+07:00
----
 # HoneyHive config as code
 
 Evaluators, charts and alerts that watch Bobi, the shop agent of the AI service, kept as files in the layout of HoneyHive's [Config as Code](https://docs.honeyhive.ai/v2/cli-reference/config-as-code) guide, so a change goes through review like code and follows their docs.
@@ -33,11 +24,11 @@ The charts show the wait for the first words, tool calls per turn, the query err
 
 | Path | CLI namespace | Applied by |
 |---|---|---|
-| `evaluators/` | `honeyhive metrics` | `sync-evaluators.sh` with a project key |
-| `state.json` | | the evaluator IDs `sync-evaluators.sh` updates by; commit it after a run that creates one |
-| `charts/` | `honeyhive charts` | `sync-dashboards.sh`, created or updated by `name` |
-| `alerts/` | `honeyhive alerts` | `sync-dashboards.sh`, created when no alert has the `name` |
-| `projects.yaml` | | the projects `sync-dashboards.sh` covers; staging and production share one and differ by `source` |
+| `evaluators/` | `honeyhive metrics` | `scripts/honeyhive/sync-evaluators.sh` with a project key |
+| `state.json` | | the evaluator IDs `scripts/honeyhive/sync-evaluators.sh` updates by; commit it after a run that creates one |
+| `charts/` | `honeyhive charts` | `scripts/honeyhive/sync-dashboards.sh`, created or updated by `name` |
+| `alerts/` | `honeyhive alerts` | `scripts/honeyhive/sync-dashboards.sh`, created when no alert has the `name` |
+| `projects.yaml` | | the projects `scripts/honeyhive/sync-dashboards.sh` covers; staging and production share one and differ by `source` |
 
 The two scripts sit at the repository root and the workflows `.github/workflows/honeyhive-sync.yml` and `honeyhive-dashboards.yml` run them on pushes to `main` that match each workflow's path filters, or on manual dispatch. Datasets and datapoints have no folder: the offline evaluation in `backend/ai/evaluation/agent_chat` keeps its cases and seed in files (`cases.yaml`, `seed.sql`) and hashes them into `suite_version`.
 
