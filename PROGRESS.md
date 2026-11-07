@@ -1,3 +1,11 @@
+### 2026-11-07 — Refuse debug-signed production Android builds
+
+| Area | Change |
+|---|---|
+| CI | • `write-release-keystore.sh` fails an `android-production` build when `ANDROID_KEYSTORE_BASE64` is empty instead of signing with the public debug keystore; `mobile-release.yml` passes it the environment<br>• Found when the release AAB from run 42350017899 built green but was signed `CN=Android Debug`, because the Dopbase `release/production` value was empty |
+
+Check: the script exits 1 for android-production without a keystore, 0 for android-staging and with a keystore; `shellcheck --severity=warning` and `actionlint` passed.
+
 ### 2026-11-07 — English file names for product images and icons
 
 | Area | Change |
@@ -182,12 +190,3 @@ Check: `uv run pytest tests/unit_tests -q` (495 passed, 1 skipped) and `ruff che
 | Docs | • The AI README says the turn waits once for its session |
 
 Check: `uv run pytest tests/unit_tests -q` (495 passed, 1 skipped), `ruff check` and `ruff format --check`; the two new ordering tests fail on the old code. Three turns through the real `AgentService` with a scripted model and real HoneyHive (source `repro-fix`, from Vietnam) all read back with source `repro-fix`, a real start time, the question as input, the answer and `history_ms`; the wait cost 970 ms on a new conversation and 692 and 710 ms behind a 50 ms history read. Not verified: the wait from the production host. Commit: the one that adds this entry.
-
-### 2026-11-05 — Think less and show a plainer thinking line in chat
-
-| Area | Change |
-|---|---|
-| AI | • The `chat` alias defaults to reasoning effort `medium` and `MODEL_REASONING_EFFORT` to `low`, so turns spend fewer reasoning tokens<br>• The shop agent prompt asks for the full explanation, breakdown or steps a question needs after the answer, instead of one or two sentences |
-| Mobile | • The thinking line drops the check mark and the seconds counter and rotates through 10 plain phrases, in both assistant chat and quick transaction chat<br>• The three Bobi chat header buttons fold into one menu button that opens a floating menu; the title and the button borders are gone |
-
-Check: `uv run pytest tests/unit_tests -q` (493 passed, 1 skipped), `ruff check`, `ruff format --check`; mobile `npm run typecheck` and `npm test` (187 passed, 2 failing before this change: `parseOrder`, `quickNav`); header checked in the Expo web preview. Not verified: a real device and a live chat turn with the lower effort; the effort of the deployed aliases lives in Dopbase. Commit: the one that adds this entry.
