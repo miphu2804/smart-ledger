@@ -1,7 +1,7 @@
 import { router } from 'expo-router';
 import React, { useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
-import Svg, { Circle, Polyline } from 'react-native-svg';
+import Svg, { Path, Polyline } from 'react-native-svg';
 import { SCREEN_LINKS } from '../lib/chatMarkdown';
 import type { Point, Series, Tone, UiNode, Unit } from '../lib/chatUi';
 import { compact, vnd } from '../lib/format';
@@ -220,9 +220,9 @@ function Donut({ title, unit, data }: { title?: string; unit: Unit; data: Point[
   const total = data.reduce((sum, p) => sum + p.value, 0);
   const size = 128;
   const stroke = 20;
-  const r = (size - stroke) / 2;
-  const circumference = 2 * Math.PI * r;
-  let offset = 0;
+  // Leaves room for the focused slice, drawn 4 wider, so its outer edge is not cut by the canvas.
+  const r = (size - stroke - 4) / 2;
+  let start = 0;
   const focus = selected ?? data.reduce((best, p, i) => (p.value > data[best].value ? i : best), 0);
   return (
     <View style={styles.chart}>
@@ -230,24 +230,20 @@ function Donut({ title, unit, data }: { title?: string; unit: Unit; data: Point[
       <View style={styles.donutRow}>
         <View style={{ width: size, height: size }}>
           <Svg width={size} height={size}>
+            {/* Each slice is its own arc path: dashes on one circle cut the first slice on iOS. */}
             {data.map((p, i) => {
-              const length = (p.value / total) * circumference;
+              const share = p.value / total;
               const slice = (
-                <Circle
+                <Path
                   key={i}
-                  cx={size / 2}
-                  cy={size / 2}
-                  r={r}
+                  d={arc(size / 2, r, start, start + share)}
                   fill="none"
                   stroke={SERIES_COLORS[i % SERIES_COLORS.length]}
                   strokeWidth={i === focus ? stroke + 4 : stroke}
-                  strokeDasharray={`${Math.max(0, length - 2)} ${circumference}`}
-                  // Lùi một phần tư vòng để lát đầu bắt đầu ở 12 giờ thay vì 3 giờ.
-                  strokeDashoffset={circumference / 4 - offset}
                   opacity={i === focus ? 1 : 0.7}
                 />
               );
-              offset += length;
+              start += share;
               return slice;
             })}
           </Svg>
@@ -284,6 +280,17 @@ function Donut({ title, unit, data }: { title?: string; unit: Unit; data: Point[
       </View>
     </View>
   );
+}
+
+/** SVG arc from share `from` to share `to` of a full turn, clockwise from 12 o'clock, leaving a small gap after it. */
+function arc(center: number, r: number, from: number, to: number) {
+  const gap = 0.006;
+  const end = Math.max(from, Math.min(to - gap, from + 0.9999));
+  const point = (share: number) => {
+    const angle = share * 2 * Math.PI - Math.PI / 2;
+    return `${center + r * Math.cos(angle)} ${center + r * Math.sin(angle)}`;
+  };
+  return `M ${point(from)} A ${r} ${r} 0 ${end - from > 0.5 ? 1 : 0} 1 ${point(end)}`;
 }
 
 function Legend({ series }: { series: Series[] }) {
