@@ -1,12 +1,3 @@
----
-type: Guide
-title: "Speech recognition model (sherpa-onnx)"
-description: "Which on-device speech model files the app needs, how to fetch them and how releases serve them."
-owner: FE owner
-status: stable
-generated: { by: human:miphu2804, at: 2026-11-06T22:18:48+07:00 }
-stale_after: 2027-01-05T22:18:48+07:00
----
 # Speech recognition model (sherpa-onnx)
 
 This folder holds the Vietnamese speech recognition model that runs on the device (streaming Zipformer / transducer, used through `react-native-sherpa-onnx`). The model files (about 49 MB) are **not in git** (see `.gitignore`) so they do not bloat the history of the public repo. Only this README is tracked.

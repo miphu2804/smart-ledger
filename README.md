@@ -1,17 +1,8 @@
----
-type: Guide
-title: "SmartLedger"
-description: "Repository entry point: what the product is, how the services fit together and where to start."
-owner: Technical owner
-author: miphu2804
-status: stable
-stale_after: 2027-01-05T22:18:48+07:00
----
 # SmartLedger
 
-SmartLedger (Sổ Nghe Lời) runs in production and helps small shops record sales, payments, debts and expenses. AI voice POS is the product direction: the current mobile order-entry path uses platform speech-to-text and a rule-based `parseOrder()` parser, with owner review before checkout. Bobi chat is a separate AI capability accessed through Core; speech recognition is not evidence of AI order parsing.
+SmartLedger (Sổ Nghe Lời) is a bookkeeping app for small shops in Vietnam. Shop owners record sales, payments, debts and expenses by voice or by tap, and ask Bobi, the AI assistant, about their business. It runs in production on Android and the web.
 
-EXE201 MVP is a course delivery and acceptance scope, not the system's deployment status. See [product scope](docs/product/project-overview.md) and [implementation evidence](docs/architecture/technical-design.md#1-scope); checked-in features are not automatically enabled, deployed or accepted.
+Voice orders use the platform speech-to-text and the rule-based `parseOrder()` parser, and the owner reviews each order before checkout. Bobi chat is served by the AI service through Core.
 
 ## Tech stack
 
@@ -25,14 +16,15 @@ EXE201 MVP is a course delivery and acceptance scope, not the system's deploymen
 
 ## System boundaries
 
-| Part | Responsibility | Service guide |
-|---|---|---|
-| Core | Java 21 / Spring Boot public API; authentication, shop ownership and business transactions | [Core](backend/core/README.md) |
-| AI | Internal Python / FastAPI service called by Core; Agent chat, conversation history and AI capabilities | [AI](backend/ai/README.md) |
-| Frontend | Expo Router OWNER app; separate Vite / React landing and ADMIN web | [Frontend](frontend/README.md) |
-| Data | Supabase PostgreSQL; Core Flyway migrations and separate AI CLI migrations | [Local development](docs/development/local-development.md) |
+| Part | Responsibility | Runs on | Service guide |
+|---|---|---|---|
+| Core | Java 21 / Spring Boot public API; authentication, shop ownership and business transactions; owns the business database | VPS (Docker) | [Core](backend/core/README.md) |
+| AI | Internal Python / FastAPI service called only by Core; Agent chat, conversation history and memory | VPS (Docker) | [AI](backend/ai/README.md) |
+| Mobile | Expo Router app for the shop OWNER | Android build, web on Vercel | [Mobile](frontend/mobile/README.md) |
+| Web | Vite / React landing page and ADMIN dashboard | Vercel | [Web](frontend/web/README.md) |
+| Data | Supabase PostgreSQL; Core Flyway migrations and separate AI CLI migrations | Supabase | [Local development](docs/development/local-development.md) |
 
-Core verifies client identity and shop access before forwarding Agent requests with an internal token. Core owns business data; AI owns its conversation and memory storage. Runtime configuration and integrated acceptance remain separate from these code boundaries.
+Core verifies client identity and shop access before forwarding Agent requests with an internal token. Core owns business data; AI owns its conversation and memory storage.
 
 ## System architecture
 
@@ -44,26 +36,54 @@ Core verifies client identity and shop access before forwarding Agent requests w
 | Purple | VPS setup with Ansible |
 | Orange | Runtime request flow from the app to Core, AI and the database |
 
-The diagram shows the target delivery and runtime topology drawn from the tracked `deploy/` files; it does not prove that every component is enabled in an environment. [Technical design §1](docs/architecture/technical-design.md#1-scope) records implementation status, [CI/CD](docs/development/ci-cd.md) explains the pipeline and the [diagram guide](docs/architecture/diagrams/README.md) lists the other diagrams.
+[Technical design §1](docs/architecture/technical-design.md#1-scope) records the status of each component, [CI/CD](docs/development/ci-cd.md) explains the pipeline and the [diagram guide](docs/architecture/diagrams/README.md) lists the other diagrams.
 
-## Start here
+## Getting started
 
-- [Documentation](docs/README.md): domains, canonical sources and reading paths.
-- [Local development](docs/development/local-development.md): setup, Compose and pre-PR checks.
-- [CONTRIBUTING](CONTRIBUTING.md): branches, reviews and releases into `staging`, then production.
-- [AGENTS](AGENTS.md): root policy and scoped instruction loading for coding agents.
-- [Security policy](SECURITY.md): reporting vulnerabilities.
+| Task | Where |
+|---|---|
+| Find the document that owns a fact | [Documentation](docs/README.md) |
+| Set up, run and check each service before a PR | [Local development](docs/development/local-development.md) |
+| Branches, commits, pull requests and releases | [CONTRIBUTING](CONTRIBUTING.md) |
+| Deploy pipeline and environments | [CI/CD](docs/development/ci-cd.md) |
+| Instructions for coding agents | [AGENTS](AGENTS.md) |
+| Report a vulnerability | [Security policy](SECURITY.md) |
 
 ## Repository layout
 
-| Path | Ownership |
-|---|---|
-| `backend/` | Core and AI services, with their own operational guides |
-| `frontend/` | Mobile and web clients |
-| `docs/` | Product requirements, contracts, architecture, design and operations |
-| `deploy/`, `.github/` | Provisioning and delivery automation; documented in [CI/CD](docs/development/ci-cd.md) |
-| `scripts/` | Local DB, CI, secrets, API checks and device-release tooling; documented by the owning service or operations guide |
-| `secrets/` | [Credential-file workflow](secrets/README.md); do not commit secrets |
-| `supabase/` | AI schema migrations, separate from Core Flyway |
-
-Local mock mode must be selected explicitly for Mobile; consult each service guide rather than assuming checkout defaults are deployment configuration.
+```text
+smart-ledger/
+├── README.md
+├── AGENTS.md            # instructions for coding agents
+├── CLAUDE.md            # imports AGENTS.md
+├── CONTRIBUTING.md      # branches, commits, pull requests, releases
+├── SECURITY.md          # vulnerability reporting
+├── PROGRESS.md          # recent progress log
+├── BLOCKERS.md          # open blockers
+├── compose.yaml         # local Core + AI stack
+├── .agents/             # shared agent skills
+├── .github/             # CI/CD workflows, PR templates, CI helper scripts
+├── .honeyhive/          # HoneyHive evaluators, charts and alerts for Bobi
+├── deploy/
+│   ├── ansible/         # VPS provisioning
+│   ├── vps/             # Compose stack and deploy script for the VPS
+│   ├── edge/            # Caddy reverse proxy
+│   ├── monitoring/      # Prometheus, Loki and Grafana
+│   └── dopbase/         # self-hosted secrets manager
+├── scripts/             # local database, CI, secrets, Bruno API collection, Android and iOS release
+├── secrets/             # env file templates per environment, pulled from Dopbase
+├── supabase/            # AI schema migrations (Supabase CLI)
+├── docs/                # source of truth; start at docs/README.md
+│   ├── product/         # product overview, BRD, PRD and user flows
+│   ├── architecture/    # technical design, data model, ADRs, diagrams, service walkthrough
+│   ├── contracts/       # HTTP and wire contracts
+│   ├── design/          # mobile UI direction and wording
+│   ├── development/     # local development, secrets, CI/CD, release runbooks
+│   └── marketing/       # app screenshots per product flow
+├── frontend/
+│   ├── mobile/          # Expo app for the shop OWNER
+│   └── web/             # landing page and ADMIN dashboard at /admin
+└── backend/
+    ├── core/            # Core public API (Java), owns the business database
+    └── ai/              # internal AI API (Python FastAPI)
+```

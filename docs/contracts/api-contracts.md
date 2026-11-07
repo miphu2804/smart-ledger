@@ -9,9 +9,7 @@ stale_after: 2027-01-05T22:18:48+07:00
 ---
 # API Contract — SmartLedger
 
-| Metadata | Value |
-|---|---|
-| Status | Implemented source contracts; live enablement, deployment and integrated acceptance are separate verification boundaries |
+This document holds the implemented source contracts; live enablement, deployment and integrated acceptance are verified separately.
 
 ## Related documents
 

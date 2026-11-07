@@ -1,12 +1,3 @@
----
-type: Guide
-title: "secrets"
-description: "Local secret-file helpers and safe handling; environment access details remain in the private knowledge base."
-owner: Technical owner
-status: stable
-author: miphu2804
-stale_after: 2027-01-01T19:08:01+07:00
----
 # secrets
 
 This directory contains tracked templates and local helper inputs, not a publishable environment inventory. Environment addresses, domains, credential ownership and access instructions belong to the private operations knowledge base.

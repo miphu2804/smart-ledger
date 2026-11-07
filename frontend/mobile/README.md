@@ -1,12 +1,3 @@
----
-type: Service Guide
-title: "Sổ Nghe Lời — Mobile (Expo)"
-description: "How to run, configure and test the OWNER mobile app, including Firebase, speech and Core setup."
-owner: FE owner
-author: miphu2804
-status: stable
-stale_after: 2027-01-05T22:18:48+07:00
----
 # Sổ Nghe Lời — Mobile (Expo)
 
 The OWNER mobile app is an Expo Router application. The route tree is under `app/`: `(auth)` contains onboarding, `(tabs)` contains the main navigation, and protected top-level routes include sales, orders, assistant, reports, settings and `/voice`. Shared behavior is under `src/`, with Core clients in `src/lib/*Api.ts` and application state in `src/store/AppStore.tsx`.
