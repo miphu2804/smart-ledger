@@ -184,6 +184,10 @@ export function BarChart({
             key={d.label + i}
             size={12}
             color={i === activeIdx ? colors.ink : colors.faint}
+            // Seven weekday labels ("Chủ nhật", "Thứ Bảy") are wider than their slot on a phone; shrink rather than clip.
+            numberOfLines={1}
+            adjustsFontSizeToFit
+            minimumFontScale={0.7}
             style={{ flex: 1, textAlign: 'center' }}
           >
             {d.label}
@@ -214,4 +218,3 @@ export function Waveform({ active, color = colors.red, bars = 28 }: { active: bo
     </View>
   );
 }
-

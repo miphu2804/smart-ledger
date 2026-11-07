@@ -1,7 +1,7 @@
 name: format-violation
 type: PYTHON
 return_type: boolean
-description: True when the answer uses Markdown the shop agent prompt forbids, such as bullet lists, headings, quotes or a code block other than chart, so the app shows it unlike the rest of the chat.
+description: True when the answer uses Markdown the shop agent prompt forbids, such as bullet lists, headings, quotes or a code block other than chart or ui, so the app shows it unlike the rest of the chat.
 enabled_in_prod: true
 sampling_percentage: 100
 filters:
@@ -18,8 +18,8 @@ criteria: |
   import re
 
   # Rule 10 of SHOP_AGENT_SYSTEM_PROMPT allows only **bold**, numbered lists, small
-  # tables and the chart block; the service itself appends the ```actions block.
-  ALLOWED_BLOCK = re.compile(r"^[ \t]*```(chart|actions)[ \t]*\n.*?^[ \t]*```[ \t]*$", re.DOTALL | re.MULTILINE)
+  # tables and the ui block (rule 11; old answers may hold a chart block); the service itself appends the ```actions block.
+  ALLOWED_BLOCK = re.compile(r"^[ \t]*```(chart|ui|actions)[ \t]*\n.*?^[ \t]*```[ \t]*$", re.DOTALL | re.MULTILINE)
   FORBIDDEN = re.compile(r"^[ \t]*([-•*+][ \t]|#{1,6}[ \t]|>[ \t]?)|```", re.MULTILINE)
 
   answer = ALLOWED_BLOCK.sub("", outputs.get("answer") or "")

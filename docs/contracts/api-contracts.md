@@ -596,15 +596,36 @@ Core proxies this route through `POST /api/v1/agent/chat/stream` with the same a
 
 The AI Assistant screen on mobile calls the stream route and shows text gradually in the answer bubble; `reset` clears the part already shown, and `done` replaces it with the stored answer. While waiting for the first text, the thinking line shows a waiting phrase; each `tool_start` replaces it with the label of the latest step, and `tool_end` adds a tick after the label. This line disappears when the first `delta` arrives. The answer, stored data and guardrails are unchanged from `/api/v1/agent/chat`.
 
-`answer` (and the text assembled from `delta`) is plain text with a small Markdown subset defined by AI's prompt: `**bold**`, `- `/`1. ` lists, Markdown tables, and at most one chart block:
+`answer` (and the text assembled from `delta`) is plain text with a small Markdown subset defined by AI's prompt: `**bold**`, `- `/`1. ` lists, Markdown tables, and at most one `ui` block that draws charts and cards. The block uses the flat spec format of [json-render](https://github.com/vercel-labs/json-render): `root` names the top element and `elements` maps each id to its `type`, `props` and `children`.
 
 ````text
-```chart
-{"type": "bar" | "line", "title": "…", "unit": "vnd" | "count", "data": [{"label": "…", "value": 0}]}
+```ui
+{"root": "a", "elements": {"a": {"type": "Card", "props": {"title": "Top 5 món"}, "children": ["b"]}, "b": {"type": "HBarChart", "props": {"unit": "count", "data": [{"label": "Mì Hảo Hảo", "value": 20}]}, "children": []}}}
 ```
 ````
 
-The `chart` block is inside `answer`, so it is stored with the answer and shown again when the history is opened; Core and AI change no route or event. Mobile uses one shared parser (`frontend/mobile/src/lib/chatMarkdown.ts`) for text being streamed and the stored answer: a `**`/`` ` `` marker still open on the last line is temporarily closed, a line whose block type is not yet clear (`#`, `-`, `` ``` ``, a table header without its dash line yet) is held back, and an unclosed `chart` block shows "Đang vẽ biểu đồ…" (Drawing the chart…). The chart is drawn only when the JSON is valid, has 1–31 points, labels are text and values are non-negative numbers; otherwise it shows "Không hiện được biểu đồ này." (This chart cannot be shown.). The numbers in the chart are copied by the model from tool results, like every number in the answer. The [PRD](../product/product-requirements.md) and AC do not yet specify how tables/charts are presented in chat.
+| Type | Props | Use |
+|---|---|---|
+| `Card` | `title?`, children | Groups other elements |
+| `Row` | children | Puts 2 to 4 `Metric` side by side |
+| `Metric` | `label`, `value`, `unit`, `change?`, `trend?` | One key figure; `change` is the percent against the previous period and may be negative |
+| `LineChart` | `title?`, `unit`, `data` | 2 to 31 points over time |
+| `BarChart`, `HBarChart` | `title?`, `unit`, `data` | Separate items; `HBarChart` for rankings |
+| `Donut` | `title?`, `unit`, `data` | Shares of a whole, at most 6 slices |
+| `GroupedBar`, `StackedBar` | `title?`, `unit`, `labels`, `series` | Up to 4 series with one value per label |
+| `Progress` | `label`, `value`, `max`, `unit` | A figure against a target |
+| `Table` | `columns`, `rows` | Up to 5 columns and 20 rows |
+| `List` | `items` of `{label, value?, unit?, note?}` | Up to 20 rows |
+| `OrderCard` | `code`, `date?`, `customer?`, `status?`, `items`, `total` | One order |
+| `Badge` | `text`, `tone` | A status label; `tone` is `neutral`, `good`, `bad` or `warn` |
+| `Text` | `text` | A short note, at most 200 characters |
+| `ScreenButton` | `screen` | Opens an app screen from the same allowlist as the `actions` block; the prompt does not ask the model for it |
+
+`unit` is `vnd`, `count` or `percent`; a `List` item may instead carry the product's own unit word of at most 10 characters, such as `túi`, and shows as a count with that word. The block holds at most 40 elements and 4 levels, and each id is used once. Labels are cut to 24 characters. Every number except `change` and table cells is finite and at least 0.
+
+The `ui` block is inside `answer`, so it is stored with the answer and shown again when the history is opened; Core and AI change no route or event. Mobile uses one shared parser (`frontend/mobile/src/lib/chatMarkdown.ts`) for text being streamed and the stored answer: a `**`/`` ` `` marker still open on the last line is temporarily closed, a line whose block type is not yet clear (`#`, `-`, `` ``` ``, a table header without its dash line yet) is held back, and an unclosed `ui` block shows "Đang dựng thẻ…" (Building the card…). `frontend/mobile/src/lib/chatUi.ts` validates the closed block and draws it only when every element passes; an unknown type, a cycle or a broken limit shows "Không hiện được thẻ này." (This card cannot be shown.) instead of the whole block. Every element is display-only. The numbers on the card are copied by the model from tool results, like every number in the answer, and acceptance is [`AC-127`](../product/product-requirements.md).
+
+Answers stored before the `ui` block may hold a ```chart block (`{"type": "bar" | "line", "title", "unit", "data"}`); mobile still draws it, but the prompt no longer asks for it.
 
 At the end of `answer` there may be a block of buttons that open screens in the app, at most 2 buttons:
 
