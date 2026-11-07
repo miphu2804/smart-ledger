@@ -31,10 +31,10 @@ The [technical design](../technical-design.md#1-scope) records source-level impl
 
 ## Logical architecture
 
-Component boundaries from checked-in source. It is not an environment, network, deployment or acceptance diagram. Edit [`src/logical-architecture.mmd`](src/logical-architecture.mmd), then re-render it on a white background:
+Component boundaries from checked-in source. It is not an environment, network, deployment or acceptance diagram. Edit [`src/logical-architecture.mmd`](src/logical-architecture.mmd), then re-render it with every walkthrough diagram on a white background:
 
 ```bash
-npx -y -p @mermaid-js/mermaid-cli mmdc -i docs/architecture/diagrams/src/logical-architecture.mmd -o docs/architecture/diagrams/images/logical-architecture.svg -b white
+docs/architecture/service-walkthrough/export.sh
 ```
 
 ![Logical architecture](images/logical-architecture.svg)

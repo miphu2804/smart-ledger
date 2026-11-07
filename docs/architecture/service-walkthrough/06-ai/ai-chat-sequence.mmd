@@ -23,10 +23,10 @@ sequenceDiagram
     Core->>Core: requireOwnedActiveShop gives owner user_id, shop_id
     Core->>R: POST /internal/v1/agent/chat or /chat/stream (40s read timeout, X-Internal-Token)
     R->>A: chat() or stream_chat(user_id, shop_id, message, conversation_id)
+    A->>G: input length check (input_too_long), then redaction
     opt conversation_id given
         A->>DB: recent_messages(): owner-scoped, latest AGENT_HISTORY_TURNS exchanges
     end
-    A->>G: input length check (input_too_long), then redaction
     opt AGENT_MEMORY_ENABLED and the owner's switch is on
         A->>Mem: with_memories(): embed the question
         Mem->>DB: up to 10 preference memories, then cosine search, 5 best re-ranked
@@ -46,10 +46,15 @@ sequenceDiagram
             R-->>Core: SSE delta or reset
             Core-->>App: relayed delta or reset
         end
-        A->>T: query_shop_data(sql), suggest_restock(period) or suggest_screen(screen)
-        T->>T: SqlGuard: one SELECT on ai_read views, LIMIT n+1
-        T->>DB: read-only txn scoped by smartledger.shop_id
-        T-->>A: JSON rows or Error[CODE] for the model to retry
+        alt query_shop_data(sql) or suggest_restock(period)
+            A->>T: data tool call
+            T->>T: SqlGuard: one SELECT on ai_read views, LIMIT n+1
+            T->>DB: read-only txn scoped by smartledger.shop_id
+            T-->>A: JSON rows or Error[CODE] for the model to retry
+        else suggest_screen(screen)
+            A->>T: screen tool call
+            T-->>A: screen as metadata, no database read
+        end
     end
     A->>G: OutputGuardrail: retry empty or leaking answers
     A->>A: append an actions block for up to 2 suggest_screen calls
