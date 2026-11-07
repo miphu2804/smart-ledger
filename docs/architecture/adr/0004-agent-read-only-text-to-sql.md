@@ -1,11 +1,3 @@
----
-type: Architecture Decision
-title: "ADR-0004: The agent reads shop data through model-written, read-only SQL"
-description: "Accepted: the agent reads shop data through model-written, read-only SQL."
-owner: not assigned
-status: stable
-author: miphu2804
----
 # ADR-0004: The agent reads shop data through model-written, read-only SQL
 
 - **Status:** Accepted, recorded after the fact; merged in #77 on 2026-10-02

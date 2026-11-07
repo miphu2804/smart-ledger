@@ -1,12 +1,3 @@
----
-type: Design Proposal
-title: "Mobile UI style proposal and migration plan"
-description: "Visual direction and migration steps for the mobile app, with implementation checks."
-owner: Product owner
-status: draft
-generated: { by: human:miphu2804, at: 2026-11-06T22:18:48+07:00 }
-stale_after: 2027-01-05T22:18:48+07:00
----
 # Mobile UI style proposal and migration plan
 
 **Status:** visual decision for the `feat/mobile-minimal-ui` branch, dated 2026-09-24; this is not an approved production brand identity. This document only directs the `OWNER` interface; product requirements and acceptance criteria remain in the [BRD](../product/business-requirements.md) and the [PRD](../product/product-requirements.md).

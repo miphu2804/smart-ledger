@@ -1,12 +1,3 @@
----
-type: Reference
-title: "User flows"
-description: "Technical map of the mobile screen flows, generated from Expo Router calls and linked to source files and product requirements."
-owner: Product owner
-author: orei1i
-status: stable
-stale_after: 2027-01-03T18:40:27+07:00
----
 # User flows
 
 This directory contains a generated map of the mobile screen flows. It is a navigation aid, not the source of runtime behavior: route code under `frontend/mobile/app`, shared logic under `frontend/mobile/src`, and the product requirements in [`../product-requirements.md`](../product-requirements.md) remain authoritative.

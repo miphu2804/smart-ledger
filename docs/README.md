@@ -1,27 +1,18 @@
----
-type: Guide
-title: "SmartLedger documentation"
-description: "Reading paths by task, source-of-truth rules and which document to update for each kind of change."
-owner: Technical owner
-author: miphu2804
-status: stable
-stale_after: 2027-01-05T22:20:06+07:00
----
 # SmartLedger documentation
 
 SmartLedger runs in production. These documents define scope and contracts; they do not certify that every checked-in capability is enabled, deployed or accepted. EXE201 MVP names a course delivery scope and acceptance milestone, not an undeployed prototype.
 
 ## How to read the docs
 
-Use the [bundle index](index.md) for immediate documentation domains, then each domain's local index or guide for its children.
+Use the [bundle index](../.okf/docs/index.md) for immediate documentation domains, then each domain's index or guide for its children.
 
 | Task | Start here |
 |---|---|
-| Understand product scope or acceptance | [Product requirements](product/index.md) |
-| Understand implementation, data or decisions | [Architecture](architecture/index.md) |
+| Understand product scope or acceptance | [Product requirements](../.okf/docs/product/index.md) |
+| Understand implementation, data or decisions | [Architecture](../.okf/docs/architecture/index.md) |
 | Build or call an endpoint | [API contracts](contracts/api-contracts.md) |
-| Set up, test, deploy or operate | [Development and operations](development/index.md) |
-| Work on mobile UI | [Design](design/index.md) |
+| Set up, test, deploy or operate | [Development and operations](../.okf/docs/development/index.md) |
+| Work on mobile UI | [Design](../.okf/docs/design/index.md) |
 | Prepare public screenshots | [Marketing captures](marketing/README.md) |
 
 ### Target versus implemented
@@ -35,12 +26,13 @@ Use the [bundle index](index.md) for immediate documentation domains, then each 
 ### Conventions
 
 - English is the default for engineering documentation, READMEs, indexes, architecture, ADRs, contracts, operations, agent instructions and code comments. Vietnamese is reserved for business/product requirements, scope, acceptance and related product decisions/audits. Apply this by purpose, not directory: [the technical userflow guide](product/userflow/README.md) is English. Preserve exact Vietnamese UI copy, legal quotations and user-facing examples; identifiers stay unchanged.
-- Use [Open Knowledge Format v0.2](https://github.com/GoogleCloudPlatform/open-knowledge-format/blob/main/SPEC.md). Only `type` is required for concept frontmatter by OKF; our maintained guides also keep useful `title`, `description`, `owner` and `status`. Use a plain `author: <GitHub login>` for the person who wrote the document; keep that login when someone else edits it later. Git history records the last editor, and `owner` names the accountable role, so neither replaces `author`. Do not rewrite untouched documents just to normalize metadata or erase genuine machine provenance.
-- `generated` is optional and normally omitted for hand-authored pages. If retained for provenance, use the standard actor notation (for example `human:<id>`), not an unprefixed person's name. Git history records edits; do not manufacture `generated.at` timestamps.
-- Keep existing freshness evidence unless facts have been checked. Refresh `stale_after` only after a factual review, not a formatting, translation or navigation change; record the source revision and verification boundary in the text where useful. New living guides may use a review date 60 days after a factual audit, in Vietnam time (`+07:00`). ADRs preserve decision dates and need no expiry.
-- `index.md` is optional under OKF and has no frontmatter, except optional `okf_version: "0.2"` at the bundle root. Keep useful local indexes: list immediate documents and immediate subdirectory entry points only, as `* [Title](relative/path) - description`; match a document's frontmatter title and description. Do not recursively catalog all repository leaves. A tiny section need not gain an index solely for ceremony.
+- Human documents carry no frontmatter. Their metadata follows [Open Knowledge Format v0.2](https://github.com/GoogleCloudPlatform/open-knowledge-format/blob/main/SPEC.md) and lives in the `.okf/` bundle at the repository root, where `.okf/docs/product/business-requirements.md` describes `docs/product/business-requirements.md`. Edit the document, not its concept, except for the fields below.
+- A concept requires `type` and keeps `title`, `description`, `owner` and `status`, a `resource` pointing to the document, and a plain `author: <GitHub login>` for the person who wrote it; keep that login when someone else edits the document later. `generated` is optional and normally omitted for hand-authored pages; if retained for provenance, use the standard actor notation (for example `human:<id>`). Git history records edits, so do not manufacture `generated.at` timestamps.
+- After adding, renaming or retitling a document, run `python3 scripts/docs/okf_sync.py`: it sets each `title` from the document's first heading, creates a stub concept for a new document and regenerates the indexes. Replace the `description: TODO` of a new stub, then run `python3 scripts/docs/okf_sync.py --check` before pushing; CI runs the same check, which also reports frontmatter in a human document and broken relative links.
+- Keep existing freshness evidence (`stale_after`) unless facts have been checked; refresh it only after a factual review, not a formatting, translation or navigation change. New living guides may use a review date 60 days after a factual audit, in Vietnam time (`+07:00`). ADRs preserve decision dates and need no expiry.
+- The `index.md` files in `.okf/` are generated, have no frontmatter except `okf_version: "0.2"` at the bundle root, and list `* [Title](relative/path) - description`; do not edit them by hand. Human navigation is this README and the section READMEs.
 - A README explains purpose, ownership and how to use a section; an index is a short local navigation list. Service READMEs remain independently useful for setup and tests, linking deeper verification and rollout material rather than repeating it.
-- These conventions also apply to maintained service guides and operational docs outside `docs/`, except that a `README.md` outside `docs/` carries no frontmatter: GitHub shows it as the folder's front page, and its first heading and paragraph serve as title and description; find them from the relevant service or [development entry point](development/index.md), not a second global catalog. Agent policies, progress/blocker logs and PR templates have their own formats.
+- These conventions also apply to maintained service guides and operational docs outside `docs/`, whose concepts mirror their path under `.okf/`, except that a `README.md` outside `docs/` has no concept and carries no frontmatter: GitHub shows it as the folder's front page, and its first heading and paragraph serve as title and description; find them from the relevant service or [development entry point](../.okf/docs/development/index.md), not a second global catalog. Agent policies, progress/blocker logs and PR templates have their own formats.
 - Requirement IDs are stable and never reused: `BO-*`, `BR-*`, `FR-*`, `NFR-*`, `AC-*`, `OQ-*`; invoice items use `-INV-`. Keep `BO/BR → FR/NFR → AC` traceability.
 - [PROGRESS](../PROGRESS.md) is a newest-first log (at most 200 lines); [BLOCKERS](../BLOCKERS.md) records unresolved dependencies and clearly labelled resolved history. Neither defines scope.
 
@@ -61,7 +53,7 @@ Environment/domain mappings, infrastructure topology, credential inventories and
 | Endpoint, request or response | [API contracts](contracts/api-contracts.md), including endpoint status |
 | Database schema | [ERD description](architecture/erd-description.md) and [`erd.dbml`](architecture/diagrams/src/erd.dbml) |
 | Implementation status | [Technical design §1](architecture/technical-design.md#1-scope); link endpoint semantics to the contract |
-| Architectural decision | An ADR in [architecture decisions](architecture/adr/index.md) |
+| Architectural decision | An ADR in [architecture decisions](../.okf/docs/architecture/adr/index.md) |
 | Service commands, configuration, tests or feature rollout | Affected service README and its linked service-owned guide; link, do not duplicate |
 | Compose, migrations, release or cross-service setup | [Local development](development/local-development.md) and [CI/CD](development/ci-cd.md) |
 

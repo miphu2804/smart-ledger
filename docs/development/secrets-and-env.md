@@ -1,12 +1,3 @@
----
-type: Runbook
-title: "Secrets and env files"
-description: "Safe local secret handling and the boundary between repository configuration and private operations."
-owner: Technical owner
-status: stable
-author: miphu2804
-stale_after: 2027-01-02T14:52:23+07:00
----
 # Secrets and env files
 
 Environment/domain mappings, credential inventories, access grants and rotation/recovery procedures belong to the private operations knowledge base. Do not copy them into repository documentation or pull requests.

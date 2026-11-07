@@ -1,11 +1,3 @@
----
-type: Architecture Decision
-title: "ADR-0007: The code sandbox runs model-written programs, not data tools"
-description: "Accepted: the code sandbox runs model-written programs but holds no data tools."
-owner: not assigned
-status: stable
-author: miphu2804
----
 # ADR-0007: The code sandbox runs model-written programs, not data tools
 
 - **Status:** Accepted, recorded after the fact; sandbox added in #317 on 2026-10-19, data tools taken out in #331 on 2026-10-20

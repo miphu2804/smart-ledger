@@ -1,12 +1,3 @@
----
-type: Walkthrough
-title: "Service walkthrough"
-description: "Reading notes with diagrams of Core and AI service flows; explains code, does not decide behavior."
-owner: Technical owner
-status: stable
-generated: { by: human:miphu2804, at: 2026-11-06T22:18:48+07:00 }
-stale_after: 2027-01-05T22:18:48+07:00
----
 # Service walkthrough
 
 Current source reconciliation: `staging` revision `a2766ee3a37e23c0f03fd43383b608c1b2fac898` for the request/service maps, idempotency coverage and AI provider wiring. No live environment or integrated acceptance was verified.

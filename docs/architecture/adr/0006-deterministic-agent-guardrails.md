@@ -1,11 +1,3 @@
----
-type: Architecture Decision
-title: "ADR-0006: Agent guardrails are deterministic code, not model checks"
-description: "Accepted: agent guardrails are deterministic code, not model checks."
-owner: not assigned
-status: stable
-author: miphu2804
----
 # ADR-0006: Agent guardrails are deterministic code, not model checks
 
 - **Status:** Accepted, recorded after the fact; decided in #77 on 2026-10-02, moved to Pydantic AI Harness in #195 on 2026-10-14

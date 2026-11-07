@@ -1,12 +1,3 @@
----
-type: Guide
-title: "AI runtime reference"
-description: "Configuration defaults, model routing, trace fields, database setup and AI operational checks."
-owner: AI owner
-author: miphu2804
-status: stable
-stale_after: 2027-01-05T22:18:48+07:00
----
 # AI runtime reference
 
 This AI-owned reference contains implementation details and operational settings; start with the [architecture overview](architecture.md) for responsibilities and trust boundaries. Source review: `staging` commit `a2766ee3a37e23c0f03fd43383b608c1b2fac898`; measured numbers retain their original evaluation context and were not remeasured. An implemented code path, a default-off flag, a configured environment and an accepted or deployed feature are different states; this page does not infer deployment or product acceptance.

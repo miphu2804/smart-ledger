@@ -1,11 +1,3 @@
----
-type: Architecture Decision
-title: "ADR-0005: Send a fixed window of chat history, never a summary"
-description: "Accepted: send a fixed window of chat history to the model, never a summary."
-owner: not assigned
-status: stable
-author: miphu2804
----
 # ADR-0005: Send a fixed window of chat history, never a summary
 
 - **Status:** Accepted, recorded after the fact; summary removed in #145 on 2026-10-09, window set in #260 on 2026-10-16

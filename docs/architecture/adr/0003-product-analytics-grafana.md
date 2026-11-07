@@ -1,11 +1,3 @@
----
-type: Architecture Decision
-title: "ADR-0003: Product analytics in Grafana, read from Core and AI data"
-description: "Proposed: product usage metrics in Grafana, read from Core and AI data through a read-only role."
-owner: not assigned
-status: draft
-author: miphu2804
----
 # ADR-0003: Product analytics in Grafana, read from Core and AI data
 
 - **Status:** Proposed. The P1 datasource, dashboard and playbook are already in the repo (`deploy/monitoring/`), but are not enabled in any environment: they are still waiting for the database owner to create the `grafana_reader` role and load `GRAFANA_PG_*` into Dopbase. There is no migration or Core/AI code; it is not product behavior until the product owner and the operations owner approve.

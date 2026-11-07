@@ -1,11 +1,3 @@
----
-type: Architecture Decision
-title: "ADR-0002: Agent long-term memory modeled on TencentDB for PostgreSQL, built on Supabase pgvector"
-description: "Accepted: pgvector design for agent long-term memory; option A is approved by the product owner and enabled in production through `AGENT_MEMORY_ENABLED`."
-owner: not assigned
-status: stable
-author: miphu2804
----
 # ADR-0002: Agent long-term memory modeled on TencentDB for PostgreSQL, built on Supabase pgvector
 
 - **Status:** Accepted on 2026-11-07. The product owner approved agent long-term memory, option A as implemented in `backend/ai/src/memory`, and it is deployed and enabled in production. The requirement is [`FR-040`](../../product/product-requirements.md#4-danh-mục-yêu-cầu-chức-năng--áp-dụng-ưu-tiên-exe201-ở-mục-11) with acceptance criteria [`AC-122`–`AC-126`](../../product/product-requirements.md#ghi-nhớ-dài-hạn-fr-040--đã-duyệt-ngày-2026-11-07); integrated acceptance (QA sign-off) of those criteria is still pending. The [Contract](../../contracts/api-contracts.md) describes `memory/settings`, `memory/items` and the SSE event `memory`. `AGENT_MEMORY_ENABLED` still defaults to `false` in code (`backend/ai/src/app_config.py`); production sets it in the environment. See the [AI memory guide](../../../backend/ai/docs/architecture.md#long-term-memory-and-onnx-embeddings); where the flag is off, chat behavior does not change

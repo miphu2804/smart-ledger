@@ -1,12 +1,3 @@
----
-type: Reference
-title: "AI statecharts"
-description: "TLC-checked statecharts of the agent chat turn and the agent memory, with the span or log each state leaves."
-owner: Technical owner
-status: stable
-generated: { by: human:miphu2804, at: 2026-11-05T10:09:47+07:00 }
-stale_after: 2027-01-04T10:09:47+07:00
----
 # AI statecharts
 
 Three statecharts trace how one chat turn and the agent memory move between states, so a trace in HoneyHive or a log line can be placed on a chart while debugging. Each chart is drawn from a small TLA+ model of the AI code under `backend/ai/src/`, and TLC checks the rules listed under each chart on every state of that model. The charts describe the code on `staging` as of 2026-11-05; a model is not a test of the code, so a change to the flow needs the model and the chart changed with it.
