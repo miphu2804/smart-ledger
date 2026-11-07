@@ -43,5 +43,5 @@ A stopped turn answers `422` with a code and stores nothing. The service holds n
 ## References
 
 - PRs #77, #145 and #195.
-- [AI README, Guardrails](../../../backend/ai/README.md#guardrails) for the current limits and codes.
+- [AI README, Guardrails](../../../backend/ai/docs/architecture.md#guardrails-and-answer-safety) for the current limits and codes.
 - [ADR-0004](0004-agent-read-only-text-to-sql.md) for the database-side bounds on the agent's queries.

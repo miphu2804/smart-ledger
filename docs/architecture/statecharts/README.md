@@ -65,4 +65,4 @@ statechart agent-turn/AgentTurn.tla --config agent-turn/AgentTurn.cfg --view age
 node render.mjs /tmp/agent-turn/chart.mmd agent-turn/agent-turn.svg
 ```
 
-`render.mjs` imports `pele`, so copy it and `theme.css` next to an `npm install pele@1.9.0` outside the repository and run it there. The theme follows the viewer's light or dark setting.
+`render.mjs` imports `pele`, so copy it and `theme.css` next to an `npm install pele@1.9.0` outside the repository and run it there. The theme is light only, so each chart stays on a white background in any viewer.

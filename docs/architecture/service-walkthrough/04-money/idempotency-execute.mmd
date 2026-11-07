@@ -1,0 +1,27 @@
+flowchart LR
+    K{"key valid<br/>(≤ 255)?"} -->|yes| H["hash = sha256(request)"] --> R{"reserve(shop, user,<br/>op, key, hash, ttl 30d)"}
+    K -->|no| X0["INVALID_IDEMPOTENCY_KEY"]
+
+    subgraph First["First Request"]
+        RUN["action.get()"] --> C["complete()<br/>store response JSON"] --> OUT(["response"])
+    end
+
+    subgraph Retry["Retry"]
+        M{"same user<br/>and hash?"} -->|yes| EXP{"not expired?"} -->|yes| REPLAY(["stored response"])
+    end
+
+    R -->|new| RUN
+    R -->|exists| M
+    M -->|no| X1["IDEMPOTENCY_KEY_CONFLICT"]
+    EXP -->|no| X2["IDEMPOTENCY_KEY_EXPIRED"]
+    classDef default fill:#eef4ff,stroke:#5b8def,color:#1f2d3d
+    classDef decision fill:#fff4cc,stroke:#d4a017,color:#5c4400
+    classDef error fill:#fde2e1,stroke:#d9534f,color:#8a1f1b
+    classDef terminal fill:#dff5e3,stroke:#3c9d5d,color:#1e5631
+    classDef store fill:#efe6ff,stroke:#8a63d2,color:#3d2a6b
+    classDef shared fill:#ffe9d6,stroke:#e07b24,color:#6b3500
+    class K,R,M,EXP decision
+    class X0,X1,X2 error
+    class OUT,REPLAY terminal
+    style First fill:#f3f8ff,stroke:#9dbcf5
+    style Retry fill:#f4fbf2,stroke:#a8d5a2

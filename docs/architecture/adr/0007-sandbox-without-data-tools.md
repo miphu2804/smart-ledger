@@ -35,4 +35,4 @@
 ## References
 
 - PRs #317 and #331.
-- [AI README, Calculation and sandbox](../../../backend/ai/README.md#calculation-and-sandbox) for the current limits.
+- [AI README, Calculation and sandbox](../../../backend/ai/docs/architecture.md#calculation-and-sandbox) for the current limits.

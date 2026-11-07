@@ -7,7 +7,7 @@ name: Sync HoneyHive evaluators
 on:
   push:
     branches: [main]
-    paths: [".honeyhive/evaluators/**", ".honeyhive/state.json", "sync-evaluators.sh"]
+    paths: [".honeyhive/evaluators/**", ".honeyhive/state.json", "scripts/honeyhive/sync-evaluators.sh"]
 
 permissions:
   contents: read
@@ -24,10 +24,18 @@ jobs:
   sync:
     needs: select-runner
     runs-on: ${{ fromJSON(needs.select-runner.outputs.runs_on) }}
+    # Holds the runner token of ai/production, which reads the HoneyHive keys from Dopbase.
+    environment: backend-production
     concurrency:
       group: honeyhive-sync
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: ./.github/actions/setup-dopbase
+      - name: Load the HoneyHive keys from Dopbase
+        env:
+          DOPBASE_URL: ${{ vars.DOPBASE_URL }}
+          DOPBASE_TOKEN: ${{ secrets.DOPBASE_TOKEN_AI }}
+        run: scripts/ci/load-dopbase.sh ai/production '(HH_API_KEY|HH_API_URL)'
       # Pinned so runs are reproducible. HoneyHive's installer is Linux-only, so a macOS self-hosted machine uses
       # its Homebrew install and only warns when the version differs. yq v4 and jq come with the Linux image and
       # with Homebrew on the self-hosted machines.
@@ -35,11 +43,8 @@ jobs:
         run: scripts/ci/install-honeyhive.sh
       - name: Check every evaluator has a committed ID
         # An evaluator created here gets an ID this run cannot commit, so every later run would create it again.
-        # Create new evaluators locally with sync-evaluators.sh and commit state.json before merging.
+        # Create new evaluators locally with scripts/honeyhive/sync-evaluators.sh and commit state.json before merging.
         run: scripts/ci/check-evaluator-ids.sh
       - name: Apply evaluators
-        env:
-          # The CLI's names for the AI service's HH_API_KEY and HH_API_URL; the GitHub names match Dopbase ai/production.
-          HH_PROJECT_API_KEY: ${{ secrets.HH_API_KEY }}
-          HH_DATA_PLANE_URL: ${{ vars.HH_API_URL }}
-        run: bash sync-evaluators.sh
+        # The CLI's names for the AI service's HH_API_KEY and HH_API_URL, loaded from Dopbase ai/production above.
+        run: HH_PROJECT_API_KEY="$HH_API_KEY" HH_DATA_PLANE_URL="$HH_API_URL" bash scripts/honeyhive/sync-evaluators.sh

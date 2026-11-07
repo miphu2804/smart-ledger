@@ -1,0 +1,66 @@
+flowchart LR
+    subgraph API["API Space"]
+        MAIN["main.py lifespan<br/>pools, model, AgentService<br/>APIRouter /internal/v1 + X-Internal-Token"]
+        ROUTER["agent router<br/>/internal/v1/agent<br/>chat, chat/stream, conversations, memory/settings, memory/items"]
+    end
+
+    subgraph Agent["Agent Space"]
+        SVC["AgentService<br/>chat() / stream_chat()"]
+        GUARD["GuardrailService<br/>input check + redaction<br/>call, token, time limits<br/>answer screen"]
+        MODEL["model gateway<br/>LLMFactory.create_model()<br/>FallbackModel when a MODEL_FALLBACKS entry builds"]
+        TOOLS["tools<br/>query_shop_data, suggest_restock<br/>suggest_screen (always)<br/>calculate, run_code"]
+        SANDBOX["Monty sandbox<br/>run_code only, calls no tool"]
+        RESTOCK["RestockService<br/>suggest(shop_id, period)"]
+        MEM["AgentMemoryService<br/>with_memories() / remember()<br/>only when AGENT_MEMORY_ENABLED"]
+        EMB["Embedder<br/>local ONNX (default)<br/>sentence-transformers or Workers AI"]
+    end
+
+    subgraph SQL["SQL Space"]
+        EXEC["ShopDataRepository.run()<br/>pooled reader"]
+        SG["SqlGuard<br/>validate_and_wrap()"]
+    end
+
+    subgraph Store["Storage"]
+        REPO["AgentConversationRepository<br/>pooled chat-history client"]
+        PG[("chat history")]
+        VIEWS[("ai_read views")]
+        MREPO["AgentMemoryRepository<br/>pooled chat-history client"]
+        MEMDB[("agent_memories<br/>agent_memory_settings")]
+    end
+
+    subgraph Obs["Observability"]
+        LF["HoneyHive<br/>only when HH_API_KEY is set"]
+    end
+
+    MAIN -->|"include_router"| ROUTER
+    ROUTER -->|"chat, chat/stream"| SVC
+    ROUTER -->|"list / get / rename / delete"| REPO
+    SVC -->|"before / during / after run"| GUARD
+    SVC -->|"model calls"| MODEL
+    SVC -->|"tool calls"| TOOLS
+    SVC -->|"recent_messages / save_exchange"| REPO
+    SVC -.->|"session + spans, redacted question"| LF
+    TOOLS -->|"query_shop_data(sql)"| EXEC
+    TOOLS -->|"suggest_restock(period)"| RESTOCK -->|"fixed query"| EXEC
+    TOOLS -->|"run_code(code)"| SANDBOX
+    EXEC --> SG
+    EXEC -->|"shop-scoped read-only txn"| VIEWS
+    REPO -->|"postgres pool"| PG
+    ROUTER -->|"memory/settings, memory/items"| MEM
+    SVC -.->|"recall before run, remember after save"| MEM
+    MEM -->|"embed question and facts"| EMB
+    MEM -->|"extract and merge facts"| MODEL
+    MEM --> MREPO -->|"postgres pool, shop and user scoped"| MEMDB
+    classDef default fill:#eef4ff,stroke:#5b8def,color:#1f2d3d
+    classDef decision fill:#fff4cc,stroke:#d4a017,color:#5c4400
+    classDef error fill:#fde2e1,stroke:#d9534f,color:#8a1f1b
+    classDef terminal fill:#dff5e3,stroke:#3c9d5d,color:#1e5631
+    classDef store fill:#efe6ff,stroke:#8a63d2,color:#3d2a6b
+    classDef shared fill:#ffe9d6,stroke:#e07b24,color:#6b3500
+    class PG,VIEWS,MEMDB store
+    class MODEL,LF,EMB shared
+    style API fill:#f3f8ff,stroke:#9dbcf5
+    style Agent fill:#f4fbf2,stroke:#a8d5a2
+    style SQL fill:#fff9ee,stroke:#f0c987
+    style Store fill:#faf3ff,stroke:#cfa8f0
+    style Obs fill:#fdf3f8,stroke:#e0a3c4

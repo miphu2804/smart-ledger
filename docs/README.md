@@ -1,81 +1,62 @@
 # SmartLedger documentation
 
-The documents in this directory are the source of truth for project scope and system contracts. Service READMEs explain how to run each part of the code.
+SmartLedger runs in production. These documents define scope and contracts; they do not certify that every checked-in capability is enabled, deployed or accepted. EXE201 MVP names a course delivery scope and acceptance milestone, not an undeployed prototype.
 
 ## How to read the docs
 
-Start with the path that matches your task; each step links to the next level of detail.
+Use the [bundle index](../.okf/docs/index.md) for immediate documentation domains, then each domain's index or guide for its children.
 
-| Task | Read in this order |
+| Task | Start here |
 |---|---|
-| Integrate independent stock decreases | [CORE-021 contract](contracts/api-contracts.md#điều-chỉnh-giảm-tồn-core-021) → [FR-038 / AC-111–115](product/product-requirements.md#điều-chỉnh-giảm-tồn-core-021--đã-duyệt-ngày-2026-11-02) → [Core handoff](../backend/core/docs/stock-adjustments.md); no migration, separate from stock-in, FE/staging acceptance pending |
-| Integrate shared operation quotas | [API contract](contracts/api-contracts.md#giới-hạn-thao-tác-core-019) → [Core transactions and V20 rollout](../backend/core/docs/user-rate-limits.md); default-off, commit-based, cross-instance, no shared-environment activation implied |
-| New to the project | [Project overview](product/project-overview.md) → [PRD §3 main flow](product/product-requirements.md#3-luồng-mvp-chính) → [Technical design §1](architecture/technical-design.md#1-phạm-vi) for what is built today → [Architecture diagram](architecture/diagrams/images/architecture.svg) for the MVP target |
-| Change scope or requirements | [BRD](product/business-requirements.md) → [PRD](product/product-requirements.md) → acceptance criteria in PRD §8; keep `BO/BR → FR/NFR → AC` traceability |
-| Build or call an API | [API contracts](contracts/api-contracts.md) → [Technical design §3–5](architecture/technical-design.md#3-luồng-chính) → [ERD description](architecture/erd-description.md) and [`erd.dbml`](architecture/diagrams/src/erd.dbml); try requests with the [Bruno collection](../scripts/bruno/README.md) |
-| Integrate Zalo web login/link | [Zalo contract](contracts/api-contracts.md#zalo-core-015) → [implementation status](architecture/technical-design.md#zalo-core-015) → [V17 rollout/recovery](architecture/erd-description.md#zalo-core-015-v17) → [Core setup](../backend/core/README.md#zalo-authentication-core-015-local-backend-implementation) |
-| Integrate Zalo Android login/link | [Native contract](contracts/api-contracts.md#zalo-android-core-016) → [Core/V18 status](architecture/technical-design.md#zalo-android-core-016) → [V18 migration/recovery](architecture/erd-description.md#zalo-android-core-016-v18) → [staging activation after merge](../backend/core/docs/zalo-android-preparation.md#staging-activation-after-merge); runtime defaults off, staging configuration is prepared but not applied, APK/production acceptance remains separate |
-| Integrate admin dashboard charts | [Growth API contract](contracts/api-contracts.md#chuỗi-tạo-mới-theo-ngày--admin-growth) → [implementation status](architecture/technical-design.md#tổng-quan-admin-theo-ngày--admin-growth) → [Core test handoff](../backend/core/docs/admin-dashboard-growth.md); no migration, current statuses stay separate from daily creation counts, FE/staging acceptance pending |
-| Integrate DAU/MAU monitoring | [FR-036 / acceptance criteria](product/product-requirements.md#hoạt-động-người-dùng-core-018--đã-duyệt-ngày-2026-10-29) → [V19 schema](architecture/erd-description.md#core-018-v19) → [Core rollout and read-only Grafana SQL](../backend/core/docs/user-daily-activity.md); defaults off, no shared-DB migration or Grafana provisioning implied |
-| Understand a Core or AI code path | [Service walkthrough](architecture/service-walkthrough/README.md); it explains code, the documents above decide behavior |
-| Audit Core documentation against code | [Core module map](architecture/technical-design.md#bản-đồ-đối-chiếu-core--2026-10-26) → [API contracts](contracts/api-contracts.md) → [ERD](architecture/erd-description.md) → [diagram scopes](architecture/diagrams/README.md#reading-scope--core-audit-2026-10-26); current code, target architecture, dated snapshots and mock captures have different evidential roles |
-| Run or deploy | [Local development](development/local-development.md), [Core](../backend/core/README.md), [AI](../backend/ai/README.md), [Mobile](../frontend/mobile/README.md), [Web](../frontend/web/README.md), [CONTRIBUTING](../CONTRIBUTING.md), [`development/`](development/) |
-| Work on mobile UI | [`design/`](design/) for visual direction and wording, then the mobile README |
+| Understand product scope or acceptance | [Product requirements](../.okf/docs/product/index.md) |
+| Understand implementation, data or decisions | [Architecture](../.okf/docs/architecture/index.md) |
+| Build or call an endpoint | [API contracts](contracts/api-contracts.md) |
+| Set up, test, deploy or operate | [Development and operations](../.okf/docs/development/index.md) |
+| Work on mobile UI | [Design](../.okf/docs/design/index.md) |
+| Prepare public screenshots | [Marketing captures](marketing/README.md) |
 
 ### Target versus implemented
 
-- BRD, PRD and the architecture diagram describe the **MVP target**. A requirement or diagram box does not mean the code exists.
-- What is implemented today is recorded in one place: [Technical design §1](architecture/technical-design.md#1-phạm-vi). [API contracts](contracts/api-contracts.md) marks each endpoint as implemented or target. Other documents link there instead of restating status.
-- Code on `staging` is the evidence for current behavior. When a document disagrees with it, fix the document in the same pull request. When code disagrees with the PRD, treat it as a bug or a requirement change and update the PRD and its acceptance criteria.
-- Implemented is not accepted: a feature is done only when its `AC-*` pass on the integrated system.
+- **Implemented** means present in code, with the evidence and limits in [technical design §1](architecture/technical-design.md#1-scope). [API contracts](contracts/api-contracts.md) owns endpoint status and consumer behavior.
+- **Enabled** means runtime configuration permits a capability; **deployed** means a particular build reached an environment. Neither follows from an implementation or a default in source. Live configuration and deployment were not verified by this documentation cleanup.
+- **Accepted** means the relevant `AC-*` passed on the integrated system. A local test, mock capture or deployment is not acceptance evidence.
+- BRD, PRD and target diagrams describe intended scope, not a deployed-feature checklist. Preserve requirement IDs and historical decisions; a documentation cleanup cannot approve requirements or change their status.
+- The EXE201 delivery goal is a working core demo, understandable UX and real feedback; see [course validation](product/mvp-demo-validation.md). Keep existing capabilities and safety controls; optional integrations are not demo prerequisites.
 
 ### Conventions
 
-- Keep each document in its current language: most of `docs/` and the frontend READMEs are Vietnamese; the root and backend READMEs and the ERD description are English. Code identifiers stay as written in code.
-- Requirement documents start with a metadata table (`Trạng thái`, `Chủ sở hữu`, `Cập nhật lần cuối`).
-- IDs are stable and never reused: `BO-*`, `BR-*`, `FR-*`, `NFR-*`, `AC-*`, `OQ-*`; invoice items use the `-INV-` infix.
-- [`PROGRESS.md`](../PROGRESS.md) is a newest-first log of recent work (200 lines or fewer, older entries in Git history) and [`BLOCKERS.md`](../BLOCKERS.md) lists open blockers; neither defines scope.
+- Language follows the [repository language policy](../AGENTS.md#language): Vietnamese only for business and product documents in `docs/product/`, English for everything else, including every file and directory name. [The technical userflow guide](product/userflow/README.md) is English. Preserve exact Vietnamese UI copy, legal quotations and user-facing examples; identifiers stay unchanged.
+- Human documents carry no frontmatter. Their metadata follows [Open Knowledge Format v0.2](https://github.com/GoogleCloudPlatform/open-knowledge-format/blob/main/SPEC.md) and lives in the `.okf/` bundle at the repository root, where `.okf/docs/product/business-requirements.md` describes `docs/product/business-requirements.md`. Edit the document, not its concept, except for the fields below.
+- A concept requires `type` and keeps `title`, `description`, `owner` and `status`, a `resource` pointing to the document, and a plain `author: <GitHub login>` for the person who wrote it; keep that login when someone else edits the document later. `generated` is optional and normally omitted for hand-authored pages; if retained for provenance, use the standard actor notation (for example `human:<id>`). Git history records edits, so do not manufacture `generated.at` timestamps.
+- After adding, renaming or retitling a document, run `python3 scripts/docs/okf_sync.py`: it sets each `title` from the document's first heading, creates a stub concept for a new document and regenerates the indexes. Replace the `description: TODO` of a new stub, then run `python3 scripts/docs/okf_sync.py --check` before pushing; CI runs the same check, which also reports frontmatter in a human document and broken relative links.
+- Keep existing freshness evidence (`stale_after`) unless facts have been checked; refresh it only after a factual review, not a formatting, translation or navigation change. New living guides may use a review date 60 days after a factual audit, in Vietnam time (`+07:00`). ADRs preserve decision dates and need no expiry.
+- The `index.md` files in `.okf/` are generated, have no frontmatter except `okf_version: "0.2"` at the bundle root, and list `* [Title](relative/path) - description`; do not edit them by hand. Human navigation is this README and the section READMEs.
+- A README explains purpose, ownership and how to use a section; an index is a short local navigation list. Service READMEs remain independently useful for setup and tests, linking deeper verification and rollout material rather than repeating it.
+- These conventions also apply to maintained service guides and operational docs outside `docs/`, whose concepts mirror their path under `.okf/`, except that a `README.md` outside `docs/` has no concept and carries no frontmatter: GitHub shows it as the folder's front page, and its first heading and paragraph serve as title and description; find them from the relevant service or [development entry point](../.okf/docs/development/index.md), not a second global catalog. Agent policies, progress/blocker logs and PR templates have their own formats.
+- Requirement IDs are stable and never reused: `BO-*`, `BR-*`, `FR-*`, `NFR-*`, `AC-*`, `OQ-*`; invoice items use `-INV-`. Keep `BO/BR → FR/NFR → AC` traceability.
+- [PROGRESS](../PROGRESS.md) is a newest-first log (at most 200 lines); [BLOCKERS](../BLOCKERS.md) records unresolved dependencies and clearly labelled resolved history. Neither defines scope.
 
 ## Document map
 
-| Document | Owns |
-|---|---|
-| [Project overview](product/project-overview.md) | Product position, users, MVP boundary |
-| [Business requirements](product/business-requirements.md) | Outcomes, business rules, approvals |
-| [Google Play Data safety](product/google-play-data-safety.md) | Answers for the Play Console form, matched to the public policy page |
-| [Product requirements](product/product-requirements.md) | Observable behavior, `FR-*`, `NFR-*`, `AC-*` |
-| [User flows](product/userflow/README.md) | Screen-to-screen map of the mobile app with staging screenshots, linked to source files and `FR-*` codes |
-| [Technical design](architecture/technical-design.md) | Implementation status (§1), MVP components, data, flows, verification |
-| [API contracts](contracts/api-contracts.md) | FE ↔ Core and Core ↔ AI contracts, per-endpoint status |
-| [ERD description](architecture/erd-description.md) and [`erd.dbml`](architecture/diagrams/src/erd.dbml) | Database entities, relationships, data flows and migration alignment |
-| [ADR-0001: pgvector vector store](architecture/adr/0001-vector-store-pgvector.md) | Accepted: embeddings in Supabase PostgreSQL instead of Qdrant |
-| [ADR-0002: agent long-term memory](architecture/adr/0002-agent-long-term-memory.md) | Proposed: findings from Tencent's PostgreSQL agent-memory guide and a pgvector design for SmartLedger, with the [diagram](architecture/diagrams/images/agent-memory.svg) (edit [`agent-memory.drawio`](architecture/diagrams/src/agent-memory.drawio) and re-export the SVG); option A is in the AI code behind `AGENT_MEMORY_ENABLED`, off by default, and is not product behavior until the PO approves it |
-| [ADR-0003: product analytics in Grafana](architecture/adr/0003-product-analytics-grafana.md) | Proposed: a read-only PostgreSQL datasource per environment and the SmartLedger product dashboard in the `Product` folder (users, cohort retention, activation, feature adoption, AI and sales), reading `user_daily_activity`, `audit_logs`, business tables, chat tables and AI's Prometheus metrics; no Core change. The repo side is in `deploy/monitoring/`; it needs the `grafana_reader` role and `GRAFANA_PG_*` in Dopbase before it shows data, and login tracking is a P2 Core change |
-| [ADR-0008: Bifrost routing and fallback](architecture/adr/0008-bifrost-owns-routing-and-fallback.md) | Accepted: the AI service picks a model alias, Bifrost owns upstream routing, fallback and request logs without message content |
-| [ADR-0009: end-to-end tracing](architecture/adr/0009-end-to-end-tracing.md) | Accepted: HoneyHive traces each Agent chat turn as one session with the redacted question, tool calls and answer; `InputRedaction` runs before anything reaches a span, and Core correlation needs separate owner approval |
-| [Architecture diagram](architecture/diagrams/src/architecture.mmd) | MVP target system boundary; edit [`architecture.drawio`](architecture/diagrams/src/architecture.drawio) and re-export the [SVG](architecture/diagrams/images/architecture.svg) and [PNG](architecture/diagrams/images/architecture.png) together |
-| [Android APK release diagram](architecture/diagrams/images/apk-release.svg) | Manual release pipeline, release signing, the R2 bucket and the download from the landing page; edit [`apk-release.drawio`](architecture/diagrams/src/apk-release.drawio) and re-export the SVG |
-| [CI/CD and environments diagram](architecture/diagrams/images/ci-cd.svg) | CI/CD, VPS runtime, clients, dev machine, Supabase staging and production; edit [`ci-cd.drawio`](architecture/diagrams/src/ci-cd.drawio) and re-export the SVG; dashed edges are planned |
-| [Service walkthrough](architecture/service-walkthrough/README.md) | Reading notes with diagrams of Core and AI service flows; not a source of truth |
-| [AI statecharts](architecture/statecharts/README.md) | TLC-checked statecharts of the agent chat turn and the agent memory, with the span or log each state leaves, for debugging |
-| [Mobile UI style and migration](design/mobile-ui-style-migration.md) | Visual direction and implementation checks for the mobile app |
-| [Mobile wording review](design/mobile-wording-review.md) | Proposed UI wording, icon and feedback mapping pending product approval |
-| [Local development](development/local-development.md) | Setup, run commands, pre-PR checks, local Compose, the local database and the shared-database migration workflow |
-| [Mobile iOS device release](development/mobile-ios-device-release.md) | Build and install a Release configuration on a connected iPhone |
-| [Secrets and env files](development/secrets-and-env.md) | Env files per environment kept in Dopbase, the env file format, onboarding, changing a secret, adding or removing a person |
-| [CI/CD to the VPS and Vercel](development/ci-cd.md) | Flow from feature branch to the VPS and Vercel, GitHub environments, VPS provisioning and Core CORS origins |
-| [Marketing screenshots](marketing/README.md) | Phone-ratio screenshots of the app per product flow (dashboard, chat, barcode, voice) for marketing; demo data, not a source of truth for behavior |
+Documentation follows business capabilities and accountable owners, not a mechanical mirror of code packages. Core is predominantly layered Java with capability packages; AI groups Python capabilities; Mobile uses Expo Router, not Next.js. This taxonomy does not authorize a code reorganization.
+
+Canonical contracts and implementation evidence stay in `docs/`. Core and AI setup, service-specific tests and rollout runbooks stay beside their services; deployment and cross-service operations stay in `docs/development/`. [Local development](development/local-development.md) links the service guides, [CI/CD](development/ci-cd.md) owns delivery behavior, and [Secrets and env files](development/secrets-and-env.md) owns credential handling. The [AI service guide](../backend/ai/README.md) separates the architecture overview from its detailed runtime reference; do not copy configuration tables or trace schemas into overview pages.
+
+Environment/domain mappings, infrastructure topology, credential inventories and access/rotation procedures belong to the private operations knowledge base, not repository docs or diagram metadata. Keep local setup, logical boundaries and privacy safeguards here; do not remove redaction or external-data-exposure warnings to make a document appear safer.
 
 ## Which document to update
 
-| Change | Update |
+| Change | Canonical owner |
 |---|---|
-| Business scope or rule | BRD, then the PRD rows it hands off to |
-| Product behavior | PRD requirement and its acceptance criteria |
-| Endpoint, request or response | API contracts, including the endpoint status |
-| Database schema | `erd.dbml` and the ERD description |
-| Something becomes implemented | Technical design §1 and the endpoint status in API contracts |
-| Architectural decision | A new ADR in [`architecture/adr/`](architecture/adr/) |
-| Commands, env variables or setup | The README of the affected service; cross-service setup, Compose and migrations in [Local development](development/local-development.md) |
+| Business scope or rule | [BRD](product/business-requirements.md), then the PRD rows it hands off to |
+| Product behavior | [PRD](product/product-requirements.md) and its acceptance criteria |
+| Endpoint, request or response | [API contracts](contracts/api-contracts.md), including endpoint status |
+| Database schema | [ERD description](architecture/erd-description.md) and [`erd.dbml`](architecture/diagrams/src/erd.dbml) |
+| Implementation status | [Technical design §1](architecture/technical-design.md#1-scope); link endpoint semantics to the contract |
+| Architectural decision | An ADR in [architecture decisions](../.okf/docs/architecture/adr/index.md) |
+| Service commands, configuration, tests or feature rollout | Affected service README and its linked service-owned guide; link, do not duplicate |
+| Compose, migrations, release or cross-service setup | [Local development](development/local-development.md) and [CI/CD](development/ci-cd.md) |
 
-Repository branching, review, and deployment rules are defined in [CONTRIBUTING.md](../CONTRIBUTING.md).
+Update the owning document and affected local navigation in the same PR as a code change. Check claims against the exact `staging` revision, even when metadata appears fresh; expired metadata is a review trigger, not proof of incorrect content. When a document and code disagree, fix the document or route a behavior/scope decision through the product requirements; do not silently change the contract.
+
+Repository contribution and release policy is in [CONTRIBUTING](../CONTRIBUTING.md). Root and scoped agent-instruction loading is defined in [AGENTS](../AGENTS.md).

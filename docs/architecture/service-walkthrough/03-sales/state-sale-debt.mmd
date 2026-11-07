@@ -1,0 +1,29 @@
+stateDiagram-v2
+    direction LR
+    state "Sale.saleStatus" as S {
+        direction LR
+        [*] --> SALE_CONFIRMED : fromDraft()
+        SALE_CONFIRMED --> SALE_VOIDED : voidSale()
+    }
+    state "Sale.paymentStatus" as P {
+        direction LR
+        [*] --> PAID : paid == total
+        [*] --> PARTIAL : 0 < paid < total
+        [*] --> DEBT : paid == 0
+        DEBT --> PARTIAL : partial repayment
+        DEBT --> PAID : fully repaid in one payment
+        PARTIAL --> PAID : fully repaid
+    }
+    state "Debt.status" as D {
+        direction LR
+        [*] --> OPEN : open(outstanding > 0)
+        OPEN --> OPEN : partial repay()
+        OPEN --> SETTLED : repay() to 0
+        OPEN --> DEBT_VOIDED : voidRemaining()
+    }
+    classDef open fill:#fff4cc,stroke:#d4a017,color:#5c4400
+    classDef done fill:#dff5e3,stroke:#3c9d5d,color:#1e5631
+    classDef dead fill:#fde2e1,stroke:#d9534f,color:#8a1f1b
+    class DEBT,PARTIAL,OPEN open
+    class SALE_CONFIRMED,PAID,SETTLED done
+    class SALE_VOIDED,DEBT_VOIDED dead

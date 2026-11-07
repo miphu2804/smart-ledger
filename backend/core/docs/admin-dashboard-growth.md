@@ -2,10 +2,10 @@
 
 Core handoff for `feat/admin-dashboard-growth`. The canonical API shape, date rules,
 examples, errors, data boundaries and audit semantics now live in the
-[API contract](../../../docs/contracts/api-contracts.md#chuỗi-tạo-mới-theo-ngày--admin-growth).
+[API contract](../../../docs/contracts/api-contracts.md#daily-creation-series--admin-growth).
 The approved behavior is [FR-024 / AC-097–AC-100](../../../docs/product/product-requirements.md#nghiệm-thu-tổng-quan-admin-theo-ngày).
 Implementation status is in the
-[technical design](../../../docs/architecture/technical-design.md#tổng-quan-admin-theo-ngày--admin-growth).
+[technical design](../../../docs/architecture/technical-design.md#daily-admin-overview--admin-growth).
 This handoff does not establish FE or staging acceptance.
 
 The owner approved publication; [PR #368](https://github.com/miphu2804/smart-ledger/pull/368)

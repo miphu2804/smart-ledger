@@ -1,154 +1,138 @@
 # Sổ Nghe Lời — Web (landing + admin)
 
-Sổ bán hàng AI cho quán nhỏ: nói một câu, AI tự ghi món, số lượng, giá. Dự án EXE201 của Team HEXA (FPT University).
+The landing page and admin pages. Built with Vite, React 19, TypeScript and react-router-dom.
 
-Trang giới thiệu và trang quản trị. Dùng Vite, React 19, TypeScript và react-router-dom.
+## Run
 
-## Chạy
-
-Yêu cầu Node.js 20 trở lên.
+Use the Node.js version in the [local development prerequisites](../../docs/development/local-development.md#prerequisites). CI uses Node.js 22.
 
 ```bash
 cd frontend/web
 npm install
 npm run dev        # http://localhost:5173
-npm run build      # kiểm tra kiểu (tsc) rồi build ra dist/
-npm run preview    # chạy thử bản build
-npm run typecheck  # chỉ kiểm tra TypeScript
+npm run build      # type-check (tsc), then build into dist/
+npm run preview    # serve the build locally
+npm run typecheck  # TypeScript check only
 npm run lint       # oxlint
-npm run userflow   # build sơ đồ luồng người dùng vào docs/product/userflow, xem mục Userflow
+npm run userflow   # build the user flow diagram into docs/product/userflow, see Userflow
 ```
 
-Biến môi trường (xem `.env.example`):
+Environment variables (see `.env.example`):
 
-| Biến | Mặc định | Ý nghĩa |
+| Variable | Default | Meaning |
 | --- | --- | --- |
-| `VITE_API_ENDPOINT` | `http://localhost:8080` | Địa chỉ Core, không kèm `/api/v1` |
-| `VITE_USE_MOCK` | (bật) | Đặt `false` để trang quản trị đọc API thật của Core thay vì dữ liệu mẫu |
-| `VITE_FIREBASE_API_KEY` | (trống) | Chế độ thật: Web API key của dự án Firebase mà Core dùng để kiểm token (đăng nhập quản trị bằng email + mật khẩu) |
-| `VITE_FIREBASE_AUTH_EMULATOR_HOST` | (trống) | Chỉ khi chạy thử trên máy: host của Firebase Auth Emulator, vd. `localhost:9099` |
-| `VITE_ANDROID_APK_URL` | (trống) | Liên kết tải APK Android trên trang giới thiệu (xem [Publish the APK for the landing page](../../docs/development/ci-cd.md#publish-the-apk-for-the-landing-page)). Để trống thì nút tải hiện "Sắp ra mắt" và không bấm được |
-| `VITE_ADMIN_ENABLED` | (tắt) | `true` bật trang quản trị `/admin`. Tắt thì bản build không có mã admin, tài khoản demo cũng không lọt vào bundle. Đặt `true` trong `.env.local` khi phát triển |
+| `VITE_API_ENDPOINT` | `http://localhost:8080` | Core address, without `/api/v1` |
+| `VITE_USE_MOCK` | (on) | Set `false` so the admin pages read the real Core API instead of sample data |
+| `VITE_FIREBASE_API_KEY` | (empty) | Real mode: the Web API key of the Firebase project Core uses to verify tokens (admin sign-in with email and password) |
+| `VITE_FIREBASE_AUTH_EMULATOR_HOST` | (empty) | Local runs only: the Firebase Auth Emulator host, e.g. `localhost:9099` |
+| `VITE_ANDROID_APK_URL` | (empty) | Android APK download link on the landing page (see [Publish the APK for the landing page](../../docs/development/ci-cd.md#publish-the-apk-for-the-landing-page)). When empty, the download button shows "Sắp ra mắt" and cannot be clicked |
+| `VITE_ADMIN_ENABLED` | (off) | `true` enables the `/admin` pages. When off, the build contains no admin code and the demo accounts do not leak into the bundle. Set `true` in `.env.local` during development |
 
-Thông tin liên hệ công khai nằm trong [`site.yaml`](site.yaml), không phải biến môi trường: `contact_email` (hiện ở mục Liên hệ, `/privacy` và `/data-deletion`) và `social.facebook`, `social.tiktok`, `social.instagram` (icon trên thanh điều hướng và footer). Mục nào để trống thì trang không hiện mục đó.
+Public contact details live in [`site.yaml`](site.yaml), not in environment variables: `contact_email` (shown in the Contact section, `/privacy` and `/data-deletion`) and `social.facebook`, `social.tiktok`, `social.instagram` (icons in the navigation bar and footer). An empty entry hides that item.
 
-## Trang quản trị
+## Admin pages
 
-Chỉ chạy khi `VITE_ADMIN_ENABLED=true` (mặc định tắt). Khi phát triển, đặt trong `.env.local`. Bản deploy bật admin khi GitHub environment `landing-*` đặt `VITE_ADMIN_ENABLED=true` cùng `VITE_API_ENDPOINT` và `VITE_FIREBASE_API_KEY`: trang quản trị nằm ở `/admin` của chính landing, đọc dữ liệu thật của Core (xem [Landing page on Vercel](../../docs/development/ci-cd.md#landing-page-on-vercel)).
+Runs only when `VITE_ADMIN_ENABLED=true` (off by default). During development, set it in `.env.local`. A deploy enables admin when the GitHub environment `landing-*` sets `VITE_ADMIN_ENABLED=true` together with `VITE_API_ENDPOINT` and `VITE_FIREBASE_API_KEY`: the admin pages live at `/admin` of the landing site itself and read real Core data (see [Landing page on Vercel](../../docs/development/ci-cd.md#workflows)).
 
-**Hai chế độ:**
+**Two modes:**
 
-- **Dữ liệu thật** (`VITE_USE_MOCK=false`): các trang trong `src/pages/admin/core/` đọc API quản trị của Core (`/api/v1/admin/*`, [API contracts §7](../../docs/contracts/api-contracts.md)) qua `src/services/adminApi.ts`. Đăng nhập Firebase bằng email + mật khẩu qua REST (`src/services/firebaseAuth.ts`, không cài SDK `firebase`), rồi `GET /api/v1/me`: chỉ tài khoản Core có `role` ADMIN mới vào được. Tài khoản quản trị là một user email/mật khẩu trong Firebase của môi trường đó, có hồ sơ Core `system_role=ADMIN` và ACTIVE (Core không tự nâng quyền). ID token chỉ nằm trong bộ nhớ và tự làm mới; refresh token được lưu (localStorage khi "Ghi nhớ đăng nhập", sessionStorage khi không) để tải lại trang không phải đăng nhập lại; đăng xuất xoá cả hai. Core có tổng quan, chủ tiệm, cửa hàng (kèm lịch sử trạng thái, tạm ngưng / mở lại qua `PATCH /api/v1/shops/{id}/status`) và nhật ký truy cập của chính ADMIN; Core chưa có task, AI Support, tìm nhanh hay thông báo, nên các mục đó ẩn.
-- **Dữ liệu mẫu** (mặc định): các trang cũ chạy trên `localStorage`, có thêm AI Support và Tasks để demo (xem [Dữ liệu mẫu](#dữ-liệu-mẫu-mock)).
+- **Real data** (`VITE_USE_MOCK=false`): the pages in `src/pages/admin/core/` read the Core admin API (`/api/v1/admin/*`, [API contracts §7](../../docs/contracts/api-contracts.md)) through `src/services/adminApi.ts`. Firebase sign-in uses email and password over REST (`src/services/firebaseAuth.ts`, without the `firebase` SDK), then `GET /api/v1/me`: only a Core account with `role` ADMIN gets in. An admin account is an email/password user in that environment's Firebase with an ACTIVE Core profile `system_role=ADMIN` (Core never elevates roles by itself). The ID token stays in memory and refreshes itself; the refresh token is stored (localStorage with "Ghi nhớ đăng nhập", sessionStorage without) so reloading the page does not require signing in again; signing out clears both. Core has the overview, owners, shops (with status history, suspend / reopen through `PATCH /api/v1/shops/{id}/status`) and the ADMIN's own access log; Core has no tasks, AI Support, quick search or notifications, so those items are hidden.
+- **Sample data** (default): the older pages run on `localStorage`, with AI Support and Tasks added for demos (see [Mock data](#mock-data)).
 
-Chạy thử chế độ thật trên máy: Core chạy ở `localhost:8080` với `CORS_ALLOWED_ORIGINS` có `http://localhost:5173`, rồi `VITE_ADMIN_ENABLED=true VITE_USE_MOCK=false VITE_FIREBASE_API_KEY=<key> npm run dev`.
+To try real mode locally: run Core on `localhost:8080` with `CORS_ALLOWED_ORIGINS` including `http://localhost:5173`, then `VITE_ADMIN_ENABLED=true VITE_USE_MOCK=false VITE_FIREBASE_API_KEY=<key> npm run dev`.
 
-Giao diện "calm operations": nền trung tính ấm, accent xanh lá (#2F7A43 / #8FD17D), radius 16/10/999, font Geist, icon Phosphor (regular). Token nằm đầu `src/styles/admin.css`, toàn bộ CSS admin nằm trong `.adm` nên không ảnh hưởng trang giới thiệu.
+"Calm operations" look: warm neutral background, green accent (#2F7A43 / #8FD17D), radius 16/10/999, the Geist font, Phosphor icons (regular). Tokens sit at the top of `src/styles/admin.css`, and all admin CSS is scoped under `.adm` so it does not affect the landing page.
 
-| Đường dẫn | Nội dung |
+| Path | Content |
 | --- | --- |
-| `/` | Trang giới thiệu |
-| `/privacy` | Chuyển tới `/chinh-sach` |
-| `/chinh-sach` | Chính sách gửi Google Play: quyền riêng tư, điều khoản, thanh toán |
-| `/data-deletion` | Hướng dẫn xoá dữ liệu người dùng (Meta yêu cầu cho Facebook Login) |
-| `/delete-account` | Cùng trang `/data-deletion`, URL xoá tài khoản khai trên Google Play |
-| `/admin/login` | Đăng nhập (chỉ ADMIN vào được) |
-| `/admin` | Thật: chủ tiệm và cửa hàng theo trạng thái, số mới trong 7/30/90 ngày, 5 cửa hàng mới nhất, truy cập gần đây. Mock: 4 KPI · xu hướng hỗ trợ · Cần chú ý · cơ sở/OWNER mới |
-| `/admin/customers?tab=owners\|shops` | Tab Chủ tiệm / Cửa hàng, tìm, lọc trạng thái, phân trang. Bấm dòng → drawer chi tiết (`&owner=` / `&shop=`); drawer cửa hàng có lịch sử trạng thái và nút tạm ngưng / mở lại (chế độ thật). Mỗi lần tìm và mở đều được ghi nhật ký |
-| `/admin/access-logs` | Chỉ chế độ thật: nhật ký truy cập quản trị của chính ADMIN, lọc theo thao tác, mã cửa hàng, khoảng ngày |
-| `/admin/ai` | Chỉ mock: AI Support (hội thoại · chat · ngữ cảnh cơ sở); task draft chỉ tạo khi ADMIN xác nhận |
-| `/admin/tasks` | Chỉ mock: Kanban hỗ trợ; kéo thả; drawer chi tiết + lịch sử |
-| `/admin/settings/profile\|appearance\|security\|audit` | Hồ sơ · Giao diện (lưu trên trình duyệt) · Bảo mật & quyền (chỉ đọc) · Nhật ký (chỉ mock; chế độ thật chuyển sang `/admin/access-logs`) |
+| `/` | Landing page |
+| `/privacy` | Redirects to `/chinh-sach` |
+| `/chinh-sach` | Policy submitted to Google Play: privacy, terms, payments |
+| `/data-deletion` | User data deletion guide (required by Meta for Facebook Login) |
+| `/delete-account` | Same page as `/data-deletion`, the account deletion URL declared on Google Play |
+| `/admin/login` | Sign in (ADMIN only) |
+| `/admin` | Real: owners and shops by status, new counts over 7/30/90 days, the 5 newest shops, recent access. Mock: 4 KPIs, support trend, needs attention, new shops/OWNERs |
+| `/admin/customers?tab=owners\|shops` | Owners / Shops tabs with search, status filter and pagination. Clicking a row opens the detail drawer (`&owner=` / `&shop=`); the shop drawer has status history and the suspend / reopen button (real mode). Every search and open is logged |
+| `/admin/access-logs` | Real mode only: the ADMIN's own admin access log, filtered by action, shop ID and date range |
+| `/admin/ai` | Mock only: AI Support (conversations, chat, shop context); a task draft is created only when the ADMIN confirms |
+| `/admin/tasks` | Mock only: support Kanban with drag and drop; detail drawer and history |
+| `/admin/settings/profile\|appearance\|security\|audit` | Profile, Appearance (stored in the browser), Security and permissions (read-only), Log (mock only; real mode redirects to `/admin/access-logs`) |
 
-URL cũ vẫn chạy: `/admin/customers/:id` → drawer cơ sở, `/admin/logs` → nhật ký, `/admin/accounts` → `/admin/customers`. Chế độ thật: `/admin/ai` và `/admin/tasks` về Dashboard.
+Old URLs still work: `/admin/customers/:id` → shop drawer, `/admin/logs` → log, `/admin/accounts` → `/admin/customers`. In real mode, `/admin/ai` and `/admin/tasks` go to the Dashboard.
 
-**Phân quyền:** chưa đăng nhập → `/admin/login`. Tài khoản không phải ADMIN (vd. OWNER) → mọi URL `/admin/*` hiện trang **403**, không có menu quản trị.
+**Authorization:** not signed in → `/admin/login`. A non-ADMIN account (e.g. OWNER) sees a **403** page on every `/admin/*` URL, with no admin menu.
 
-**Không có:** giả danh / đăng nhập thay OWNER, xem hay sửa hoá đơn/chi phí/công nợ/tồn kho, tự nâng quyền, tắt audit. AI không tự tạo hay di chuyển task.
+**Not available:** impersonating / signing in as an OWNER, viewing or editing invoices/expenses/debts/stock, self-elevation, disabling audit. AI does not create or move tasks by itself.
 
-**Ghi & đồng thời:** tạo task gửi idempotency key (bấm 2 lần hay xác nhận lại cùng đề xuất không tạo trùng). Mỗi lần sửa task gửi `version`; nếu tab/người khác đã sửa trước → báo "Xung đột phiên bản" và tải bản mới. Mọi chuyển trạng thái, gán người, đổi mức độ đều ghi lịch sử + audit.
+**Writes and concurrency:** creating a task sends an idempotency key (clicking twice or confirming the same proposal again does not create duplicates). Every task edit sends `version`; if another tab/person edited first, the page shows "Xung đột phiên bản" and loads the new version. Every status change, assignment and severity change records history and audit.
 
-**Responsive:** ≥1280 sidebar 248px · 768–1279 sidebar 72px, cột phụ xuống dưới · <768 sidebar thành drawer, KPI cuộn ngang, bảng thành danh sách, Kanban cuộn ngang có snap. Có skip link, focus rõ, vùng bấm 40px, tôn trọng `prefers-reduced-motion`.
+**Responsive:** ≥1280 a 248px sidebar; 768–1279 a 72px sidebar with the side column moved below; <768 the sidebar becomes a drawer, KPIs scroll horizontally, tables become lists, and the Kanban scrolls horizontally with snap. Includes a skip link, clear focus, 40px hit areas, and respects `prefers-reduced-motion`.
 
-**Tài khoản demo** (chỉ chế độ mock; trang đăng nhập có nút "Điền"):
+**Mock access:** use the mock sign-in page's built-in sample-data action. Do not publish account/password or OTP pairs in documentation, and never use mock access as evidence of real authentication or authorization.
 
-| Email | Mật khẩu | Role | Kết quả |
-| --- | --- | --- | --- |
-| `admin@songhloi.vn` | `admin123` | ADMIN | Vào dashboard |
-| `owner@songhloi.vn` | `owner123` | OWNER | Trang 403 |
+## Landing and legal pages
 
-## Trang giới thiệu và trang pháp lý
+The look follows the new mobile app: brand purple `#482AAC`, cream background `#F7F6F2`, green `#8FDB6E` as the accent. Tokens live in `.lp` of `src/styles/landing.css` so they do not affect the admin pages. The content describes only what the app already has; printers, paid plans and e-invoices are not in the current scope, so they are not advertised here.
 
-Giao diện theo app mobile mới: tím thương hiệu `#482AAC`, nền kem `#F7F6F2`, xanh lá `#8FDB6E` làm điểm nhấn. Token nằm trong `.lp` của `src/styles/landing.css` nên không ảnh hưởng trang quản trị. Nội dung chỉ nói những gì app đã có; máy in, gói trả phí và hoá đơn điện tử không thuộc MVP nên không được quảng cáo ở đây.
+**Images** live in `public/`:
 
-**Hình ảnh** nằm trong `public/`:
-
-| Đường dẫn | Nguồn |
+| Path | Source |
 | --- | --- |
-| `screens/{home,voice,checkout,orders,pos,reports,products,debts}.webp` | Ảnh chụp app mobile ở chế độ mock (`EXPO_PUBLIC_USE_MOCK=true`), chụp toàn màn hình trên iOS Simulator iPhone 17 Pro Max (440×956 pt), xuất 660×1434. Đã xoá thanh trạng thái (giờ, sóng, pin, Dynamic Island). Dữ liệu trong ảnh là dữ liệu mẫu; ẩn mascot nổi khi chụp để không đè nội dung. Riêng `debts.webp` chụp từ bản web mock (`npm run web` trong `../mobile`, khung 440×956, chừa 62 pt trên cho thanh trạng thái) |
-| `brand/logo.webp`, `favicon.png`, `apple-touch-icon.png` | `frontend/mobile/assets/brand-logo.png` (icon của app) |
-| `brand/robot.webp`, `brand/agent-*.webp` | `frontend/mobile/assets/bubblelogo.png`, `assets/voice/agent-*.png` |
-| `brand/icons/*.webp` | Icon 3D trong `frontend/mobile/assets/tab1-overview` và `tab4-management` |
-| `brand/app-icon-1024.png` | Icon 1024×1024 cho trang cài đặt app Meta (Facebook Login), dựng từ `bubblelogo.png` |
+| `screens/{home,voice,checkout,orders,pos,reports,products,debts}.webp` | Screenshots of the mobile app in mock mode (`EXPO_PUBLIC_USE_MOCK=true`), full screen on the iOS Simulator iPhone 17 Pro Max (440×956 pt), exported at 660×1434. The status bar (time, signal, battery, Dynamic Island) is removed. The data in the images is sample data; the floating mascot is hidden while capturing so it does not cover content. `debts.webp` alone is captured from the mock web build (`npm run web` in `../mobile`, a 440×956 frame, leaving 62 pt at the top for the status bar) |
+| `brand/logo.webp`, `favicon.png`, `apple-touch-icon.png` | `frontend/mobile/assets/brand-logo.png` (the app icon) |
+| `brand/agent-*.webp` | `frontend/mobile/assets/voice/agent-*.png` |
+| `brand/icons/*.webp` | 3D icons in `frontend/mobile/assets/tab1-overview` and `tab4-management` |
+| `brand/app-icon-1024.png` | 1024×1024 icon for the Meta app settings page (Facebook Login), built from `bubblelogo.png` |
 
-Chụp lại ảnh khi giao diện app đổi: chạy dev build trên simulator ở chế độ mock (`npx expo start --dev-client` trong `../mobile` với ba biến `EXPO_PUBLIC_USE_MOCK`, `EXPO_PUBLIC_MOCK_CORE`, `EXPO_PUBLIC_MOCK_SHOPS` đặt `true`), chụp bằng `xcrun simctl io booted screenshot`, phủ 186 px trên cùng (thanh trạng thái @3x) bằng hàng điểm ảnh ngay bên dưới, rồi `cwebp -q 82 -resize 660 0`. Giữ đúng tỉ lệ 440:956 để ảnh khớp khung điện thoại trong `landing.css`.
+Recapture the images when the app UI changes: run a dev build on the simulator in mock mode (`npx expo start --dev-client` in `../mobile` with the three variables `EXPO_PUBLIC_USE_MOCK`, `EXPO_PUBLIC_MOCK_CORE`, `EXPO_PUBLIC_MOCK_SHOPS` set to `true`), capture with `xcrun simctl io booted screenshot`, cover the top 186 px (the status bar at @3x) with the pixel row just below it, then `cwebp -q 82 -resize 660 0`. Keep the 440:956 ratio so the images fit the phone frame in `landing.css`.
 
-**Trang pháp lý** (`src/pages/legal/`) là văn bản công khai. Đổi nhà cung cấp, dữ liệu thu thập hay cam kết xử lý yêu cầu xoá (`DELETION_DAYS`) thì cập nhật nội dung và `POLICY_UPDATED` trong `legalConfig.ts`.
+**Feedback form:** The `/#gop-y` section is a preview built on request: full name, phone number, feedback type and content. Required fields use browser validation; the Send button only shows a preview notice, calls no API, stores nothing in localStorage and never reports a successful send. There is no receiving service yet; Core business scope and the requirement for real feedback intake are unchanged.
 
-**Triển khai:** job `deploy-landing` trong [`cd.yml`](../../.github/workflows/cd.yml) (CI gọi sau khi job `landing` qua) build web này và đẩy lên một dự án Vercel riêng tên `landing`. Vercel Git không deploy (`git.deploymentEnabled: false` trong `vercel.json`). Pull request tạm không deploy preview (giới hạn deploy/ngày của Vercel Hobby). Các môi trường, chi tiết ở [CI/CD](../../docs/development/ci-cd.md#landing-page-on-vercel):
+**Legal pages** (`src/pages/legal/`) are public text. When a provider, the data collected or the deletion handling commitment (`DELETION_DAYS`) changes, update the content and `POLICY_UPDATED` in `legalConfig.ts`.
 
-| Môi trường | Nhánh | Địa chỉ |
-| --- | --- | --- |
-| Staging | `staging` | `LANDING_URL` của environment `landing-staging` |
-| Production | `main` (cần duyệt) | `LANDING_URL` của environment `landing-production` |
+**Deployment:** the repository [delivery workflows](../../docs/development/ci-cd.md#workflows) build and deliver this application. Provider projects, domains, environment mappings and publication access are maintained in the private operations knowledge base, not this README. PR previews are disabled; deployment does not establish integrated acceptance.
 
-Thiết lập một lần trên Vercel: New Project → import repo này → Root Directory `frontend/web` (framework Vite tự nhận). Lấy project ID đặt làm secret `VERCEL_PROJECT_ID` trong ba environment `landing-*`. Biến `LANDING_URL` đặt làm Variables của từng environment.
-
-`rewrites` trong `vercel.json` chuyển mọi đường dẫn về `index.html` để `/privacy`, `/data-deletion` mở trực tiếp được.
+`rewrites` in `vercel.json` sends every path to `index.html` so `/privacy` and `/data-deletion` open directly.
 
 ## Userflow
 
-Mã nguồn của [sơ đồ luồng người dùng](../../docs/product/userflow/README.md) nằm ở `src/userflow`. `npm run userflow` build nó (cấu hình `vite.userflow.config.ts`) thành một tệp tự chứa `docs/product/userflow/index.html`, mở thẳng bằng trình duyệt; ảnh chụp nằm ở `docs/product/userflow/screens/`. `vite build` của web không đụng tới trang này nên nó không vào bản deploy.
+The source of the [user flow diagram](../../docs/product/userflow/README.md) lives in `src/userflow`. `npm run userflow` builds it (config `vite.userflow.config.ts`) into a self-contained file `docs/product/userflow/index.html` that opens directly in a browser; screenshots live in `docs/product/userflow/screens/`. The web `vite build` does not touch this page, so it is not part of the deploy.
 
-## Trạng thái dùng chung
+## Shared states
 
-`src/components/States.tsx` — `LoadingState`, `EmptyState`, `ErrorState` (nút Thử lại), `ForbiddenState`, `ReadOnlyState`.
-`src/hooks/useAsync.ts` — trả `{ data, error, loading, reload }`.
+`src/components/States.tsx` — `LoadingState`, `EmptyState`, `ErrorState` (Retry button), `ForbiddenState`, `ReadOnlyState`.
+`src/hooks/useAsync.ts` — returns `{ data, error, loading, reload }`.
 
-Kiểm tra nhanh (chế độ mock): thêm `?mock=slow`, `?mock=empty` hoặc `?mock=error` vào URL admin, hoặc chọn ở ô **Dữ liệu mẫu** cuối sidebar. `?mock=normal` để tắt. Khi AI Support lỗi, nội dung câu hỏi được giữ lại để bấm Thử lại.
+Quick check (mock mode): add `?mock=slow`, `?mock=empty` or `?mock=error` to an admin URL, or pick it in the **Dữ liệu mẫu** box at the bottom of the sidebar. `?mock=normal` turns it off. When AI Support fails, the question text is kept so Retry can be clicked.
 
-## Dữ liệu mẫu (mock)
+## Mock data
 
-- `src/types.ts` mô tả hợp đồng API **giả định** (`AdminOverviewView`, `AdminUserItem`, `AdminShopDetailView`, `SupportTask`, `AiMessage`…). Các field của `AdminOverviewView` là giả định, cần khoá lại với backend.
-- `src/mocks/accounts.ts` sinh 48 OWNER / 53 cơ sở; `src/mocks/tasks.ts` sinh 11 support task. Chỉ có dữ liệu hỗ trợ. "Hôm nay" của dữ liệu mẫu là `MOCK_TODAY` (16/09/2026).
-- `src/services/mockStore.ts` là "backend giả" lưu trong `localStorage` (`snl_mock_db`, `snl_mock_tasks`, `snl_mock_ai`, `snl_mock_audit`, `snl_mock_idem`). Nút **Khôi phục dữ liệu mẫu** đưa về ban đầu. Tuỳ chọn cá nhân lưu ở `snl_admin_prefs`.
-- AI Support trong mock là bộ trả lời theo luật (`src/services/aiService.ts`), không gọi model thật.
-- Các trang mock (`DashboardPage`, `CustomersPage`, `AiSupportPage`, `TasksPage`, nhật ký trong Cài đặt) dùng hợp đồng giả định trong `src/types.ts` và `accountService`/`taskService`/`aiService`, khác API thật của Core; chế độ thật dùng `src/pages/admin/core/` thay cho chúng. Core chưa có task, thành viên, hội thoại AI, gói, thiết bị hay xu hướng, nên các phần đó chỉ có ở mock.
+- `src/types.ts` contains legacy mock-page types, not the real Core contract. Real ADMIN requests and DTOs live in `src/services/adminApi.ts` and follow the [implemented ADMIN contract](../../docs/contracts/api-contracts.md#7-admin-dashboard--implemented-in-core).
+- `src/mocks/accounts.ts` generates 48 OWNERs / 53 shops; `src/mocks/tasks.ts` generates 11 support tasks. Only support data exists. "Today" in the sample data is `MOCK_TODAY` (2026-09-16).
+- `src/services/mockStore.ts` is a "fake backend" stored in `localStorage` (`snl_mock_db`, `snl_mock_tasks`, `snl_mock_ai`, `snl_mock_audit`, `snl_mock_idem`). The **Khôi phục dữ liệu mẫu** button resets it. Personal preferences are stored in `snl_admin_prefs`.
+- AI Support in mock mode is a rule-based responder (`src/services/aiService.ts`) and calls no real model.
+- The mock pages (`DashboardPage`, `CustomersPage`, `AiSupportPage`, `TasksPage`, the log in Settings) use the assumed contract in `src/types.ts` and `accountService`/`taskService`/`aiService`, which differ from the real Core API; real mode uses `src/pages/admin/core/` instead. Core has no tasks, members, AI conversations, plans, devices or trends, so those parts exist only in mock mode.
 
-## Cấu trúc
+## Structure
 
 ```
 src/
-  App.tsx, main.tsx          định tuyến
-  config.ts                  USE_MOCK, API_ENDPOINT, hạn mức gói
-  types.ts                   kiểu dữ liệu / hợp đồng API giả định
-  mocks/                     sinh dữ liệu mẫu, task mẫu, giả lập tình huống API
+  App.tsx, main.tsx          routing
+  config.ts                  USE_MOCK, API_ENDPOINT, plan limits
+  types.ts                   legacy mock-page data types
+  mocks/                     sample data, sample tasks, simulated API scenarios
   services/                  api, auth, account, task, ai, preferences, mockStore
   components/admin/          ui (Panel, Pill, Avatar, DetailDrawer…), charts
   components/                States, Pagination, RequireAuth, Modal, Toast
-  pages/landing/             trang giới thiệu, chân trang dùng chung
-  pages/legal/               chính sách quyền riêng tư, hướng dẫn xoá dữ liệu
+  pages/landing/             landing page, shared footer
+  pages/legal/               privacy policy, data deletion guide
   pages/admin/               Login, AdminLayout (AppShell), Dashboard, Customers, AiSupport, Tasks, Settings
   pages/admin/tasks/         TaskFormModal
-  pages/ForbiddenPage        trang 403
-  userflow/                  sơ đồ userflow build vào docs: flows.ts (nút, cạnh, toạ độ), FlowCanvas, NodeSheet
-  styles/                    base, landing, admin (token theo plan)
+  pages/ForbiddenPage        403 page
+  userflow/                  userflow diagram built into docs: flows.ts (nodes, edges, coordinates), FlowCanvas, NodeSheet
+  styles/                    base, landing, admin (tokens per plan)
 ```
 
-## App mobile
+## Mobile app
 
-App Expo nằm ở thư mục cùng cấp `../mobile` — xem `../mobile/README.md`.
-
-### Giao diện góp ý landing
-
-Mục `/#gop-y` là bản xem trước theo yêu cầu: họ tên, số điện thoại, loại góp ý và nội dung. Các ô bắt buộc dùng validation trình duyệt; nút Gửi chỉ hiện thông báo bản xem trước, không gọi API, không lưu localStorage và không báo gửi thành công. Chưa có dịch vụ tiếp nhận; chưa thay đổi phạm vi nghiệp vụ Core hoặc yêu cầu nhận góp ý thật.
+The Expo app lives in the sibling folder `../mobile`; see `../mobile/README.md`.

@@ -12,9 +12,9 @@ preparation is separate and does not deploy or run shared-DB migrations.
   `zalo_manual`, schema `core_zalo_manual`. Synthetic credentials are hard-coded
   exclusively for this disposable container. The launcher rejects other mounts,
   labels, ports or database settings. It does not load the repo `.env.staging`.
-- Existing V1–V18 migrations are applied only there. The test entry point is in
+- The checked-in V1–V20 migrations are applied only there. The test entry point is in
   `src/test`, not the packaged application. The earlier separate schema fixture
-  is retired; V17 is now the single SQL source.
+  is retired; V17 is now the single SQL source for the WEB auth-store migration.
 - Database data is in **tmpfs**: stopping/restarting the container or Docker
   loses it. Keep the container running between repeated-login checks. A Core
   restart alone preserves identity mappings, but invalidates in-flight OAuth
@@ -28,7 +28,7 @@ preparation is separate and does not deploy or run shared-DB migrations.
   shortcut under ignored `target/`. The gateway expires after two hours. Do not
   share the shortcut or its URL fragment. The gateway is not a production proxy.
 - Zalo and Firebase calls during manual login are **real**. Firebase is pinned
-  to dev/staging project `smart-ledger-c2892`; production service accounts and
+  to the permitted non-production test project; production service accounts and
   Auth Emulator configuration are rejected. This can create a real Firebase Auth
   user even though Core business data is isolated. Use your own disposable test
   accounts and acknowledge the checkbox. No automatic Firebase user deletion.
@@ -106,7 +106,7 @@ ZALO_MANUAL_CONFIRM_FIREBASE_STAGING=true
 ```
 
 Use the exact HTTPS origin **without trailing slash**. The service-account file
-must have `project_id=smart-ledger-c2892` and signing credentials. This file is
+must match the non-production project pinned by the test tooling and include signing credentials. Obtain the authorized project mapping from the private operations knowledge base; do not bypass that pin. This file is
 for Core only; never enter it or the Zalo App Secret into the browser. Do not
 reuse the old smoke helper env file without adapting its field names. Do not
 paste credentials into chat or use them as command-line arguments.
@@ -190,7 +190,7 @@ the HTTPS test page, unlocks it with the one-run key and removes that key from
 the visible URL. Do not open the source `index.html` directly or use plain
 `http://127.0.0.1:8792`: the public HTTPS origin is part of the security binding.
 
-1. Enter the Firebase **Web API key** from project `smart-ledger-c2892` settings.
+1. Use the Firebase **Web API key** for the non-production project permitted by the tooling, obtained through the private operations procedure.
    This is not the service-account private key or the Zalo secret. If API-key
    referrer restrictions are enabled, allow only this test origin temporarily.
 2. Read/acknowledge real dev/staging Firebase account creation, then click login.

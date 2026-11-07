@@ -2,7 +2,7 @@
 
 The owner approved commit-based, cross-instance quotas and the two-table migration on 2026-10-31. This supersedes the in-memory/request-counting proposal in [issue #430](https://github.com/miphu2804/smart-ledger/issues/430). Enforcement defaults off; no shared-DB migration or activation is implied.
 
-The [API contract](../../../docs/contracts/api-contracts.md#giới-hạn-thao-tác-core-019) owns limits, responses, retry and fixed-window semantics. Traceability is BR-024 → FR-037 → AC-104–108.
+The [API contract](../../../docs/contracts/api-contracts.md#core-019-operation-limits) owns limits, responses, retry and fixed-window semantics. Traceability is BR-024 → FR-037 → AC-104–108.
 
 ## Architecture
 

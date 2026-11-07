@@ -38,4 +38,4 @@
 ## References
 
 - PRs #74, #145 and #260.
-- [AI README, Chat history and context](../../../backend/ai/README.md#chat-history-and-context).
+- [AI README, Chat history and context](../../../backend/ai/docs/architecture.md#chat-history-and-context).

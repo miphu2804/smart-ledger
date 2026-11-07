@@ -1,0 +1,13 @@
+stateDiagram-v2
+    direction LR
+    [*] --> DRAFT : create()
+    DRAFT --> DRAFT : replace()
+    DRAFT --> CANCELLED : cancel()
+    DRAFT --> CONFIRMED : confirm() creates Sale
+    DRAFT --> EXPIRED : past expiresAt (1 month)
+    classDef open fill:#fff4cc,stroke:#d4a017,color:#5c4400
+    classDef done fill:#dff5e3,stroke:#3c9d5d,color:#1e5631
+    classDef dead fill:#fde2e1,stroke:#d9534f,color:#8a1f1b
+    class DRAFT open
+    class CONFIRMED done
+    class CANCELLED,EXPIRED dead

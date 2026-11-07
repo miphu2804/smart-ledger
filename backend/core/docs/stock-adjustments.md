@@ -1,6 +1,6 @@
 # Independent stock decreases — CORE-021
 
-Implementation for [#457](https://github.com/miphu2804/smart-ledger/issues/457) on `feat/core-stock-adjustment`, approved by the owner on 2026-11-02. The [API contract](../../../docs/contracts/api-contracts.md#điều-chỉnh-giảm-tồn-core-021) owns request/response/errors and the [PRD](../../../docs/product/product-requirements.md#điều-chỉnh-giảm-tồn-core-021--đã-duyệt-ngày-2026-11-02) owns `FR-038` and `AC-111`–`AC-115`. This does not establish FE, staging or production acceptance.
+Implementation for [#457](https://github.com/miphu2804/smart-ledger/issues/457) on `feat/core-stock-adjustment`, approved by the owner on 2026-11-02. The [API contract](../../../docs/contracts/api-contracts.md#core-021-stock-decrease-adjustment) owns request/response/errors and the [PRD](../../../docs/product/product-requirements.md#điều-chỉnh-giảm-tồn-core-021--đã-duyệt-ngày-2026-11-02) owns `FR-038` and `AC-111`–`AC-115`. This does not establish FE, staging or production acceptance.
 
 ## Transaction and existing storage
 

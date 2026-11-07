@@ -1,28 +1,28 @@
 /**
- * Cấu hình môi trường cho app mobile.
- * Expo chỉ đưa các biến bắt đầu bằng EXPO_PUBLIC_ vào bundle (xem .env.example).
+ * Environment configuration for the mobile app.
+ * Expo exposes only variables prefixed with EXPO_PUBLIC_ in the bundle (see .env.example).
  *
- * API_ENDPOINT và ba cờ giả lập bắt buộc đặt trong env, không có giá trị mặc định: thiếu hoặc cờ không phải true/false
- * thì app dừng ngay khi mở, thay vì lặng lẽ chạy nhầm chế độ. Phải đọc dạng `process.env.EXPO_PUBLIC_X` (không qua
- * biến trung gian) để Expo thay giá trị vào bundle lúc build.
+ * API_ENDPOINT and the three mock flags are required environment values with no defaults: if a value is missing or a
+ * flag is not true/false, the app fails at launch instead of silently using the wrong mode. Read the values directly
+ * from `process.env.EXPO_PUBLIC_X` so Expo can substitute them in the bundle during the build.
  */
 export const API_ENDPOINT = requiredEnv('EXPO_PUBLIC_API_ENDPOINT', process.env.EXPO_PUBLIC_API_ENDPOINT);
 export const USE_MOCK = envFlag('EXPO_PUBLIC_USE_MOCK', process.env.EXPO_PUBLIC_USE_MOCK);
 /**
- * Core (POST /auth/session, /me, /shops) giả lập. Luôn bật khi USE_MOCK=true; đặt EXPO_PUBLIC_MOCK_CORE=true để dùng
- * Firebase THẬT nhưng Core vẫn giả lập — dùng khi backend Core chưa có API (test đăng nhập SĐT trên máy thật).
+ * Simulated Core session and profile calls. This is always enabled when USE_MOCK=true; set EXPO_PUBLIC_MOCK_CORE=true
+ * to use real Firebase authentication while keeping Core calls simulated for isolated client testing.
  */
 export const USE_MOCK_CORE = envFlag('EXPO_PUBLIC_MOCK_CORE', process.env.EXPO_PUBLIC_MOCK_CORE) || USE_MOCK;
 /**
- * Chỉ POST /shops giả lập. Core đã có /auth/session và /me nhưng CHƯA có /shops: đặt EXPO_PUBLIC_MOCK_SHOPS=true để test
- * trọn luồng với Core thật. Tiệm chỉ lưu ở máy nên mỗi lần mở lại app sẽ bị hỏi tạo tiệm lại (Core vẫn báo needsOnboarding).
+ * Simulate only shop creation and update. Core provides POST /api/v1/shops; set EXPO_PUBLIC_MOCK_SHOPS=true when a
+ * test must avoid that real call. Mock shops live only in the client-side simulator and are not deployment evidence.
  */
 export const USE_MOCK_SHOPS = envFlag('EXPO_PUBLIC_MOCK_SHOPS', process.env.EXPO_PUBLIC_MOCK_SHOPS) || USE_MOCK_CORE;
 
 /**
- * Firebase Auth (đăng nhập + xác thực số điện thoại) — chỉ dùng khi USE_MOCK=false.
- * - Web (expo web): đọc các biến EXPO_PUBLIC_FIREBASE_* bên dưới (Firebase Console → Project settings → Your apps → Web).
- * - Android / iOS: đọc từ google-services.json / GoogleService-Info.plist (xem README, mục "Gắn Firebase").
+ * Firebase Auth (sign-in and email verification), used only when USE_MOCK=false.
+ * - Web (Expo web): reads the EXPO_PUBLIC_FIREBASE_* values below (Firebase Console → Project settings → Your apps → Web).
+ * - Android/iOS: reads from google-services.json / GoogleService-Info.plist (see the mobile README).
  */
 export const FIREBASE_WEB_CONFIG = {
   apiKey: process.env.EXPO_PUBLIC_FIREBASE_API_KEY ?? '',
@@ -32,35 +32,37 @@ export const FIREBASE_WEB_CONFIG = {
 };
 
 /**
- * Nhận dạng giọng nói trên Android (model sherpa-onnx chạy trên máy). App tải các file model từ địa chỉ này về bộ nhớ
- * của app ở lần đầu mở màn Đọc đơn (xem assets/models/README.md). Phải kết thúc bằng `/`; để trống thì mic báo chưa có model.
+ * Android speech recognition (the sherpa-onnx model runs on the device). The app downloads model files from this base
+ * URL into app storage when the voice screen first needs them (see assets/models/README.md). It should end with `/`;
+ * when empty, the microphone flow reports that no model is available.
  */
 export const STT_MODEL_URL = process.env.EXPO_PUBLIC_STT_MODEL_URL ?? '';
 
 /**
- * Địa chỉ version.json của bản APK phát hành (ví dụ https://pub-xxx.r2.dev/android/production/version.json). CD ghi file này
- * sau mỗi lần phát hành; có giá trị thì app Android hỏi cập nhật khi có bản mới hơn. Để trống thì không kiểm tra
- * (bản dev, bản đưa lên Play Store).
+ * URL of the released APK's version.json (for example, https://pub-xxx.r2.dev/android/production/version.json).
+ * CD writes this file after a release; when set, Android checks for a newer version. Empty disables the check for
+ * development builds and Play Store distribution.
  */
 export const APP_UPDATE_URL = (process.env.EXPO_PUBLIC_UPDATE_URL ?? '').trim();
 
 /**
- * Bật nút "Zalo" trên bản web (đăng nhập qua cửa sổ Zalo, hợp đồng Zalo CORE-015). Chỉ đặt `true` khi Core của môi trường
- * đó đã bật `ZALO_ENABLED` và có origin của trang web trong `ZALO_CLIENT_ORIGINS`; để trống thì nút ghi "Sắp có".
- * App Android dùng `ZALO_NATIVE_CLIENT_ID` bên dưới thay cho cờ này.
+ * Enables the Zalo button on web (sign-in through the Zalo window, contract Zalo CORE-015). Set `true` only when
+ * that environment has Core `ZALO_ENABLED` and the web origin in `ZALO_CLIENT_ORIGINS`; otherwise the button says
+ * "Sắp có". Android uses the native client ID below instead.
  */
 export const ZALO_LOGIN_ENABLED = process.env.EXPO_PUBLIC_ZALO_LOGIN === 'true';
 
 /**
- * Đăng nhập Zalo trên app Android (hợp đồng Zalo CORE-016): đúng giá trị `ZALO_NATIVE_CLIENT_ID` của Core môi trường đó.
- * Đặt lúc build thì nút "Zalo" trên Android bấm được và APK khai App Link `https://<Core>/mobile/auth/zalo/complete`
- * (xem app.config.js); để trống thì nút ghi "Sắp có". Core cũng phải bật `ZALO_NATIVE_ENABLED` với package và SHA-256
- * chứng chỉ ký của đúng APK đó, nếu không App Link không mở lại app.
+ * Android Zalo sign-in (contract Zalo CORE-016): the value must be the `ZALO_NATIVE_CLIENT_ID` for the target Core
+ * environment. When set at build time, Android enables the "Zalo" button and declares the App Link
+ * `https://<Core>/mobile/auth/zalo/complete` (see app.config.js); when empty, the button says "Sắp có". Core must
+ * also enable `ZALO_NATIVE_ENABLED` for this package and the signing certificate SHA-256, or the App Link cannot
+ * return to the app.
  */
 export const ZALO_NATIVE_CLIENT_ID = (process.env.EXPO_PUBLIC_ZALO_NATIVE_CLIENT_ID ?? '').trim();
 
-/** Email hỗ trợ hiện ở màn xác minh email; để trống thì không hiện dòng liên hệ. */
-/** Trang công khai của sản phẩm: chính sách (/chinh-sach) và hướng dẫn xoá tài khoản (/delete-account). */
+/** Support email shown on the email-verification screen; empty means that contact line is hidden. */
+/** Public product pages: policy (/chinh-sach) and account deletion instructions (/delete-account). */
 export const WEBSITE_URL = 'https://songheloi.id.vn';
 
 export const SUPPORT_EMAIL = (process.env.EXPO_PUBLIC_SUPPORT_EMAIL ?? '').trim();

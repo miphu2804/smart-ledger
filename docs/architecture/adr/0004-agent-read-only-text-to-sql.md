@@ -38,10 +38,10 @@ The model passes only `sql`; the shop comes from the request context, never from
 - Every new kind of data needs a migration (a view and its grant) and a guard allowlist change. Customer names and contacts, expense descriptions, refunds and stock-in history are not exposed yet.
 - Functions outside the allowlist, such as `to_char` or regex `~`, are rejected, and the model has to rewrite the query. The allowlist may need to grow after measuring with real questions.
 - Migrations need a role with `CREATEROLE` on the first run, and operations must create the login that holds `ai_sql_reader` in each environment.
-- Server logs hold the model's SQL and up to 1000 characters of each result ([AI README, Observability](../../../backend/ai/README.md#observability)).
+- Server logs hold the model's SQL and up to 1000 characters of each result ([AI README, Observability](../../../backend/ai/docs/architecture.md#observability)).
 
 ## References
 
 - Issue #76, PRs #77 and #106.
-- [AI README, Read-only shop data](../../../backend/ai/README.md#read-only-shop-data) for the current layers and the login setup.
-- [API contracts §6](../../contracts/api-contracts.md#công-cụ-đọc-dữ-liệu-tiệm-của-agent).
+- [AI README, Read-only shop data](../../../backend/ai/docs/architecture.md#read-only-shop-data) for the current layers and the login setup.
+- [API contracts §6](../../contracts/api-contracts.md#agent-tool-for-reading-shop-data).

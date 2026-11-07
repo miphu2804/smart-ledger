@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Fails when an evaluator in .honeyhive/evaluators has no ID in .honeyhive/state.json. An evaluator created in CI gets
 # an ID that run cannot commit, so every later run would create it again. Create new evaluators locally with
-# sync-evaluators.sh and commit state.json before merging. Run from the repository root.
+# scripts/honeyhive/sync-evaluators.sh and commit state.json before merging. Run from the repository root.
 set -euo pipefail
 . "$(dirname "$0")/lib.sh"
 

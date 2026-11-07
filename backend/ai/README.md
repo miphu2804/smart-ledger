@@ -1,338 +1,65 @@
 # SmartLedger AI
 
-Internal FastAPI service that runs the owner's Agent chat. Only Core calls it: Core proxies its public `/api/v1/agent/*` routes here. Frontends must not call this service.
+SmartLedger AI is the internal FastAPI service for the owner's Agent chat. Core is the only caller: it proxies the public `/api/v1/agent/*` routes to AI. Frontends must not call this service directly.
 
 | Need | Read |
 |---|---|
-| Request and response shapes | [API contracts §6](../../docs/contracts/api-contracts.md#6-core--ai-nội-bộ) |
-| Implementation status | [Technical design §1](../../docs/architecture/technical-design.md#1-phạm-vi) |
-| Code walkthrough with diagrams | [Service walkthrough §8](../../docs/architecture/service-walkthrough/README.md#8-ai-service) |
-| Vector store and long-term memory decisions | [ADR-0001](../../docs/architecture/adr/0001-vector-store-pgvector.md), [ADR-0002](../../docs/architecture/adr/0002-agent-long-term-memory.md) |
+| Request and response shapes | [API contracts §5–6](../../docs/contracts/api-contracts.md#5-ai-through-core) |
+| Implementation status | [Technical design §1](../../docs/architecture/technical-design.md#1-scope) |
+| Responsibilities and trust boundaries | [AI service architecture](docs/architecture.md) |
+| Configuration and operational details | [AI runtime reference](docs/runtime-reference.md) |
+| Code walkthrough | [Service walkthrough §8](../../docs/architecture/service-walkthrough/README.md#8-ai-service) |
+| Vector and memory decisions | [ADR-0001](../../docs/architecture/adr/0001-vector-store-pgvector.md), [ADR-0002](../../docs/architecture/adr/0002-agent-long-term-memory.md) |
 
 ## Routes
 
-`src/main.py` is the composition root. Every `/internal/v1` route inherits the `X-Internal-Token` check; a new flow adds one `include_router` line there.
+`src/main.py` is the composition root. Every `/internal/v1` route inherits the `X-Internal-Token` check. `/health` and `/metrics` are unauthenticated; hosted delivery must restrict them to the internal network. The local Compose stack publishes the AI port, so local reachability is not an access-control guarantee. `/health` checks no dependency.
 
 | Method | Path | Purpose |
 |---|---|---|
-| `GET` | `/health` | Returns `{"status": "ok"}`; no token, checks no dependency |
-| `GET` | `/metrics` | Prometheus request metrics for Grafana; no token, reachable only on the container network |
 | `POST` | `/internal/v1/agent/chat` | One chat turn, JSON answer |
-| `POST` | `/internal/v1/agent/chat/stream` | Same turn as server-sent events; Core relays it as `/api/v1/agent/chat/stream` |
+| `POST` | `/internal/v1/agent/chat/stream` | The same turn as server-sent events; Core relays it |
 | `GET` | `/internal/v1/agent/conversations` | List the owner's conversations |
-| `GET` `PATCH` `DELETE` | `/internal/v1/agent/conversations/{id}` | Read, rename or delete one conversation |
-| `GET` `PUT` | `/internal/v1/agent/memory/settings` | Read or set the owner's long-term memory switch |
-| `GET` | `/internal/v1/agent/memory/items` | List the owner's live memories |
+| `GET` `PATCH` `DELETE` | `/internal/v1/agent/conversations/{id}` | Read, rename or delete a conversation |
+| `GET` `PUT` | `/internal/v1/agent/memory/settings` | Read or set the owner's memory switch |
+| `GET` | `/internal/v1/agent/memory/items` | List live memories |
 | `DELETE` | `/internal/v1/agent/memory/items/{id}` | Forget one memory |
 
-There are no invoice, expense or draft endpoints.
-
-### Errors
-
-| Status | `detail` | When |
-|---|---|---|
-| `401` | `unauthorized` | Missing or wrong `X-Internal-Token`; an unset token rejects every `/internal/v1` route |
-| `404` | `conversation_not_found`, `memory_not_found` | The conversation or memory is not the caller's user and shop |
-| `409` | `memory_unavailable` | Writing memory settings or items while long-term memory is not built |
-| `422` | `input_too_long`, `answer_unavailable`, `answer_timeout` | A [guardrail](#guardrails) stopped the turn; nothing is stored |
-| `503` | `ai_unavailable` | Any other failure, such as an unreachable database; the cause goes to the log |
-
-Core forwards the `422` codes as its own `code` and turns every other non-404 AI error into `503 ai_unavailable`.
+There are no invoice, expense or draft endpoints. Error mapping and the Core proxy boundary belong to the [API contract](../../docs/contracts/api-contracts.md#6-core--ai-internal).
 
 ## Agent tools
 
-The agent runs on [Pydantic AI](https://ai.pydantic.dev/). Prompts live in `src/prompt_templates/`, are English and static, and tell the agent to answer in Vietnamese.
+The agent uses Pydantic AI. Prompts are static English instructions that tell the model to answer in Vietnamese.
 
-| Tool | Available when | Does |
+| Tool | Availability | Boundary |
 |---|---|---|
-| `query_shop_data` | `AI_SQL_READER_URL` is set | Runs one model-written `SELECT` over the [read-only views](#read-only-shop-data) |
-| `suggest_restock` | `AI_SQL_READER_URL` is set | Lists products whose stock is below the [restock cover](#restock-suggestions) |
-| `calculate` | `CALC_ENABLED` (default on) | Runs ordered [arithmetic steps](#calculation-and-sandbox) instead of mental math |
-| `run_code` | `SANDBOX_ENABLED` (default on) | Runs a small model-written Python program in the Monty sandbox; it calls no tool |
-| `suggest_screen` | Always | Adds an [app screen button](#app-guide-and-screen-buttons) to the answer |
+| `query_shop_data` | `AI_SQL_READER_URL` configured | One guarded `SELECT` over tenant-filtered read views |
+| `suggest_restock` | `AI_SQL_READER_URL` configured | Read-only stock suggestion |
+| `calculate` | `CALC_ENABLED=true` | Closed arithmetic operation set, no I/O |
+| `run_code` | `SANDBOX_ENABLED=true` and the Code Mode extra installed | Model-written Python in Monty; no tools are folded in by default |
+| `suggest_screen` | Always | Closed set of mobile screen buttons |
 
-## How a chat turn runs
+AI returns answers and proposals only; it does not create sales, payments, debts or expenses.
 
-1. Reject an owner message longer than `AGENT_MAX_INPUT_CHARS`.
-2. Redact secrets and personal data from the message; the redacted text is what gets stored.
-3. Load the last `AGENT_HISTORY_TURNS` exchanges verbatim, without earlier ```` ```actions ```` blocks.
-4. With long-term memory on, recall memories and place them before the message.
-5. Run the model under the request, token, time and tool-call limits.
-6. Screen the final answer and send a leaking or empty one back for a retry.
-7. Append accepted screen buttons, then save the exchange.
-8. With long-term memory on, extract new facts in the background.
+## Chat turn
 
-## Chat history and context
+1. Reject an oversized owner message.
+2. Redact supported secret and personal-data patterns; names and phone numbers can remain.
+3. Load the bounded recent history and, when enabled, recall long-term memory.
+4. Select a model and run within request, token, time and tool limits.
+5. Screen the answer, append approved screen actions, and save only an accepted turn.
+6. Extract memory facts in the background when long-term memory is enabled.
 
-- History is never summarized: older messages than `AGENT_HISTORY_TURNS` (default 30 exchanges) simply do not reach the model. 30 turns at the 2000-character cap fit a 100k-token window.
-- The current shop time (`Asia/Ho_Chi_Minh`) follows the new message after a cache breakpoint and is never stored, so instructions and history stay a cacheable prefix.
-- `AgentConversationRepository.recent_messages` checks the conversation belongs to the user and shop before reading it.
-- With `REDIS_URL` set, the repository keeps each conversation's latest messages in Redis for 24 hours, keyed by conversation, user and shop, so a repeat turn skips the database read; `save_exchange` updates a cached entry after it commits, `delete_conversation` removes it, and an unset or unreachable Redis makes every turn read PostgreSQL. Start a local one with `docker run -d --rm --name smartledger-local-redis -p 127.0.0.1:6379:6379 redis:7-alpine redis-server --maxmemory 64mb --maxmemory-policy allkeys-lru` and set `REDIS_URL=redis://127.0.0.1:6379/0`.
-- `chat_conversations.summary` and `summary_through_message_id` are unused and kept only so the previous release can roll back.
-
-## Model provider
-
-`LLMFactory.create_model(alias)` in `src/providers/llm_factory.py` reads `MODEL_ALIASES`, a JSON object mapping each alias to a `protocol`, the `model` id, an optional `effort` and an optional `service_tier`. The application uses one alias, `chat`, on `gpt-6-luna` over `openai_responses` with effort `medium`. The protocol picks the provider class:
-
-| `protocol` | Provider | API |
-|---|---|---|
-| `openai_responses` (default) | `OpenAIResponsesProvider` | `/v1/responses` |
-| `openai_chat` | `OpenAIChatProvider` | `/chat/completions` |
-
-- Every model shares `OPENAI_API_KEY`, the gateway credential: the Bifrost virtual key when AI calls Bifrost, and the OpenAI key when it calls OpenAI directly. Both clients also send it as `x-bf-vk`, because Bifrost reads a virtual key from the Bearer header only when it starts with `sk-bf-`; the header lives on the client because a run's `extra_headers` replace the model's whole. OpenAI ignores it.
-- `OPENAI_BASE_URL` is the base of the OpenAI APIs, and blank means the OpenAI default.
-- Through Bifrost the model id has no provider prefix: the virtual key's allowed models pick the upstream, and routing rules in `deploy/vps/bifrost.json` hold any fallback ([ADR-0008](../../docs/architecture/adr/0008-bifrost-owns-routing-and-fallback.md)). Bifrost also serves `mercury-3` from Inception, which has only `/chat/completions`, so an alias for it uses `openai_chat`; Bifrost refuses any other request type for Inception.
-- `MODEL_FALLBACKS` is a JSON list of `protocol:model` tried in order, for an environment that calls a provider directly; a fallback gets only what is left of the turn timeout, so it mainly covers fast failures.
-- `session_settings` sends `x-bf-session-id` (`conversation-<id>` for each turn, one-off ids for drafts and memory calls) to group a conversation's Bifrost logs and `x-bf-lh-shop-id` to add the shop to log metadata.
-- `effort` of an alias maps to `openai_reasoning_effort`; an alias without one uses `MODEL_REASONING_EFFORT`. The values depend on the model: `gpt-6-luna` takes `none` to `max`, Mercury 3 takes `instant`, `low`, `medium` or `high`.
-- `service_tier` of an alias maps to `openai_service_tier`: `auto`, `default`, `flex` or `priority`, where `priority` is OpenAI's faster and pricier tier; an alias without one sends no tier and leaves the provider default. Set it per alias in `MODEL_ALIASES`, for example `"service_tier": "priority"` on a `gpt-6-luna` alias.
-
-### Model tiers
-
-With `MODEL_TIERING_ENABLED=true`, each chat turn runs on the model its request needs instead of always on `chat`. `LLMRouterService` (`src/llm_router/`) asks TypeSafe Jev through Bifrost's `/v1/decisions` with `BifrostTierClassifier` (`TIER_CLASSIFIER_URL`, e.g. `http://bifrost:8080/v1/decisions`) to rate the owner's latest message, led by their previous one, and picks the alias of that tier:
-
-| Tier | Alias | Intended model |
-|---|---|---|
-| `SIMPLE` | `chat-simple` | `mercury-3` over `openai_chat`, effort `instant` |
-| `MEDIUM` | `chat-medium` | `mercury-3` over `openai_chat`, effort `medium` |
-| `COMPLEX` | `chat-complex` | `gpt-6-luna` over `openai_responses`, effort `high` |
-
-```json
-{"chat": {"protocol": "openai_responses", "model": "gpt-6-luna", "effort": "medium"},
- "chat-simple": {"protocol": "openai_chat", "model": "mercury-3", "effort": "instant"},
- "chat-medium": {"protocol": "openai_chat", "model": "mercury-3", "effort": "medium"},
- "chat-complex": {"protocol": "openai_responses", "model": "gpt-6-luna", "effort": "high"}}
-```
-
-- The aliases live in `MODEL_ALIASES`; when the URL or any of the three is missing, AI logs `tiering off` at startup and every turn runs on `chat`. Memory recall and writes always use `chat`.
-- The classification runs beside memory recall and waits at most `TIER_CLASSIFIER_TIMEOUT_SECONDS`; an error, a timeout or a refused answer runs the turn on `chat-complex`.
-- A conversation keeps the highest tier it has reached, so a short follow-up to a hard question stays on the stronger model and its prompt cache; once it is `COMPLEX` Jev is not asked again. The tiers live in the process for a day of inactivity and a restart only means the next turn is classified again.
-- The model is picked once per turn, so every tool-call step of the turn runs on it. The HoneyHive session records `model`, `tier`, `tier_alias` and `tier_mechanism` (`classified`, `conversation` or `fallback`), and the log has one `model tier` line per turn.
-- Whether `gpt-6-luna` accepts `xhigh` has not been tried yet; check it with one direct call before enabling tiers.
-
-## Read-only shop data
-
-`query_shop_data` reads the shop profile, categories, products, sales, sale items, debts, payments and ACTIVE expenses. There is no SQL HTTP endpoint. Five layers keep a query read-only and inside the current shop:
-
-| Layer | Where | Rule |
-|---|---|---|
-| Role | AI baseline migration | `NOLOGIN` role `ai_sql_reader` has `SELECT` on the eight `ai_read` views only |
-| Views | `ai_read.v_*` | `security_barrier` views filter on `smartledger.shop_id`; an unset setting returns no rows; customer names, phones, free-text notes and transfer references are left out |
-| Guard | `src/sql/guard.py` | Rejects SQL over 4000 characters, then `sqlglot` accepts exactly one `SELECT` over those views with allowlisted functions and casts and re-renders it under `LIMIT` |
-| Execution | `src/sql/repository.py` | Own pool (`SQL_POOL_MAX_SIZE`), one `READ ONLY` transaction, shop id bound from the request, `SQL_TIMEOUT_MS`, `SQL_ROW_LIMIT`, text cells cut at 200 characters |
-| Output | `src/agent/tools.py` | Rejected queries return `Error[CODE]: reason` for the model to fix; any other failure fails the turn with `503` |
-
-The model passes only `sql`; the shop comes from the run context. Refunds, stock-in history and customer contacts are not exposed yet.
-
-Create the login the service uses once, after pushing the baseline as a user with `CREATEROLE`. Keep the password in the environment's secrets:
-
-```sql
-CREATE ROLE smartledger_ai_reader LOGIN PASSWORD '<secret>' IN ROLE ai_sql_reader;
-ALTER ROLE smartledger_ai_reader SET default_transaction_read_only = on;
-```
-
-## Guardrails
-
-`GuardrailService` (`src/agent/guardrails/service.py`) applies the [Pydantic AI Harness guardrails](https://pydantic.dev/docs/ai/harness/guardrails/) around each run. All checks are deterministic; there is no model-based safety check.
-
-| Check | Setting (default) | On failure |
-|---|---|---|
-| Message length | `AGENT_MAX_INPUT_CHARS` (2000) | `422 input_too_long` before any model call |
-| Redaction (`input_redaction.py`) | — | Keys, tokens, JWTs, IBANs, Luhn-valid cards and emails become `[redacted:<name>]` |
-| Model requests | `AGENT_MODEL_CALL_LIMIT` (4) | `422 answer_unavailable` |
-| Tokens per turn | `AGENT_TURN_TOKEN_LIMIT` (200000) | `422 answer_unavailable` |
-| Turn time | `AGENT_TURN_TIMEOUT_SECONDS` (35, below Core's 40 s) | `422 answer_timeout` |
-| Tool calls (`tool_call_limit.py`) | `AGENT_TOOL_CALL_LIMIT` (3) | Further calls refused; the model answers with what it has |
-| Answer screen (`answer_screen.py`) | — | An empty answer or one leaking views, settings, error codes or SQL is retried; still failing gives `422 answer_unavailable` |
-
-Limits are provisional until the PO approves them; each answered turn logs its token usage to size them.
-
-## Streaming
-
-The [stream contract](../../docs/contracts/api-contracts.md#stream-trả-lời-chat) defines the events. How the service produces them:
-
-- History and input checks run before the first byte, so a pre-stream failure is a normal JSON error; a later failure ends the stream with an `error` event carrying the same code.
-- The run uses `agent.iter()` with `stream_text(delta=True)`; `run_stream` would stop at the first final-looking output and skip later tool calls.
-- `AnswerScreen.screened_prefix` releases only text no continuation can turn into a leak, holding back a short tail (up to 400 characters after a `select`).
-- `reset` discards shown text when a data tool call or a retry follows it. The text after the last `reset` always equals the stored answer.
-- Nothing is saved unless the run completes; closing the stream cancels the run.
-
-## Restock suggestions
-
-`suggest_restock(period)` returns tracked ACTIVE products below cover, most urgent first, each with a suggested quantity and a fixed Vietnamese reason. It changes nothing.
-
-- Only `CONFIRMED` sales in the period count.
-- Suggested quantity is `ceil(sold_qty / days * COVER_DAYS - max(stock_qty, 0))`, shown only when positive.
-- `COVER_DAYS` (7, in `src/restock/policy.py`) and the periods `last_7_days` and `last_30_days` are provisional.
-- It runs one fixed `SELECT` through the same guard and pool as `query_shop_data` and flags a list cut by the row cap.
-
-## Calculation and sandbox
-
-**`calculate`** (`src/calculation/`, framework-free) runs up to `CALC_MAX_OPERATIONS` (20) steps of `add`, `subtract`, `multiply`, `divide`, `percentage`, `round`, `min` and `max`; a step may use `$` for the previous result. Operands and results stay within `CALC_MAX_OPERAND_VALUE` (1e15). A bad plan returns `Error[CODE]` for the model to fix. It stays callable past the tool-call limit because it does no I/O.
-
-**`run_code`** (`src/sandbox/wrapper.py`) runs a model-written Python snippet in [Monty](https://github.com/pydantic/monty) through the Harness Code Mode capability. Monty starts only when a turn calls `run_code`. `RUN_CODE_PROMPT` keeps it for work that neither one SQL query nor `calculate` can express; the program gets its inputs from earlier tool results.
-
-`SANDBOX_TOOLS` in `src/main.py` lists the tools folded into the sandbox and is empty: the read-only data tools stay direct, so a plain data question never starts Monty.
-
-| Limit | Setting (default) |
-|---|---|
-| Execution time per snippet | `SANDBOX_MAX_DURATION_SECS` (5) |
-| Monty heap | `SANDBOX_MAX_MEMORY_BYTES` (64 MiB); not a process limit |
-| Nested tool calls per snippet | `SANDBOX_MAX_TOOL_CALLS` (3) |
-| Host interactions per snippet | `SANDBOX_MAX_SUSPENSIONS` (1000) |
-
-The tool-call guardrail counts one `run_code` as one call and does not see calls nested inside it. If a tool is ever folded in, keep `SANDBOX_MAX_TOOL_CALLS` equal to `AGENT_TOOL_CALL_LIMIT` so a snippet cannot multiply the database load. All calculation and sandbox defaults are provisional.
-
-## App guide and screen buttons
-
-`APP_GUIDE_PROMPT` (`src/prompt_templates/app_guide.py`) names the app's tabs, screens and buttons. `suggest_screen(screen)` takes one screen from a closed set; after the run, `AgentService` appends up to two distinct screens as a ```` ```actions ```` block and strips it before replaying history. Update the prompt when a mobile route moves.
-
-## Long-term memory (off by default)
-
-`AGENT_MEMORY_ENABLED=true` turns on the [ADR-0002](../../docs/architecture/adr/0002-agent-long-term-memory.md) memory. It is not product behavior until the PO approves it. ADR-0002 owns the recall, ranking and reconcile design; [the memory evaluation](evaluation/memory/README.md) measures its recall.
-
-- Needs the migrations `20261014000000_agent_memories.sql` and `20261015000000_agent_memory_visibility.sql`, and an embedder from `AGENT_MEMORY_EMBEDDING_PROVIDER`:
-  - `sentence-transformers` runs locally and needs `uv sync --group memory`; the Docker image leaves that group out, so there the flag logs an error and stays off.
-  - `cloudflare` calls Workers AI with `CLOUDFLARE_ACCOUNT_ID` and `CLOUDFLARE_API_TOKEN`; owner messages and facts are sent to Cloudflare.
-  - `onnx` runs a static ONNX model in this process with onnxruntime, without torch; `AGENT_MEMORY_EMBEDDING_MODEL` is a directory holding `model.onnx` and `tokenizer.json`. The default. The Docker image ships the int8 export of `static-similarity-mrl-multilingual-v1` at `/app/models/static-mrl-int8`, pinned to one revision and checked by SHA-256. It embeds a message in under 1 ms and adds about 330 MB of memory, but its recall on the memory evaluation is lower than embeddinggemma's (0.753 against 0.861 at 384 dimensions).
-- Vectors are cut to 384 dimensions. Vectors of two models cannot be compared, so an environment that changes provider or model re-embeds its stored memories: set the new values in Dopbase and deploy, then run `uv run python -m src.memory.reembed` from `backend/ai` with that environment's `POSTGRES_URL` and the new embedding settings, first as a dry run and then with `--apply`. In that order no memory written in between keeps the old model's vector; recall is off-target only from the deploy until the script finishes. All vectors are written in one transaction, and running it again with the old settings restores the old model's vectors.
-- Recall: up to ten `preference` memories lead every turn, then the five best matches by cosine plus BM25 (`src/memory/ranking.py`). A failed search answers without memories. The stream sends a `memory` event before the first `delta`.
-- Write: after a saved turn, the chat model extracts up to five facts of the types in `AGENT_MEMORY_TYPES`, reconciles them with similar live memories and merges memories older than 7 days. It runs in the background and never fails the turn. Facts with a Vietnamese phone number are dropped.
-- The owner's switch lives in `agent_memory_settings` (on when no row); off stops recall and writes and deletes nothing. Deleting a conversation deletes the memories it produced.
-
-## Text drafts
-
-`DraftService.parse(shop_id, mode, text)` in `src/drafts/service.py` turns owner text or an STT transcript into a `DraftView`. It writes nothing and has no endpoint yet; the planned `/internal/v1/drafts/parse` and audio belong to #3.
-
-- `SALE` matches lines against the shop's ACTIVE catalog; an unknown id, ambiguous line or `confidence` below 0.7 leaves the product empty with a Vietnamese warning, and a line with quantity 0 or less is dropped with one. Price always comes from the catalog.
-- `EXPENSE` makes one line per expense with the amount in `unit_price`.
-- Any model or catalog failure raises `DraftUnavailableError`, which the endpoint is to map to `503 ai_unavailable`.
-
-## Observability
-
-- **Logs:** stdout at `LOG_LEVEL`. At `INFO` and `WARNING`, `src/agent/tool_events.py` logs each tool call with its name, call id and the size of its arguments and result, and a rejected query, a turn without an answer or a failed memory step logs its code or error type, so server logs hold no shop data; the SQL, results and reasons, each cut to 1000 characters, and memory tracebacks log at `DEBUG` only. A tool retry logs at `WARNING`.
-- **Traces:** with `HH_API_KEY` set and `HH_SOURCE=production`, `src/observability.py` sends one [HoneyHive](https://docs.honeyhive.ai/v2) span per turn, model request, tool call and memory embedding, with timing, model, tokens, tool names, errors, `shop_id` and the content, grouped into one HoneyHive session per turn. The content is the prompts, the redacted question, tool arguments, tool results and the answer, so customer names and phone numbers the owner types reach HoneyHive (`NFR-008`); raw media does not, and `InputRedaction` removes keys, tokens, card numbers, IBANs and emails before the session opens. `tests/unit_tests/test_observability.py` checks both. The session opens with the redacted question, `user_id`, `shop_id`, `conversation_id`, the model, `prompt_version` (a hash of the instructions and tool definitions) and `git_sha`, the commit the deploy workflow builds into the image, and closes with the answer and the turn's tokens, model requests and tool calls, plus `first_text_ms` for a streamed turn, the wait from the turn's arrival to the first words the owner sees, memory recall and any preamble included, so the session list reads like the chat and filters by prompt version or release. A turn that fails, times out or is cancelled instead gets `metadata.error`, the guardrail code such as `answer_timeout`, the exception type, or `cancelled` when the owner closed the stream. Each update waits for the session to be created first, up to five seconds, because HoneyHive loses an update for a session it does not have yet, and a session HoneyHive refuses logs a `WARNING`. Those updates are blocking HTTP calls, so they run on two threads of their own and a slow HoneyHive cannot hold the threads the database calls use. The tier classifier calls Bifrost's `/v1/decisions` over plain HTTP, which no agent instrumentation sees, so it records its own `tier classifier` span of type `model` inside the turn's `llm router` span, with the model and the `prompt_tokens`, `completion_tokens` and `total_tokens` Bifrost reports, which HoneyHive adds to the session's token totals and model events. Only the chat agent opens sessions; memory runs inside the chat turn's session with its `shop_id`, and a draft run has none, so the SDK drops its spans. `HH_SAMPLE_RATE` (default 1) traces that share of turns; a turn outside the sample opens no session, so the SDK drops its spans too, and the SDK's warning for each dropped span is filtered out. A turn sends about seven events, more with tool calls, against the free plan's monthly cap. Cost stays 0 on HoneyHive: it sums the `metadata.cost` the app sets on events and prices nothing itself, and Bifrost, which prices every model request, writes that cost only to its own log, so read it there (`deploy/vps/bifrost.json` holds the one price override, for `mercury-3`, which Bifrost's built-in price list lacks). Embeddings run on Cloudflare Workers AI outside Bifrost and have no cost record. Any other `HH_SOURCE` (the default `local`, or `staging`) turns tracing off, so the free plan's monthly events stay for production. FastAPI requests are not instrumented because that would record the unredacted message. The turn waits on HoneyHive only once, before its first span, until the session exists, up to five seconds: a span that reaches HoneyHive first makes it create the session itself with source `api`, start time 0 and no inputs, which the later start does not fix. The session start goes out before the history read, so the read hides part of that wait, and `history_ms` reaches the session as a later update; a slow or down HoneyHive costs a turn at most that wait and loses only the session fields and the spans. The session fields go out through HoneyHive's sessions API with the turn's start time, because the SDK's `acreate_session` sends none and HoneyHive would then time the session from 1970 to its last span. On shutdown the app waits up to ten seconds for memory writes, cancels any still running before the database pool closes, waits up to ten seconds for session updates, flushes queued spans for up to five seconds, then shuts the tracer down; `deploy/vps/compose.yaml` gives the container 60 seconds to stop, enough for an open stream to finish first. Tracing starts in `lifespan`, not at import, and the tests clear `HH_API_KEY`, so a test run sends nothing to HoneyHive.
-- **Online evaluators:** HoneyHive scores every new `query_shop_data` call for a refused query and every turn's answer, on its session, for leaked internals, figures no tool supports, forbidden Markdown, a chart the app cannot draw and a reply not in Vietnamese, with Python evaluators kept as config as code in [`.honeyhive`](../../.honeyhive/README.md) at the repository root, together with the charts and the alerts on a slow p95 turn, on the query error rate and on failed turns, all on `production` traffic only; `sync-evaluators.sh` and `sync-dashboards.sh` there apply them, by hand or from the workflows on a merge into `main`.
-- **Metrics:** `/metrics` exposes request rate, status and latency per route through `prometheus-fastapi-instrumentator`, timed to the last streamed byte, for the dashboards in `deploy/monitoring/`.
-
-## Database access
-
-| Connection | Setting | Pool (default) | Used for |
-|---|---|---|---|
-| Application database | `POSTGRES_URL` | `POSTGRES_POOL_MAX_SIZE` (2) | Chat history, memories, catalog for drafts |
-| Shop-data reader | `AI_SQL_READER_URL` | `SQL_POOL_MAX_SIZE` (2) | `query_shop_data` and `suggest_restock` |
-
-- URLs must be `postgresql://` or `postgres://`; libpq keyword strings are rejected.
-- The four connections fit the Supabase session pooler's 15 clients next to Core's 10.
-- PostgreSQL connects lazily on first use with a 3 s connect timeout; a request waits up to 5 s for a free connection. An unreachable database is logged, does not stop the service and makes database routes answer `503`.
-- Migrations own the schema; the service never creates a table.
-
-## Schema and migrations
-
-The AI schema (chat history, the `vector` extension, the `ai_read` views and memory tables) lives in [`supabase/migrations/`](../../supabase/migrations/). It reads Core's tables, so run Core's Flyway migrations first. On the shared staging database, push only after the pull request merges ([Database migrations](../../docs/development/local-development.md#database-migrations)). From the repository root:
-
-```bash
-set -a && . backend/ai/.env && set +a
-npx supabase@2.119.0 db push --db-url "$POSTGRES_URL"
-```
-
-Add a change as a new file with `npx supabase@2.119.0 migration new <name>`; never edit a pushed file.
-
-## Configuration
-
-Settings come from `src/app_config.py`, read from the environment or `.env`; blank values fall back to the default. Write `.env` with `scripts/secrets/apply.sh dev dev` ([Secrets and env files](../../docs/development/secrets-and-env.md)) or copy `.env.example`.
-
-| Group | Variable | Default | Purpose |
-|---|---|---|---|
-| Server | `APP_TITLE` | `SmartLedger AI` | FastAPI title |
-| | `SERVER_HOST`, `SERVER_PORT` | `0.0.0.0`, `8001` | Bind address |
-| | `LOG_LEVEL` | `INFO` | Root log level |
-| Core | `INTERNAL_API_TOKEN` | unset | Shared with Core; unset rejects every `/internal/v1` route |
-| Database | `POSTGRES_URL` | unset | Application database |
-| | `POSTGRES_POOL_MAX_SIZE` | `2` | Application pool size |
-| Shop data | `AI_SQL_READER_URL` | unset | Read-only login; unset removes the data tools |
-| | `SQL_POOL_MAX_SIZE` | `2` | Reader pool size |
-| | `SQL_TIMEOUT_MS` | `3000` | Statement timeout |
-| | `SQL_ROW_LIMIT` | `100` | Row cap per query |
-| Model | `MODEL_ALIASES` | `chat` on `gpt-6-luna` over `openai_responses`, effort `medium` | Alias to `protocol`, `model` and optional `effort` |
-| | `MODEL_FALLBACKS` | `[]` | JSON list of `provider:model` |
-| | `MODEL_TIMEOUT_SECONDS` | `20` | Timeout per model request |
-| | `MODEL_REASONING_EFFORT` | `low` | Effort of an alias that sets none; the values depend on the model |
-| | `MODEL_TIERING_ENABLED` | `false` | Pick each turn's model by tier; see [Model tiers](#model-tiers) |
-| | `TIER_CLASSIFIER_URL` | unset | Bifrost's `/v1/decisions` URL; required for tiers |
-| | `TIER_CLASSIFIER_MODEL` | `typesafe/jev-latest` | Decision model that rates each turn |
-| | `TIER_CLASSIFIER_TIMEOUT_SECONDS` | `1.5` | Longest wait for a rating; past it the turn runs `chat-complex` |
-| | `OPENAI_API_KEY`, `OPENAI_BASE_URL` | unset | Shared by every model; blank URL means OpenAI |
-| Guardrails | `AGENT_MAX_INPUT_CHARS` | `2000` | See [Guardrails](#guardrails) |
-| | `AGENT_MODEL_CALL_LIMIT` | `4` | |
-| | `AGENT_TOOL_CALL_LIMIT` | `3` | |
-| | `AGENT_TURN_TOKEN_LIMIT` | `200000` | |
-| | `AGENT_TURN_TIMEOUT_SECONDS` | `35` | |
-| | `AGENT_HISTORY_TURNS` | `30` | Exchanges sent with each turn |
-| Calculation | `CALC_ENABLED` | `true` | See [Calculation and sandbox](#calculation-and-sandbox) |
-| | `CALC_MAX_OPERATIONS` | `20` | |
-| | `CALC_MAX_OPERAND_VALUE` | `1e15` | |
-| Sandbox | `SANDBOX_ENABLED` | `true` | |
-| | `SANDBOX_MAX_MEMORY_BYTES` | `67108864` | |
-| | `SANDBOX_MAX_DURATION_SECS` | `5` | |
-| | `SANDBOX_MAX_TOOL_CALLS` | `3` | |
-| | `SANDBOX_MAX_SUSPENSIONS` | `1000` | |
-| Memory | `AGENT_MEMORY_ENABLED` | `false` | See [Long-term memory](#long-term-memory-off-by-default) |
-| | `AGENT_MEMORY_TYPES` | `preference,procedural,semantic` | Types the model may write |
-| | `AGENT_MEMORY_EMBEDDING_PROVIDER` | `onnx` | Or `cloudflare`, `sentence-transformers`; one provider per environment |
-| | `AGENT_MEMORY_EMBEDDING_MODEL` | `models/static-mrl-int8` | Embedding model; for `onnx` a directory relative to the working directory, filled locally by `scripts/ai/fetch-embedding-model.sh` |
-| | `CLOUDFLARE_ACCOUNT_ID`, `CLOUDFLARE_API_TOKEN` | unset | Workers AI embeddings |
-| Tracing | `HH_API_KEY` | unset | Unset sends nothing; also needs `HH_SOURCE=production` |
-| | `HH_API_URL` | unset | Data plane URL; unset uses HoneyHive's multi-tenant default |
-| | `HH_SOURCE` | `local` | Traces go out only when this is `production`; the alerts watch `production` only |
-| | `HH_SAMPLE_RATE` | `1` | Share of chat turns traced, 0 to 1 |
-| | `GIT_SHA` | unset | Set in the image by `deploy-backend.yml`; tags each session |
-| Deferred | `QDRANT_URL`, `LITELLM_URL` | unset | Kept for planned integrations; no code reads them |
-
-On the VPS the deploy sets the HoneyHive values from Dopbase ([AI tracing settings](../../docs/development/ci-cd.md#ai-tracing-settings)).
+Streaming checks input and history before the first byte and emits answer/progress events. Disconnect cancels the producer, but a database write already running may still commit. Event schemas and persistence semantics belong to the [stream contract](../../docs/contracts/api-contracts.md#chat-answer-stream).
 
 ## Run
 
-`uv run` runs a command in this folder's virtual environment and syncs it first; a `.py` file runs directly (`uv run evaluation/run.py`), and only a module needs `python -m` (`uv run python -m src.main`).
+Settings are owned by the [AI runtime reference](docs/runtime-reference.md#configuration); do not copy volatile model, flag or limit values into other architecture pages.
 
 ```bash
 uv sync --group dev
-cp .env.example .env
+cp -n .env.example .env   # keeps an existing .env
 uv run python -m src.main
 ```
 
-While editing code, `uv run uvicorn src.main:app --reload --port 8001` restarts the server on each change; it uses Uvicorn's own log format instead of the app's.
-
-To run against the local database instead of staging, see [Develop against the local database](../../docs/development/local-development.md#develop-against-the-local-database).
-
-### Local Compose
-
-From the repository root, start Core and this service against the shared staging databases ([Local Compose](../../docs/development/local-development.md#local-compose)):
-
-```bash
-docker compose --env-file backend/core/.env --env-file backend/ai/.env up --build
-```
-
-AI answers on `http://localhost:8001/health`; override the port with `AI_PORT`.
-
-## Check
-
-```bash
-uvx pre-commit install
-uv run ruff check --fix
-uv run ruff format
-uv run pytest
-```
-
-`pre-commit` runs Ruff (lint, import order and format) on commit. The live draft test runs only when asked: `RUN_LIVE_MODEL_TESTS=1 uv run pytest tests/integration_tests/test_draft_parse_live.py`.
-
-## Scripts
-
-```bash
-uv run evaluation/run.py memory                # memory recall eval, no model call
-uv run evaluation/run.py agent_chat --dry-run  # chat eval plan, no model call
-uv run evaluation/run.py agent_chat            # chat eval, calls the chat and judge models
-uv run evaluation/memory/generate.py           # regenerate the memory eval's cases.jsonl
-```
-
-See [Evaluation](evaluation/README.md) for the options.
+For local Compose, checks, migrations and evaluation commands, see [the runtime reference](docs/runtime-reference.md#run-and-check) and [Evaluation](evaluation/README.md).

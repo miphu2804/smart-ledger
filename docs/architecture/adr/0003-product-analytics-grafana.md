@@ -1,116 +1,116 @@
-# ADR-0003: Product analytics trong Grafana đọc từ dữ liệu Core và AI
+# ADR-0003: Product analytics in Grafana, read from Core and AI data
 
-- **Trạng thái:** Proposed. Datasource, dashboard và playbook của P1 đã có trong repo (`deploy/monitoring/`), nhưng chưa bật trên môi trường nào: còn chờ owner cơ sở dữ liệu tạo role `grafana_reader` và nạp `GRAFANA_PG_*` vào Dopbase. Không có migration hay code Core/AI; không phải hành vi sản phẩm cho tới khi chủ sở hữu sản phẩm và chủ vận hành duyệt.
-- **Ngày:** 2026-10-29
-- **Owner:** chưa chỉ định; cần một owner sản phẩm cho định nghĩa chỉ số và một owner cơ sở dữ liệu cho vai trò đọc.
-- Liên quan: [OPS-004 #269](https://github.com/miphu2804/smart-ledger/issues/269) (monitoring), [CORE-018 #409](https://github.com/miphu2804/smart-ledger/issues/409) (DAU/MAU), ba dashboard hạ tầng của PR #422.
+- **Status:** Proposed. The P1 datasource, dashboard and playbook are already in the repo (`deploy/monitoring/`), but are not enabled in any environment: they are still waiting for the database owner to create the `grafana_reader` role and load `GRAFANA_PG_*` into Dopbase. There is no migration or Core/AI code; it is not product behavior until the product owner and the operations owner approve.
+- **Date:** 2026-10-29
+- **Owner:** not assigned; needs a product owner for the metric definitions and a database owner for the read role.
+- Related: [OPS-004 #269](https://github.com/miphu2804/smart-ledger/issues/269) (monitoring), [CORE-018 #409](https://github.com/miphu2804/smart-ledger/issues/409) (DAU/MAU), the three infrastructure dashboards of PR #422.
 
-## 1. Bối cảnh
+## 1. Context
 
-- Hạ tầng monitoring đã có ba lớp Infra trong Grafana 12.1.1: overview, service và resources ([CI/CD](../../development/ci-cd.md#monitoring), [`deploy/monitoring/`](../../../deploy/monitoring/)). Chúng trả lời "hệ thống có sao không", không trả lời "chủ tiệm dùng tính năng nào".
-- Core chỉ phơi `/actuator/health`; không có `/actuator/prometheus` và không ghi access log có đường dẫn ([`application.yml`](../../../backend/core/src/main/resources/application.yml)). Vì vậy không có metric request theo route của Core.
-- Caddy chỉ cho metric theo host, không theo route ([`Caddyfile`](../../../deploy/edge/Caddyfile)); recording rule gộp còn `env` và `service` ([`service-red.yml`](../../../deploy/monitoring/prometheus/rules/service-red.yml)).
-- AI phơi `/metrics` qua prometheus-fastapi-instrumentator với nhãn `handler`, `method`, `status`, độ trễ tính tới byte cuối của stream ([`main.py`](../../../backend/ai/src/main.py), [AI README](../../../backend/ai/README.md)).
-- Core đã ghi sẵn một dòng sự kiện append-only cho mỗi thao tác nghiệp vụ thành công: `audit_logs` có `actor_user_id`, `actor_role`, `shop_id`, `action`, `entity_type`, `entity_id`, `request_id`, `metadata`, `created_at`, cấm UPDATE/DELETE ([ERD](../../architecture/erd-description.md)).
-- `user_daily_activity` (V19, CORE-018) cho DAU/MAU nhưng runtime mặc định tắt và chưa migrate/rollout trên shared database ([hướng dẫn rollout](../../../backend/core/docs/user-daily-activity.md)).
-- Lịch sử chat nằm trong `chat_conversations`/`chat_messages` do AI baseline tạo; `ai_requests` chỉ là thiết kế đích, chưa có bảng.
+- The monitoring infrastructure already has three Infra layers in Grafana 12.1.1: overview, service and resources ([CI/CD](../../development/ci-cd.md#monitoring), [`deploy/monitoring/`](../../../deploy/monitoring/)). They answer "is the system okay", not "which features does the shop owner use".
+- Core only exposes `/actuator/health`; there is no `/actuator/prometheus` and no access log with paths ([`application.yml`](../../../backend/core/src/main/resources/application.yml)). So there is no per-route request metric for Core.
+- Caddy only gives metrics per host, not per route ([`Caddyfile`](../../../deploy/edge/Caddyfile)); the recording rule aggregates down to `env` and `service` ([`service-red.yml`](../../../deploy/monitoring/prometheus/rules/service-red.yml)).
+- AI exposes `/metrics` through prometheus-fastapi-instrumentator with the labels `handler`, `method`, `status`, with latency measured up to the last byte of the stream ([`main.py`](../../../backend/ai/src/main.py), [AI README](../../../backend/ai/README.md)).
+- Core already writes an append-only event row for each successful business operation: `audit_logs` has `actor_user_id`, `actor_role`, `shop_id`, `action`, `entity_type`, `entity_id`, `request_id`, `metadata`, `created_at`, and forbids UPDATE/DELETE ([ERD](../../architecture/erd-description.md)).
+- `user_daily_activity` (V19, CORE-018) provides DAU/MAU, but at runtime it is off by default and has not been migrated/rolled out on the shared database ([rollout guide](../../../backend/core/docs/user-daily-activity.md)).
+- Chat history lives in `chat_conversations`/`chat_messages`, created by the AI baseline; `ai_requests` is only a target design, with no table yet.
 
-## 2. Ràng buộc
+## 2. Constraints
 
-- Core bị đóng băng trừ phạm vi PR #368 ([AGENTS.md](../../../AGENTS.md)); thiết kế P1 không được sửa Core, không thêm migration, không thêm endpoint.
-- VPS 4 GB, monitoring giới hạn khoảng 1 GB RAM; Grafana đã 256 MB.
-- Supabase session pooler chỉ cho 15 client; Core giữ tới 10 (Hikari mặc định), AI giữ tới 4 ([AI README](../../../backend/ai/README.md#routes-and-database-access)).
-- Supabase direct host là IPv6-only; VPS không có IPv6 dùng session pooler ([CI/CD](../../development/ci-cd.md#vps)).
-- Không lưu hay đọc PII qua Grafana: không tên/số điện thoại khách, không nội dung chat, không mô tả chi phí, không email (trừ cột đã duyệt cho DAU/MAU).
+- Core is frozen except for the scope of PR #368 ([AGENTS.md](../../../AGENTS.md)); the P1 design must not edit Core, add migrations or add endpoints.
+- The VPS has 4 GB, and monitoring is limited to about 1 GB RAM; Grafana already uses 256 MB.
+- The Supabase session pooler allows only 15 clients; Core holds up to 10 (Hikari default), AI holds up to 4 ([AI README](../../../backend/ai/docs/architecture.md#database-and-migrations)).
+- The Supabase direct host is IPv6-only; a VPS without IPv6 uses the session pooler ([CI/CD](../../development/ci-cd.md#monitoring)).
+- Do not store or read PII through Grafana: no customer names/phone numbers, no chat content, no expense descriptions, no emails (except the columns approved for DAU/MAU).
 
-## 3. Câu hỏi sản phẩm cần trả lời
+## 3. Product questions to answer
 
-| Câu hỏi | Chỉ số | Nguồn |
+| Question | Metric | Source |
 |---|---|---|
-| Bao nhiêu người dùng thật sự quay lại? | DAU, WAU, MAU, stickiness DAU/MAU | `user_daily_activity` |
-| Người dùng mới có ở lại không? | Retention theo cohort tuần đăng ký | `users`, `user_daily_activity` |
-| Bao nhiêu cửa hàng đang hoạt động? | Cửa hàng có sự kiện OWNER trong tuần | `audit_logs` |
-| Cửa hàng mới có đi tới đơn đầu tiên không? | Funnel tạo tiệm → có hàng hoá → bán trong 7 ngày | `shops`, `products`, `sales` |
-| Tính năng nào được dùng, bởi bao nhiêu cửa hàng? | Số cửa hàng distinct theo nhóm action | `audit_logs` |
-| Trợ lý AI có được dùng và nhanh không? | Hội thoại/ngày, cửa hàng distinct, p95 theo route | `chat_conversations`, Prometheus AI |
-| Đọc đơn bằng AI có hiệu quả không? | Tỉ lệ draft `AI_VOICE` và tỉ lệ draft AI được chốt | `sale_drafts` |
-| Chất lượng bán hàng ra sao? | Đơn/ngày, doanh thu/ngày, tỉ lệ huỷ | `sales` |
-| Dữ liệu analytics còn tươi không? | Tuổi bản ghi mới nhất theo bảng | tất cả |
-| Người dùng đăng nhập bằng cách nào, có phải đăng nhập lại nhiều không? | Lượt đăng nhập theo phương thức | Chưa có nguồn; P2 (mục 6.4) |
+| How many users really come back? | DAU, WAU, MAU, DAU/MAU stickiness | `user_daily_activity` |
+| Do new users stay? | Retention by signup-week cohort | `users`, `user_daily_activity` |
+| How many shops are active? | Shops with an OWNER event in the week | `audit_logs` |
+| Does a new shop reach its first order? | Funnel: create shop → has products → sells within 7 days | `shops`, `products`, `sales` |
+| Which features are used, by how many shops? | Distinct shops by action group | `audit_logs` |
+| Is the AI assistant used, and is it fast? | Conversations/day, distinct shops, p95 by route | `chat_conversations`, Prometheus AI |
+| Is AI order reading effective? | Share of `AI_VOICE` drafts and share of AI drafts confirmed | `sale_drafts` |
+| How is sales quality? | Orders/day, revenue/day, void rate | `sales` |
+| Is the analytics data still fresh? | Age of the newest record per table | all |
+| How do users sign in, and do they have to sign in again often? | Sign-ins by method | No source yet; P2 (section 6.4) |
 
-## 4. Quyết định
+## 4. Decision
 
-Dựng lớp **Product** trong Grafana từ dữ liệu đã có, không sửa Core:
+Build a **Product** layer in Grafana from existing data, without editing Core:
 
-1. Một PostgreSQL datasource **chỉ đọc cho mỗi môi trường** (staging, production) trỏ vào Supabase bằng session pooler và role `grafana_reader`.
-2. Một dashboard provision từ repo, **SmartLedger product**, tag `smart-ledger`, folder `Product`. Việc tra sự kiện nằm ở hàng `Events` thu gọn cuối dashboard thay vì một dashboard thứ hai, vì nó dùng cùng bộ lọc thời gian và môi trường.
-3. Mọi chỉ số định nghĩa trên sự kiện đã ghi: `user_daily_activity` cho người dùng và retention, `audit_logs` cho cửa hàng và tính năng, bảng nghiệp vụ là kết quả, bảng chat là mức dùng AI, Prometheus AI là độ trễ/lỗi.
-4. Phần thiếu (đăng nhập, phiên dùng app, screen view, thất bại) để P2/P3 và cần owner Core duyệt trước; mục 6.4 giải thích vì sao không đo logout.
+1. One **read-only** PostgreSQL datasource **per environment** (staging, production) pointing at Supabase through the session pooler and the `grafana_reader` role.
+2. One dashboard provisioned from the repo, **SmartLedger product**, tag `smart-ledger`, folder `Product`. Event lookup lives in a collapsed `Events` row at the bottom of the dashboard instead of a second dashboard, because it uses the same time and environment filters.
+3. Every metric is defined on already-recorded events: `user_daily_activity` for users and retention, `audit_logs` for shops and features, business tables for outcomes, chat tables for AI usage, Prometheus AI for latency/errors.
+4. The missing parts (sign-in, app sessions, screen views, failures) are left to P2/P3 and need Core owner approval first; section 6.4 explains why logout is not measured.
 
-## 5. Phương án đã cân nhắc
+## 5. Options considered
 
-| Phương án | Vì sao không chọn |
+| Option | Why not chosen |
 |---|---|
-| Đếm sự kiện bằng Prometheus counter trong Core | Cần sửa Core, không có nhãn theo shop vì cardinality, và reset khi restart; để P2 sau khi owner duyệt |
-| Tempo/OpenTelemetry cho trace phân tán | Cần OTel agent trong Core (đóng băng) và thêm container 200–400 MB trên VPS 4 GB; trace của AI đi lên HoneyHive theo [ADR-0009](0009-end-to-end-tracing.md); không trả lời được câu hỏi product như dữ liệu nghiệp vụ |
-| PostHog/Umami/analytics SaaS | Cần SDK trong app, quyết định quyền riêng tư mới, chi phí và dữ liệu ra ngoài; team đã hoãn hạ tầng phụ trợ |
-| Bảng `product_events` mới do client ghi | Cần endpoint Core mới và migration; mạnh hơn P1 nhưng chặn bởi phạm vi Core; để P3 nếu PO cần phễu theo intent |
-| Đọc thẳng DB production bằng role owner | Vượt quyền tối thiểu, rủi ro ghi nhầm và lộ PII |
+| Count events with a Prometheus counter in Core | Needs a Core change, has no per-shop label because of cardinality, and resets on restart; left to P2 after the owner approves |
+| Tempo/OpenTelemetry for distributed traces | Needs an OTel agent in Core (frozen) and an extra 200–400 MB container on the 4 GB VPS; AI traces go to HoneyHive per [ADR-0009](0009-end-to-end-tracing.md); it cannot answer product questions the way business data can |
+| PostHog/Umami/analytics SaaS | Needs an SDK in the app, a new privacy decision, cost and data leaving our infrastructure; the team has deferred auxiliary infrastructure |
+| A new `product_events` table written by the client | Needs a new Core endpoint and a migration; stronger than P1 but blocked by the Core scope; left to P3 if the PO needs an intent funnel |
+| Read the production database directly with the owner role | Exceeds least privilege, with the risk of accidental writes and PII exposure |
 
-## 6. Mô hình sự kiện có sẵn
+## 6. Existing event model
 
-### 6.1 `audit_logs` là event log sản phẩm
+### 6.1 `audit_logs` is the product event log
 
-Mỗi dòng là một hành động nghiệp vụ thành công, bất biến, có `request_id` để trace ngược. Nhóm theo tính năng:
+Each row is a successful, immutable business action with a `request_id` for tracing back. Grouped by feature:
 
-| Tính năng | Action |
+| Feature | Action |
 |---|---|
-| Bán hàng | `SALE_CONFIRMED`, `SALE_VOIDED`, `SALE_REFUND_RECORDED` |
-| Công nợ | `DEBT_REPAYMENT_RECORDED`, `DEBT_VOIDED` |
-| Hàng hoá và tồn kho | `PRODUCT_CREATED`, `PRODUCT_UPDATED`, `PRODUCT_ARCHIVED`, `STOCK_ADJUSTED`, `STOCK_RESTORED_ON_VOID` |
-| Danh mục | `CATEGORY_CREATED`, `CATEGORY_UPDATED`, `CATEGORY_ARCHIVED` |
-| Chi phí | `EXPENSE_CREATED`, `EXPENSE_UPDATED`, `EXPENSE_ARCHIVED` |
-| Tiệm | `SHOP_CREATED`, `SHOP_UPDATED`, `SHOP_ARCHIVED`, `SHOP_INACTIVATED`, `SHOP_REACTIVATED` |
-| Hồ sơ | `USER_AVATAR_UPDATED` |
-| ADMIN | `ADMIN_*`, `SHOP_INACTIVATED`, `SHOP_REACTIVATED` với `actor_role=ADMIN` |
+| Sales | `SALE_CONFIRMED`, `SALE_VOIDED`, `SALE_REFUND_RECORDED` |
+| Debts | `DEBT_REPAYMENT_RECORDED`, `DEBT_VOIDED` |
+| Products and inventory | `PRODUCT_CREATED`, `PRODUCT_UPDATED`, `PRODUCT_ARCHIVED`, `STOCK_ADJUSTED`, `STOCK_RESTORED_ON_VOID` |
+| Categories | `CATEGORY_CREATED`, `CATEGORY_UPDATED`, `CATEGORY_ARCHIVED` |
+| Expenses | `EXPENSE_CREATED`, `EXPENSE_UPDATED`, `EXPENSE_ARCHIVED` |
+| Shop | `SHOP_CREATED`, `SHOP_UPDATED`, `SHOP_ARCHIVED`, `SHOP_INACTIVATED`, `SHOP_REACTIVATED` |
+| Profile | `USER_AVATAR_UPDATED` |
+| ADMIN | `ADMIN_*`, `SHOP_INACTIVATED`, `SHOP_REACTIVATED` with `actor_role=ADMIN` |
 
-Giới hạn phải nêu trên dashboard: chỉ ghi thành công, chỉ các action trong whitelist, không có screen view, không có lần thất bại, không có thao tác đọc của OWNER. Vì vậy adoption là "đã làm" chứ không phải "đã mở".
+Limits that must be stated on the dashboard: only successes are recorded, only the actions in the whitelist, no screen views, no failed attempts, no OWNER read operations. So adoption means "did it" and not "opened it".
 
-### 6.2 Bảng nghiệp vụ và AI
+### 6.2 Business and AI tables
 
-| Nguồn | Cột dùng được | Chỉ số |
+| Source | Usable columns | Metric |
 |---|---|---|
-| `shops` | `id`, `owner_id`, `created_at` | Cửa hàng mới, funnel |
-| `products` | `id`, `shop_id`, `status`, `barcode`, `created_at` | Có hàng hoá, độ phủ mã vạch |
-| `sale_drafts` | `id`, `shop_id`, `source_type`, `confirmed_sale_id`, `created_at` | Tỉ lệ AI đọc đơn và tỉ lệ chốt |
-| `sales` | `id`, `shop_id`, `total_vnd`, `sale_status`, `payment_status`, `sold_at`, `voided_at` | Doanh thu, tỉ lệ huỷ |
-| `expenses` | `id`, `shop_id`, `amount_vnd`, `category`, `expense_at`, `source_ai_request_id` | Mức dùng chi phí |
-| `debts`, `payments` | `id`, `sale_id`, `customer_id`, `amount_vnd`, `status`, `created_at`, `received_at` | Mức dùng công nợ |
-| `chat_conversations` | `id`, `user_id`, `shop_id`, `started_at`, `last_message_at` | Mức dùng trợ lý |
-| `chat_messages` | `conversation_id`, `role`, `created_at` | Cấu trúc lượt chat, không đọc nội dung |
-| `notification_recipients` | `user_id`, `read_at`, `created_at` | Tỉ lệ đọc thông báo |
-| Prometheus AI | `http_requests_total`, `http_request_duration_seconds_bucket` với `handler` | Lượt gọi theo route, p95, lỗi |
+| `shops` | `id`, `owner_id`, `created_at` | New shops, funnel |
+| `products` | `id`, `shop_id`, `status`, `barcode`, `created_at` | Has products, barcode coverage |
+| `sale_drafts` | `id`, `shop_id`, `source_type`, `confirmed_sale_id`, `created_at` | Share of AI order reading and confirmation rate |
+| `sales` | `id`, `shop_id`, `total_vnd`, `sale_status`, `payment_status`, `sold_at`, `voided_at` | Revenue, void rate |
+| `expenses` | `id`, `shop_id`, `amount_vnd`, `category`, `expense_at`, `source_ai_request_id` | Expense usage |
+| `debts`, `payments` | `id`, `sale_id`, `customer_id`, `amount_vnd`, `status`, `created_at`, `received_at` | Debt usage |
+| `chat_conversations` | `id`, `user_id`, `shop_id`, `started_at`, `last_message_at` | Assistant usage |
+| `chat_messages` | `conversation_id`, `role`, `created_at` | Chat turn structure, content is not read |
+| `notification_recipients` | `user_id`, `read_at`, `created_at` | Notification read rate |
+| Prometheus AI | `http_requests_total`, `http_request_duration_seconds_bucket` with `handler` | Calls by route, p95, errors |
 
-### 6.3 Phần thiếu, để P2/P3
+### 6.3 Missing parts, left to P2/P3
 
-- Lần quét mã vạch, mở màn, bắt đầu giọng nói, số lần thử và thất bại của AI: không có sự kiện.
-- Thời gian xử lý một đơn trên UI: không có.
-- Trace theo `request_id` trong log Core: Core không ghi request id ra log, nên chưa nối được sự kiện sang Loki.
+- Barcode scans, screen opens, voice starts, AI attempt counts and failures: no events.
+- Time to process one order in the UI: none.
+- Tracing by `request_id` in Core logs: Core does not write the request id to its logs, so events cannot yet be linked to Loki.
 
-### 6.4 Đăng nhập, đăng xuất và phiên dùng
+### 6.4 Sign-in, sign-out and app sessions
 
-- App mobile đăng nhập bằng Firebase (Google, Facebook, email, custom token cho Zalo) rồi gọi `POST /auth/session`; khi mở lại app, `AppStore` chỉ khôi phục phiên Firebase và gọi `GET /me` ([`AppStore.tsx`](../../../frontend/mobile/src/store/AppStore.tsx)). Vì vậy mỗi lần gọi `/auth/session` là một lần đăng nhập thật: tài khoản mới, cài lại app, đổi máy hoặc bị đăng xuất.
-- Core không ghi lần gọi này: `audit_logs` không có action đăng nhập, Caddy chỉ đo theo host. Hôm nay không có nguồn cho số lượt đăng nhập.
-- Đăng xuất chỉ là `signOut()` của Firebase trên máy, Core không nhận request nào. Firebase tự gia hạn token, nên phần lớn chủ tiệm không bao giờ bấm đăng xuất; đóng hay gỡ app không tạo sự kiện. Số lượt logout vì vậy nhỏ và lệch, không dùng làm chỉ số.
-- "Người dùng có quay lại không" đã được trả lời bằng `user_daily_activity` và retention theo cohort, không cần login/logout.
-- P2 đề xuất: Core ghi audit `USER_SIGNED_IN` trong `/auth/session` với `isNewAccount` và phương thức lấy từ claim `firebase.sign_in_provider` của ID token (chưa kiểm trên token thật). Nó cho tỉ lệ dùng từng cách đăng nhập, số lần đăng nhập lại mỗi user (cao là tín hiệu app mất phiên) và cho phép tách cohort theo phương thức. Cần owner Core duyệt; nếu `audit_logs` có CHECK constraint trên action thì cần thêm migration và phê duyệt riêng.
-- P3: phiên dùng app (`app_open`, phiên kết thúc sau 30 phút ở background), đăng nhập thất bại theo phương thức (không bao giờ tới Core), và lý do bị đăng xuất (người dùng bấm, 401, 403, sai vai trò) từ `forceSignOut`; tất cả là sự kiện client.
+- The mobile app signs in with Firebase (Google, Facebook, email, custom token for Zalo) and then calls `POST /auth/session`; when the app is reopened, `AppStore` only restores the Firebase session and calls `GET /me` ([`AppStore.tsx`](../../../frontend/mobile/src/store/AppStore.tsx)). So each call to `/auth/session` is a real sign-in: a new account, a reinstall, a new device or being signed out.
+- Core does not record this call: `audit_logs` has no sign-in action, and Caddy only measures per host. Today there is no source for the number of sign-ins.
+- Sign-out is only Firebase's `signOut()` on the device, and Core receives no request. Firebase renews tokens by itself, so most shop owners never press sign-out; closing or uninstalling the app creates no event. The number of logouts is therefore small and biased, and is not used as a metric.
+- "Do users come back" is already answered by `user_daily_activity` and cohort retention, without needing login/logout.
+- P2 proposal: Core writes an audit `USER_SIGNED_IN` in `/auth/session` with `isNewAccount` and the method taken from the `firebase.sign_in_provider` claim of the ID token (not yet checked on a real token). It gives the usage share of each sign-in method and the number of re-sign-ins per user (a high number is a sign the app loses its session), and allows splitting cohorts by method. It needs Core owner approval; if `audit_logs` has a CHECK constraint on action, it needs a migration and a separate approval.
+- P3: app sessions (`app_open`, a session ends after 30 minutes in the background), failed sign-ins by method (which never reach Core), and the reason for being signed out (user pressed, 401, 403, wrong role) from `forceSignOut`; all of these are client events.
 
-## 7. Kiến trúc
+## 7. Architecture
 
-### 7.1 Vai trò đọc
+### 7.1 Read role
 
-Một login `grafana_reader` cho mỗi môi trường, không superuser, không BYPASSRLS, chỉ SELECT theo cột. SQL bàn giao cho owner cơ sở dữ liệu; ADR này không chạy nó:
+One `grafana_reader` login per environment, not a superuser, no BYPASSRLS, SELECT only per column. The SQL is handed to the database owner; this ADR does not run it:
 
 ```sql
 CREATE ROLE grafana_reader LOGIN PASSWORD '...' NOSUPERUSER NOBYPASSRLS NOINHERIT;
@@ -119,7 +119,7 @@ ALTER ROLE grafana_reader SET statement_timeout = '10s';
 ALTER ROLE grafana_reader SET idle_in_transaction_session_timeout = '30s';
 GRANT USAGE ON SCHEMA public TO grafana_reader;
 
--- CORE-018 đã quy định cột này và policy RLS tương ứng.
+-- CORE-018 already specifies this column and the matching RLS policy.
 GRANT SELECT (id, system_role, email, created_at) ON public.users TO grafana_reader;
 GRANT SELECT (user_id, activity_date) ON public.user_daily_activity TO grafana_reader;
 CREATE POLICY grafana_daily_activity_read ON public.user_daily_activity
@@ -139,109 +139,109 @@ GRANT SELECT (id, conversation_id, role, created_at) ON public.chat_messages TO 
 GRANT SELECT (id, notification_event_id, user_id, read_at, created_at) ON public.notification_recipients TO grafana_reader;
 ```
 
-Không cấp cột tên, số điện thoại, mô tả, `content`, `metadata` của chat hay `new_data`/`old_data`. Supabase cho phép role tuỳ biến qua shared pooler; username lấy nguyên chuỗi ở Dashboard → Connect → Session pooler (dạng `<role>.<project-ref>`), không tự ghép từ tên role và region. Sau khi tạo, kiểm `SELECT current_user` qua đúng datasource để chắc pooler ánh xạ đúng role.
+Do not grant name, phone number, description, chat `content` or `metadata`, or `new_data`/`old_data` columns. Supabase allows custom roles through the shared pooler; take the username verbatim from the string at Dashboard → Connect → Session pooler (in the form `<role>.<project-ref>`), not assembled from the role name and region. After creating it, check `SELECT current_user` through the actual datasource to be sure the pooler maps to the right role.
 
-Chỉ ba bảng trong danh sách có RLS hôm nay: `user_daily_activity` (policy ở trên), `agent_memories` và `agent_memory_settings` (không cấp quyền). Khi roll out, chạy `SELECT tablename FROM pg_tables WHERE schemaname = 'public' AND rowsecurity` trên từng môi trường; bảng nào bật RLS mà không có policy cho `grafana_reader` sẽ trả rỗng, và policy chỉ được thêm sau khi rà quyền kế thừa.
+Only three tables in the list have RLS today: `user_daily_activity` (the policy above), `agent_memories` and `agent_memory_settings` (no grant). At rollout, run `SELECT tablename FROM pg_tables WHERE schemaname = 'public' AND rowsecurity` in each environment; a table with RLS enabled and no policy for `grafana_reader` will return empty, and a policy is added only after reviewing inherited privileges.
 
 ### 7.2 Datasource
 
-Hai datasource trong [`datasources.yaml`](../../../deploy/monitoring/grafana/provisioning/datasources/datasources.yaml), uid `smartledger-staging-pg` và `smartledger-production-pg`, kiểu `grafana-postgresql-datasource`, `sslmode: require`, `maxOpenConns: 1`, `maxIdleConns: 0`. Host, database, user và mật khẩu lấy từ biến `SMARTLEDGER_<ENV>_PG_*` của container Grafana; môi trường thiếu biến vẫn có datasource nhưng panel báo lỗi kết nối.
+Two datasources in [`datasources.yaml`](../../../deploy/monitoring/grafana/provisioning/datasources/datasources.yaml), uid `smartledger-staging-pg` and `smartledger-production-pg`, type `grafana-postgresql-datasource`, `sslmode: require`, `maxOpenConns: 1`, `maxIdleConns: 0`. Host, database, user and password come from the `SMARTLEDGER_<ENV>_PG_*` variables of the Grafana container; an environment missing the variables still has a datasource, but its panels show a connection error.
 
-`maxIdleConns: 0` để Grafana đóng connection ngay sau truy vấn, không giữ slot pooler giữa các lần refresh. Với tổng 15 slot, đặt Core còn 8 và AI còn 4 bằng biến môi trường: `SPRING_DATASOURCE_HIKARI_MAXIMUM_POOL_SIZE=8` (Core, không sửa code, đã có trong mẫu `.env.core`) và `POSTGRES_POOL_MAX_SIZE=2`, `SQL_POOL_MAX_SIZE=2` (AI đã mặc định 2). Như vậy 8 + 4 + 1 = 13, còn 2 slot dự phòng.
+`maxIdleConns: 0` makes Grafana close the connection right after a query, without holding a pooler slot between refreshes. With 15 slots in total, set Core down to 8 and AI down to 4 through environment variables: `SPRING_DATASOURCE_HIKARI_MAXIMUM_POOL_SIZE=8` (Core, no code change, already in the `.env.core` template) and `POSTGRES_POOL_MAX_SIZE=2`, `SQL_POOL_MAX_SIZE=2` (AI already defaults to 2). That makes 8 + 4 + 1 = 13, leaving 2 spare slots.
 
-### 7.3 Provisioning, playbook và secrets
+### 7.3 Provisioning, playbook and secrets
 
-- Dashboard nằm ở [`deploy/monitoring/grafana/product/product.json`](../../../deploy/monitoring/grafana/product/product.json), ngoài thư mục provisioning của Infra vì provider đọc cả thư mục con; provider thứ hai đưa nó vào folder `Product`.
-- Login đọc nằm trong nhóm `monitor` của Dopbase với các khoá đã có trong mẫu [`.env.monitor`](../../../secrets/templates/.env.monitor): `GRAFANA_PG_HOST`, `GRAFANA_PG_PORT` (mặc định 5432), `GRAFANA_PG_DATABASE` (mặc định `postgres`), `GRAFANA_PG_USER`, `GRAFANA_PG_PASSWORD`. [`run.sh`](../../../scripts/infra/run.sh) nạp file này cùng `.env.vps`.
-- Playbook ghi `postgres-<environment>.env` (0600, `no_log`) cạnh `.env` của monitoring; Compose đọc cả hai file như `env_file` tuỳ chọn. Mỗi môi trường chỉ ghi file của mình, nên lần chạy staging không xoá datasource production như khi dùng chung `.env`.
-- Host rỗng thì playbook bỏ qua bước này; dashboard vẫn provision nhưng panel SQL báo lỗi kết nối.
+- The dashboard lives at [`deploy/monitoring/grafana/product/product.json`](../../../deploy/monitoring/grafana/product/product.json), outside the Infra provisioning folder because the provider reads subfolders too; a second provider puts it in the `Product` folder.
+- The read login lives in Dopbase's `monitor` group with the keys already in the [`.env.monitor`](../../../secrets/templates/.env.monitor) template: `GRAFANA_PG_HOST`, `GRAFANA_PG_PORT` (default 5432), `GRAFANA_PG_DATABASE` (default `postgres`), `GRAFANA_PG_USER`, `GRAFANA_PG_PASSWORD`. [`run.sh`](../../../scripts/infra/run.sh) loads this file together with `.env.vps`.
+- The playbook writes `postgres-<environment>.env` (0600, `no_log`) next to monitoring's `.env`; Compose reads both files as optional `env_file`s. Each environment writes only its own file, so a staging run does not erase the production datasource as it would with a shared `.env`.
+- If the host is empty, the playbook skips this step; the dashboard is still provisioned but the SQL panels show a connection error.
 
-## 8. Đặc tả dashboard
+## 8. Dashboard specification
 
-Dashboard `smart-ledger-product`: tag `smart-ledger` để vào thanh liên kết chung, `editable: false`, refresh 5 phút, mặc định 7 ngày, timezone `Asia/Ho_Chi_Minh`. Biến `env` (staging, production) chọn cả datasource `smartledger-${env}-pg` lẫn nhãn `env` của Prometheus. SQL nằm trong JSON; mọi chỉ số người dùng và cửa hàng loại tài khoản có email `loadtest+` (với cửa hàng: theo owner).
+Dashboard `smart-ledger-product`: tag `smart-ledger` to join the shared link bar, `editable: false`, 5-minute refresh, default 7 days, timezone `Asia/Ho_Chi_Minh`. The `env` variable (staging, production) selects both the `smartledger-${env}-pg` datasource and Prometheus's `env` label. The SQL lives in the JSON; every user and shop metric excludes accounts whose email has `loadtest+` (for shops: by owner).
 
-| Hàng | Panel | Nguồn |
+| Row | Panel | Source |
 |---|---|---|
-| Users | DAU, WAU, MAU của OWNER; stickiness (DAU trung bình 30 ngày / MAU); owner và shop mới trong khoảng thời gian | `user_daily_activity`, `users`, `shops` |
-| Users | DAU theo role mỗi ngày; owner và shop mới mỗi ngày | như trên |
-| Retention | Bảng cohort theo tuần đăng ký (thứ Hai, giờ Việt Nam), 12 cohort gần nhất, cột W0–W8 là % owner còn hoạt động ở tuần thứ n; ô của tuần chưa tới để trống | `users`, `user_daily_activity` |
-| Shops and activation | Cửa hàng hoạt động mỗi tuần; funnel tạo shop → có hàng hoá → đơn `CONFIRMED` trong 7 ngày → dùng AI | `audit_logs`, `shops`, `products`, `sales`, `chat_conversations` |
-| Feature adoption | Shop distinct mỗi tuần theo nhóm `SALE_*`, `PRODUCT_*`, `CATEGORY_*`, `STOCK_ADJUSTED`, `EXPENSE_*`, `DEBT_*` | `audit_logs` |
-| AI | Hội thoại và shop dùng trợ lý mỗi ngày; draft `AI_VOICE`/`MANUAL` và số draft AI được chốt mỗi tuần | `chat_conversations`, `sale_drafts` |
-| AI | Lượt gọi và p95 theo `handler` | Prometheus `http_requests_total`, `http_request_duration_seconds_bucket` của AI (recording rule đã bỏ nhãn `handler`) |
-| Business | Đơn chốt và huỷ mỗi ngày theo `sold_at`; doanh thu đơn chốt | `sales` |
-| Data freshness | Tuổi bản ghi mới nhất của `audit_logs`, `sales`, `user_daily_activity` | như tên |
-| Events (thu gọn) | 500 sự kiện mới nhất, lọc theo biến `action` và `shop` | `audit_logs` |
+| Users | DAU, WAU, MAU of OWNER; stickiness (30-day average DAU / MAU); new owners and shops in the period | `user_daily_activity`, `users`, `shops` |
+| Users | DAU by role per day; new owners and shops per day | as above |
+| Retention | Cohort table by signup week (Monday, Vietnam time), the 12 most recent cohorts, columns W0–W8 are the % of owners still active in week n; cells for weeks not yet reached are left blank | `users`, `user_daily_activity` |
+| Shops and activation | Active shops per week; funnel create shop → has products → `CONFIRMED` order within 7 days → uses AI | `audit_logs`, `shops`, `products`, `sales`, `chat_conversations` |
+| Feature adoption | Distinct shops per week by group `SALE_*`, `PRODUCT_*`, `CATEGORY_*`, `STOCK_ADJUSTED`, `EXPENSE_*`, `DEBT_*` | `audit_logs` |
+| AI | Conversations and shops using the assistant per day; `AI_VOICE`/`MANUAL` drafts and the number of AI drafts confirmed per week | `chat_conversations`, `sale_drafts` |
+| AI | Calls and p95 by `handler` | Prometheus `http_requests_total`, `http_request_duration_seconds_bucket` of AI (the recording rule dropped the `handler` label) |
+| Business | Confirmed and voided orders per day by `sold_at`; revenue of confirmed orders | `sales` |
+| Data freshness | Age of the newest record in `audit_logs`, `sales`, `user_daily_activity` | as named |
+| Events (collapsed) | The 500 newest events, filtered by the `action` and `shop` variables | `audit_logs` |
 
-Retention chỉ tính được khoảng 12 tuần vì `user_daily_activity` giữ 90 ngày; muốn xem xa hơn cần một bảng tổng hợp theo tuần, là thay đổi Core. Cohort nhỏ dao động mạnh, nên đọc W1 và W4 qua nhiều hàng.
+Retention can only be computed for about 12 weeks because `user_daily_activity` keeps 90 days; looking further back needs a weekly aggregate table, which is a Core change. Small cohorts fluctuate strongly, so read W1 and W4 across many rows.
 
-## 9. Định nghĩa chỉ số
+## 9. Metric definitions
 
-- **DAU:** số user distinct có ít nhất một request API nghiệp vụ thành công trong ngày Việt Nam, theo CORE-018; loại email `loadtest+`.
-- **MAU:** user distinct trong 30 ngày lịch gồm hôm nay; không phải tháng lịch. WAU tương tự với 7 ngày.
-- **Stickiness:** DAU trung bình của 30 ngày chia MAU.
-- **Retention tuần n:** trong owner đăng ký cùng tuần, tỉ lệ có ít nhất một ngày hoạt động ở tuần thứ n sau tuần đăng ký. "Hoạt động" là một request API thành công (CORE-018); PO có thể chốt định nghĩa chặt hơn, ví dụ có chốt đơn trong tuần.
-- **Cửa hàng hoạt động:** shop distinct có ít nhất một sự kiện `actor_role=OWNER` trong cửa sổ.
-- **Kích hoạt:** shop tạo trong cửa sổ có đơn `CONFIRMED` đầu tiên trong 7 ngày kể từ `shops.created_at`; cửa sổ 7 ngày là giả định, cần PO chốt.
-- **Adoption tính năng:** shop distinct có ít nhất một action thuộc nhóm trong cửa sổ, chia cho số cửa hàng hoạt động cùng cửa sổ; hiển thị cả tử số và mẫu số để tránh đọc nhầm tỉ lệ nhỏ.
-- **Tỉ lệ huỷ:** đơn `VOIDED` chia cho tổng `CONFIRMED` cộng `VOIDED` theo `sold_at`; đơn huỷ hiện tại làm thay đổi kỳ bán cũ. FR-006 tính theo thời điểm huỷ; dashboard đếm theo `sold_at` để đơn chốt và đơn huỷ cùng một trục, cần PO chốt cách nào.
-- **Mức dùng AI:** hội thoại bắt đầu trong cửa sổ; độ trễ và lỗi lấy từ Prometheus AI theo `handler`.
-- Mọi phép chia ngày dùng `Asia/Ho_Chi_Minh`; dashboard đặt timezone cố định để không phụ thuộc trình duyệt.
+- **DAU:** distinct users with at least one successful business API request in a Vietnam day, per CORE-018; excludes `loadtest+` emails.
+- **MAU:** distinct users in the 30 calendar days including today; not a calendar month. WAU is similar with 7 days.
+- **Stickiness:** the 30-day average DAU divided by MAU.
+- **Week-n retention:** among owners who signed up in the same week, the share with at least one active day in the nth week after the signup week. "Active" means one successful API request (CORE-018); the PO may settle a stricter definition, for example confirming an order in the week.
+- **Active shop:** distinct shops with at least one `actor_role=OWNER` event in the window.
+- **Activation:** a shop created in the window has its first `CONFIRMED` order within 7 days of `shops.created_at`; the 7-day window is an assumption that the PO must settle.
+- **Feature adoption:** distinct shops with at least one action of the group in the window, divided by the number of active shops in the same window; show both the numerator and the denominator to avoid misreading a small ratio.
+- **Void rate:** `VOIDED` orders divided by the total of `CONFIRMED` plus `VOIDED` by `sold_at`; a void today changes an old sales period. FR-006 counts by the time of the void; the dashboard counts by `sold_at` so confirmed and voided orders share one axis, and the PO must settle which way.
+- **AI usage:** conversations started in the window; latency and errors come from Prometheus AI by `handler`.
+- All day divisions use `Asia/Ho_Chi_Minh`; the dashboard sets a fixed timezone so it does not depend on the browser.
 
-## 10. Quyền riêng tư và bảo mật
+## 10. Privacy and security
 
-- Không cấp cột PII và nội dung cho `grafana_reader`; kiểm bằng `has_column_privilege` như trong [hướng dẫn CORE-018](../../../backend/core/docs/user-daily-activity.md#staging-evidence-required-before-closing-409).
-- Role chỉ đọc, `default_transaction_read_only`, timeout 10 giây; không dùng credential của Core hay service role.
-- Mật khẩu chỉ ở Dopbase và `.env` 0600 trên VPS; playbook dùng `no_log`. Không đưa chuỗi kết nối vào dashboard JSON, alert hay log.
-- Dashboard `editable: false`, sign-up và anonymous đã tắt; chỉ ADMIN Grafana xem được.
-- Dữ liệu production chỉ hiển thị chỉ số tổng hợp và các cột đã liệt kê, không xuất CSV ra ngoài.
+- Do not grant PII and content columns to `grafana_reader`; check with `has_column_privilege` as in the [CORE-018 guide](../../../backend/core/docs/user-daily-activity.md#staging-evidence-required-before-closing-409).
+- The role is read-only, `default_transaction_read_only`, 10-second timeout; do not use Core's credentials or the service role.
+- The password lives only in Dopbase and the 0600 `.env` on the VPS; the playbook uses `no_log`. Do not put the connection string in the dashboard JSON, alerts or logs.
+- The dashboard is `editable: false`, sign-up and anonymous access are off; only the Grafana ADMIN can view it.
+- Production data shows only aggregate metrics and the listed columns, and no CSV is exported outside.
 
-## 11. Vận hành
+## 11. Operations
 
-- Refresh 5 phút, mỗi lần khoảng 10 truy vấn tuần tự trên một connection; đủ cho dữ liệu nhỏ hiện tại.
-- Giới hạn thời gian mặc định 7 ngày, tối đa 90 ngày; mọi panel lọc theo thời gian và `LIMIT` cho bảng.
-- Datasource lỗi (sai mật khẩu, quá slot) hiện lỗi kết nối trên từng panel SQL; hàng Data freshness không có giá trị khi bảng rỗng hoặc role mất quyền đọc.
-- Rollback: xóa hai datasource và dashboard product khỏi repo rồi chạy lại playbook; thu hồi grant hoặc drop role khi owner quyết định. Không có dữ liệu nào bị thay đổi.
+- 5-minute refresh, about 10 sequential queries on one connection each time; enough for the current small data.
+- The time range is 7 days by default, up to 90 days; every panel filters by time and uses `LIMIT` for tables.
+- A failing datasource (wrong password, out of slots) shows a connection error on each SQL panel; the Data freshness row has no value when the table is empty or the role lost read access.
+- Rollback: remove the two datasources and the product dashboard from the repo and rerun the playbook; revoke the grants or drop the role when the owner decides. No data is changed.
 
-## 12. Lộ trình
+## 12. Roadmap
 
-| Giai đoạn | Nội dung | Điều kiện |
+| Phase | Content | Condition |
 |---|---|---|
-| P1 | Role đọc, hai datasource, dashboard product với retention theo cohort | Đã có trong repo; còn chờ ADR được duyệt, owner DB tạo role, `GRAFANA_PG_*` trong Dopbase và rollout CORE-018 cho panel người dùng |
-| P2 | Audit `USER_SIGNED_IN` trong `/auth/session` (mục 6.4); counter sự kiện intent trong Core tại `/actuator/prometheus` với nhãn hữu hạn (`feature`, `outcome`), Alloy scrape trong app network như AI | Owner Core duyệt phạm vi sửa Core; migration nếu constraint của `audit_logs` đòi |
-| P3 | Sự kiện client: phiên dùng app, đăng nhập thất bại, lý do bị đăng xuất, phễu theo bước UI; bảng `product_events` append-only hoặc SDK client nếu chấp nhận dữ liệu ra ngoài | Migration và phê duyệt riêng; ADR mới |
+| P1 | Read role, two datasources, product dashboard with cohort retention | Already in the repo; still waiting for the ADR to be approved, the DB owner to create the role, `GRAFANA_PG_*` in Dopbase and the CORE-018 rollout for the user panels |
+| P2 | Audit `USER_SIGNED_IN` in `/auth/session` (section 6.4); an intent event counter in Core at `/actuator/prometheus` with finite labels (`feature`, `outcome`), scraped by Alloy inside the app network like AI | The Core owner approves the scope of editing Core; a migration if the `audit_logs` constraint requires it |
+| P3 | Client events: app sessions, failed sign-ins, the reason for being signed out, a funnel by UI step; an append-only `product_events` table or a client SDK if data leaving our infrastructure is accepted | A migration and a separate approval; a new ADR |
 
-## 13. Kiểm chứng
+## 13. Verification
 
-P1 phải qua các bước sau trước khi coi là xong:
+P1 must pass the following steps before it is considered done:
 
-| Kiểm tra | Cách làm | Trạng thái |
+| Check | Method | Status |
 |---|---|---|
-| SQL chạy đúng | PostgreSQL dùng một lần (như CORE-018) nạp dữ liệu mẫu cho mọi bảng được cấp quyền; chạy từng truy vấn panel qua Grafana cục bộ | Đã chạy 2026-10-30: PostgreSQL 16 với mọi migration Core và bảng chat của AI baseline, role tạo bằng SQL ở mục 7.1, 44 owner (4 loadtest) và khoảng 500 đơn mẫu; Grafana 12.1.1 provision từ repo, mọi truy vấn SQL của dashboard chạy qua `/api/ds/query` bằng `grafana_reader` và hiển thị đúng. Chưa có dữ liệu thật |
-| Quyền tối thiểu đủ cho dashboard | Cùng lần chạy trên | Đã chạy: không truy vấn nào cần cột ngoài mục 7.1 |
-| Role tối thiểu | `has_column_privilege`, `has_table_privilege`, `rolsuper`, `rolbypassrls` trên staging; xác nhận không đọc được cột PII | Chưa làm |
-| Kết nối pooler | Datasource staging dùng `grafana_reader.<project-ref>`, TLS bắt buộc, mở đúng một connection | Chưa làm |
-| Ngân sách slot | Đo `pg_stat_activity` hoặc dashboard Supabase khi Grafana refresh 5 phút, Core chạy tải nhẹ; không vượt 13 slot | Chưa làm |
-| Playbook | Chạy playbook staging rồi production; datasource của cả hai môi trường vẫn cấu hình sau mỗi lần | Chưa làm |
-| Loại trừ loadtest | So DAU/MAU với count thủ công loại `loadtest+` | Chưa làm |
-| Chỉ số mẫu | Tạo một shop, một product, một sale trên staging; kiểm funnel và adoption tăng đúng một | Chưa làm |
+| SQL runs correctly | A single-use PostgreSQL (as in CORE-018) loaded with sample data for every granted table; run each panel query through a local Grafana | Run on 2026-10-30: PostgreSQL 16 with every Core migration and the AI baseline's chat tables, the role created with the SQL in section 7.1, 44 owners (4 loadtest) and about 500 sample orders; Grafana 12.1.1 provisioned from the repo, every SQL query of the dashboard ran through `/api/ds/query` as `grafana_reader` and displayed correctly. No real data yet |
+| Least privilege is enough for the dashboard | The same run as above | Run: no query needs a column outside section 7.1 |
+| Minimal role | `has_column_privilege`, `has_table_privilege`, `rolsuper`, `rolbypassrls` on staging; confirm PII columns cannot be read | Not done |
+| Pooler connection | The staging datasource uses `grafana_reader.<project-ref>`, TLS required, opens exactly one connection | Not done |
+| Slot budget | Measure `pg_stat_activity` or the Supabase dashboard while Grafana refreshes every 5 minutes and Core runs a light load; must not exceed 13 slots | Not done |
+| Playbook | Run the staging playbook and then production; the datasources of both environments stay configured after each run | Not done |
+| Loadtest exclusion | Compare DAU/MAU with a manual count excluding `loadtest+` | Not done |
+| Sample metrics | Create one shop, one product, one sale on staging; check that the funnel and adoption each rise by exactly one | Not done |
 
-## 14. Rủi ro
+## 14. Risks
 
-| Rủi ro | Ảnh hưởng | Giảm thiểu |
+| Risk | Impact | Mitigation |
 |---|---|---|
-| Hết slot pooler khi thêm Grafana | Core không lấy được connection, request lỗi | Hạ Hikari xuống 8 và AI giữ 4 bằng biến môi trường; `maxIdleConns: 0`; đo trước khi bật production |
-| `.env` monitoring bị ghi đè theo môi trường | Mất datasource của môi trường còn lại | Mỗi môi trường ghi `postgres-<environment>.env` riêng, Compose đọc cả hai |
-| Bảng bật RLS không có policy | Panel trả rỗng, dễ hiểu nhầm là không có người dùng | Rà `pg_tables.rowsecurity` trên từng môi trường trước khi nghiệm thu |
-| Truy vấn nặng trên Supabase nhỏ | Chậm hoặc tốn egress | `statement_timeout` 10 giây, lọc thời gian, `LIMIT`, refresh 5 phút |
-| `audit_logs` chỉ ghi thành công và action whitelist | Đọc nhầm adoption là "đã dùng" thay vì "đã thử" | Ghi chú trên dashboard; bổ sung intent ở P2/P3 |
-| Schema chat do AI baseline quản lý | Đổi cột AI làm hỏng panel | Panel chỉ dùng cột ổn định trong ERD; thêm bước kiểm tra khi migration AI đổi bảng chat |
-| CORE-018 chưa rollout | Không có DAU/MAU | Panel ghi rõ "chưa có dữ liệu cho tới khi bật `USER_ACTIVITY_ENABLED`"; các panel khác vẫn chạy |
+| Out of pooler slots when adding Grafana | Core cannot get a connection, requests fail | Lower Hikari to 8 and keep AI at 4 through environment variables; `maxIdleConns: 0`; measure before enabling production |
+| Monitoring's `.env` overwritten per environment | The other environment's datasource is lost | Each environment writes its own `postgres-<environment>.env`, and Compose reads both |
+| A table with RLS enabled and no policy | Panels return empty, easily misread as no users | Review `pg_tables.rowsecurity` in each environment before acceptance |
+| Heavy queries on a small Supabase | Slow or costs egress | `statement_timeout` of 10 seconds, time filters, `LIMIT`, 5-minute refresh |
+| `audit_logs` records only successes and whitelisted actions | Adoption misread as "used" instead of "tried" | A note on the dashboard; add intent in P2/P3 |
+| The chat schema is managed by the AI baseline | Changing AI columns breaks panels | Panels use only stable columns in the ERD; add a check step when an AI migration changes the chat tables |
+| CORE-018 not rolled out | No DAU/MAU | The panel states "no data until `USER_ACTIVITY_ENABLED` is turned on"; the other panels still run |
 
-## 15. Câu hỏi mở
+## 15. Open questions
 
-- Chỉ số Bắc đẩu là DAU hay cửa hàng hoạt động theo tuần? ADR chọn hiển thị cả hai, cần PO chốt cái nào dẫn dắt.
-- Cửa sổ kích hoạt 7 ngày có đúng với thực tế bán hàng không?
-- Có tính mức dùng của ADMIN vào adoption không, hay chỉ OWNER?
-- Ai sở hữu role `grafana_reader` ở production, và ai xoay mật khẩu?
-- P2 có nằm trong MVP không, hay chờ sau phản hồi từ chủ tiệm?
+- Is the north star metric DAU or weekly active shops? The ADR chooses to show both; the PO must settle which one leads.
+- Does the 7-day activation window match real sales behavior?
+- Should ADMIN usage count toward adoption, or only OWNER?
+- Who owns the `grafana_reader` role in production, and who rotates the password?
+- Is P2 part of the MVP, or does it wait for feedback from shop owners?

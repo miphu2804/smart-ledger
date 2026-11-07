@@ -8,7 +8,7 @@ name: Sync HoneyHive charts and alerts
 on:
   push:
     branches: [main]
-    paths: [".honeyhive/charts/**", ".honeyhive/alerts/**", ".honeyhive/projects.yaml", "sync-dashboards.sh"]
+    paths: [".honeyhive/charts/**", ".honeyhive/alerts/**", ".honeyhive/projects.yaml", "scripts/honeyhive/sync-dashboards.sh"]
 
 permissions:
   contents: read
@@ -25,20 +25,23 @@ jobs:
   sync:
     needs: select-runner
     runs-on: ${{ fromJSON(needs.select-runner.outputs.runs_on) }}
+    # Holds the runner token of ai/production, which reads the HoneyHive keys from Dopbase.
+    environment: backend-production
     concurrency:
       group: honeyhive-dashboards
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: ./.github/actions/setup-dopbase
+      - name: Load the HoneyHive keys from Dopbase
+        env:
+          DOPBASE_URL: ${{ vars.DOPBASE_URL }}
+          DOPBASE_TOKEN: ${{ secrets.DOPBASE_TOKEN_AI }}
+        run: scripts/ci/load-dopbase.sh ai/production '(HH_API_URL|HH_CONTROL_PLANE_URL|HH_DATA_PLANE_API_KEY|HH_CONTROL_PLANE_API_KEY)'
       # Pinned so runs are reproducible. HoneyHive's installer is Linux-only, so a macOS self-hosted machine uses
       # its Homebrew install and only warns when the version differs. yq v4 and jq come with the Linux image and
       # with Homebrew on the self-hosted machines.
       - name: Install HoneyHive CLI
         run: scripts/ci/install-honeyhive.sh
       - name: Apply charts and alerts
-        env:
-          HH_DATA_PLANE_API_KEY: ${{ secrets.HH_DATA_PLANE_API_KEY }}
-          HH_CONTROL_PLANE_API_KEY: ${{ secrets.HH_CONTROL_PLANE_API_KEY }}
-          # HH_API_URL is the AI service's data plane URL; the GitHub names match Dopbase ai/production.
-          HH_DATA_PLANE_URL: ${{ vars.HH_API_URL }}
-          HH_CONTROL_PLANE_URL: ${{ vars.HH_CONTROL_PLANE_URL }}
-        run: bash sync-dashboards.sh
+        # HH_API_URL is the AI service's data plane URL; the keys above are loaded from Dopbase ai/production.
+        run: HH_DATA_PLANE_URL="$HH_API_URL" bash scripts/honeyhive/sync-dashboards.sh

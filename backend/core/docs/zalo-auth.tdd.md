@@ -8,7 +8,7 @@ evidence is appended below; older results are retained as dated checkpoints.
 Scope: Core-only implementation on `feat/zalo-login`, issue #238. No migration,
 frontend, canonical `docs/`, root progress, commit, push or deployment in this
 iteration. The user approved the implementation design. This evidence is not
-staging acceptance or a new source of product requirements.
+staging acceptance or a new source of product requirements. The V1–V16/V17 references below are dated historical checkpoints for the revisions named in each section; the current checked-in Core migration set is V1–V20. See the [current verification guide](verification.md#migration-evidence-and-safety) before interpreting a historical result as current-schema or deployment evidence.
 
 ## Test-first checkpoints
 

@@ -1,16 +1,14 @@
 # SmartLedger
 
-AI voice POS for small shops (So Nghe Loi): say one sentence and the AI records the items, quantities, and prices. Product overview: [docs/product/project-overview.md](docs/product/project-overview.md).
+SmartLedger (Sổ Nghe Lời) is a voice-first bookkeeping app for small shops in Vietnam: street stalls, family eateries, bakeries and corner stores that keep their sales in their head, in a paper notebook or as a single end-of-day total.
 
-## Overview
+It answers the questions a notebook cannot:
 
-| Step | What happens | Where |
-|---|---|---|
-| 1 | The shop owner signs in with Firebase Auth | Mobile, Core |
-| 2 | The app sends ledger and shop requests to the public API | Mobile → Core |
-| 3 | Core forwards each Agent chat to the AI service with an internal token | Core → AI |
-| 4 | AI answers with the chosen model and streams the reply back | AI |
-| 5 | Core keeps the business data; AI keeps the conversation history | Supabase PostgreSQL |
+- How much did the shop really sell today?
+- Which items sell best?
+- Who still owes the shop money, and how much has it spent?
+
+Owners record sales, payments, debts and expenses by speaking or with a few taps, and ask Bobi, the AI assistant, about their business. Nothing reaches the ledger until the owner confirms it. SmartLedger runs in production on Android and the web; the [product overview](docs/product/project-overview.md) describes its users and scope.
 
 ## Tech stack
 
@@ -22,6 +20,18 @@ AI voice POS for small shops (So Nghe Loi): say one sentence and the AI records 
 | Data and auth | <img alt="PostgreSQL" src="https://img.shields.io/badge/PostgreSQL-4169E1?logo=postgresql&logoColor=white"> <img alt="Supabase" src="https://img.shields.io/badge/Supabase-3FCF8E?logo=supabase&logoColor=white"> <img alt="Firebase Auth" src="https://img.shields.io/badge/Firebase_Auth-DD2C00?logo=firebase&logoColor=white"> |
 | Delivery | <img alt="Docker" src="https://img.shields.io/badge/Docker-2496ED?logo=docker&logoColor=white"> <img alt="Caddy" src="https://img.shields.io/badge/Caddy-1F88C0?logo=caddy&logoColor=white"> <img alt="GitHub Actions" src="https://img.shields.io/badge/GitHub_Actions-2088FF?logo=githubactions&logoColor=white"> <img alt="Ansible" src="https://img.shields.io/badge/Ansible-EE0000?logo=ansible&logoColor=white"> <img alt="Vercel" src="https://img.shields.io/badge/Vercel-000000?logo=vercel&logoColor=white"> |
 
+## System boundaries
+
+| Part | Responsibility | Runs on | Service guide |
+|---|---|---|---|
+| Core | Java 21 / Spring Boot public API; authentication, shop ownership and business transactions; owns the business database | VPS (Docker) | [Core](backend/core/README.md) |
+| AI | Internal Python / FastAPI service called only by Core; Agent chat, conversation history and memory | VPS (Docker) | [AI](backend/ai/README.md) |
+| Mobile | Expo Router app for the shop OWNER | Android build, web on Vercel | [Mobile](frontend/mobile/README.md) |
+| Web | Vite / React landing page and ADMIN dashboard | Vercel | [Web](frontend/web/README.md) |
+| Data | Supabase PostgreSQL; Core Flyway migrations and separate AI CLI migrations | Supabase | [Local development](docs/development/local-development.md) |
+
+Core verifies client identity and shop access before forwarding Agent requests with an internal token. Core owns business data; AI owns its conversation and memory storage.
+
 ## System architecture
 
 ![SmartLedger system architecture](docs/architecture/diagrams/images/ci-cd.svg)
@@ -29,27 +39,21 @@ AI voice POS for small shops (So Nghe Loi): say one sentence and the AI records 
 | Color | Flow |
 |---|---|
 | Green | Deploy pipeline: push, CI, image build, deploy to the VPS |
-| Purple | One-time VPS setup with Ansible |
-| Orange | Runtime request flow from the app to Core, AI, and the database |
+| Purple | VPS setup with Ansible |
+| Orange | Runtime request flow from the app to Core, AI and the database |
 
-Related: [Technical design §1](docs/architecture/technical-design.md#1-phạm-vi) (status per component), [ADRs](docs/architecture/adr/) (why), [CI/CD](docs/development/ci-cd.md) (pipeline).
-
-| Part | Path | Runs on | Role |
-|---|---|---|---|
-| Core | [`backend/core`](backend/core/README.md) | VPS (Docker) | Java public API for the clients; owns the database |
-| AI | [`backend/ai`](backend/ai/README.md) | VPS (Docker) | Python FastAPI internal API; only Core calls it |
-| Mobile | [`frontend/mobile`](frontend/mobile/README.md) | Android build, web on Vercel | Expo app for the shop OWNER |
-| Web | [`frontend/web`](frontend/web/README.md) | Vercel | Landing page and ADMIN dashboard |
-| AI schema | [`supabase/`](supabase/) | Supabase | CLI migrations for the AI tables |
+[Technical design §1](docs/architecture/technical-design.md#1-scope) records the status of each component, [CI/CD](docs/development/ci-cd.md) explains the pipeline and the [diagram guide](docs/architecture/diagrams/README.md) lists the other diagrams.
 
 ## Getting started
 
 | Task | Where |
 |---|---|
-| Set up, run, and check each service before a PR | [Local development](docs/development/local-development.md) |
-| Branches, commits, pull requests, releases | [CONTRIBUTING](CONTRIBUTING.md) |
+| Find the document that owns a fact | [Documentation](docs/README.md) |
+| Set up, run and check each service before a PR | [Local development](docs/development/local-development.md) |
+| Branches, commits, pull requests and releases | [CONTRIBUTING](CONTRIBUTING.md) |
 | Deploy pipeline and environments | [CI/CD](docs/development/ci-cd.md) |
-| Environment files and secrets | [Secrets and env files](docs/development/secrets-and-env.md) |
+| Instructions for coding agents | [AGENTS](AGENTS.md) |
+| Report a vulnerability | [Security policy](SECURITY.md) |
 
 ## Repository layout
 
@@ -59,28 +63,33 @@ smart-ledger/
 ├── AGENTS.md            # instructions for coding agents
 ├── CLAUDE.md            # imports AGENTS.md
 ├── CONTRIBUTING.md      # branches, commits, pull requests, releases
+├── SECURITY.md          # vulnerability reporting
 ├── PROGRESS.md          # recent progress log
 ├── BLOCKERS.md          # open blockers
-├── compose.yaml         # Core + AI (Supabase)
+├── compose.yaml         # local Core + AI stack
+├── .agents/             # shared agent skills
 ├── .github/             # CI/CD workflows, PR templates, CI helper scripts
-├── scripts/             # local database, secrets sync, Bruno API collection, Android and iOS release
-├── secrets/             # env files per environment, pulled from Dopbase
+├── .honeyhive/          # HoneyHive evaluators, charts and alerts for Bobi
+├── deploy/
+│   ├── ansible/         # VPS provisioning
+│   ├── vps/             # Compose stack and deploy script for the VPS
+│   ├── edge/            # Caddy reverse proxy
+│   ├── monitoring/      # Prometheus, Loki and Grafana
+│   └── dopbase/         # self-hosted secrets manager
+├── scripts/             # local database, CI, secrets, Bruno API collection, Android and iOS release
+├── secrets/             # env file templates per environment, pulled from Dopbase
 ├── supabase/            # AI schema migrations (Supabase CLI)
 ├── docs/                # source of truth; start at docs/README.md
-│   ├── product/         # product description, BRD, PRD
-│   ├── architecture/    # technical design, ERD, ADRs, diagrams, service walkthrough
-│   ├── contracts/       # HTTP/wire contracts
+│   ├── product/         # product overview, BRD, PRD and user flows
+│   ├── architecture/    # technical design, data model, ADRs, diagrams, service walkthrough
+│   ├── contracts/       # HTTP and wire contracts
 │   ├── design/          # mobile UI direction and wording
 │   ├── development/     # local development, secrets, CI/CD, release runbooks
 │   └── marketing/       # app screenshots per product flow
 ├── frontend/
-│   ├── mobile/          # Expo app for the OWNER; mock data by default
-│   └── web/             # landing page + ADMIN dashboard at /admin
+│   ├── mobile/          # Expo app for the shop OWNER
+│   └── web/             # landing page and ADMIN dashboard at /admin
 └── backend/
-    ├── core/            # Core public API (Java), DB owner
+    ├── core/            # Core public API (Java), owns the business database
     └── ai/              # internal AI API (Python FastAPI)
 ```
-
-## Documentation
-
-Start at the [documentation index](docs/README.md); it maps every document and names the one that owns each fact.

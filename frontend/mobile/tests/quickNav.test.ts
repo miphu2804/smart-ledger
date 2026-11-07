@@ -10,7 +10,7 @@ describe('menu chuyển nhanh', () => {
   it('có đủ các màn chính, mỗi mục một khoá', () => {
     assert.deepEqual(
       items.map((item) => item.label),
-      ['Tổng quan', 'Bán hàng', 'Đơn hàng', 'Công nợ', 'Hàng hoá', 'Báo cáo', 'Chi phí', 'Trợ lý AI', 'Cài đặt'],
+      ['Tổng quan', 'Tạo đơn', 'Đơn hàng', 'Công nợ', 'Hàng hoá', 'Báo cáo', 'Chi phí', 'Trợ lý Bobi', 'Cài đặt'],
     );
     assert.equal(new Set(items.map((item) => item.key)).size, items.length);
   });

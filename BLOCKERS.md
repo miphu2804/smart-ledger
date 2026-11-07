@@ -1,29 +1,47 @@
-### [2026-10-26] — [CI] PR #368 chờ runner hoặc xử lý billing của chủ repository
+## Open verification dependencies
+
+### [2026-11-07] — [Acceptance] Integrated admin growth acceptance is not verified
 
 **Status:** Open
 
-**Blocked by:** [CI #785](https://github.com/miphu2804/smart-ledger/actions/runs/40218136882) mất kết nối self-hosted runner trước bước build/test. [CI #786](https://github.com/miphu2804/smart-ledger/actions/runs/40277351366) trên nhánh feature vẫn chờ runner. Lượt thủ công [CI #787](https://github.com/miphu2804/smart-ledger/actions/runs/40278406256) chạy nhánh main bị GitHub chặn trước khi cấp runner vì tài khoản chủ repository bị khóa do billing; summary sau đó lỗi fromJSON vì không có runner output. Người dùng không quản lý máy M4 Pro.
+**Blocked by:** PR #368 merged on 2026-10-26 as `d4dc743e3315368eea5980d074aacc9e05af9e4f`; its Core and container-image checks succeeded. The documentation audit did not run Firebase/FE integration, staging smoke/UAT, production acceptance or a real load evaluation.
 
-**Impact:** Chưa có CI pass cho HEAD của PR #368. Kiểm thử local đã đạt không thay required checks. Quota artifact đã chặn upload summary ở #785, nhưng upload đó là optional/continue-on-error và không phải nguyên nhân hai job Core/container thất bại.
+**Impact:** The API is implemented and merged, but the local regression and successful PR checks do not establish integrated acceptance or the currently deployed/enabled state.
 
-**Next action:** Chủ repository xử lý billing hoặc người quản lý M4 Pro khôi phục runner/mạng, sau đó chạy CI trên đúng `feat/admin-dashboard-growth` và kiểm tra các job thực sự thực thi. Không bỏ required checks, tự đổi biến runner, xóa artifact hay merge để né blocker.
+**Next action:** The feature/integration owner records the tested build and environment and completes the [Core handoff](backend/core/docs/admin-dashboard-growth.md). Check current delivery evidence separately: CI on `staging` commit `a2766ee` succeeded ([run 42251227949](https://github.com/miphu2804/smart-ledger/actions/runs/42251227949)), while that revision's [CD run](https://github.com/miphu2804/smart-ledger/actions/runs/42251883849) and [infra run](https://github.com/miphu2804/smart-ledger/actions/runs/42251227926) failed; their causes and remediation were not verified by this docs-only audit. No environment change is authorized here.
 
-### [2026-10-26] — [Validation] Đã hoàn tất hồi quy PostgreSQL cho admin growth
+## Resolved history
+
+### [2026-10-26] — [CI] PR #368 runner/billing interruption
 
 **Status:** Resolved
 
-**Blocked by:** Trước đó Docker Desktop báo lỗi process và CLI không kết nối được Linux engine. Người dùng đã khôi phục Docker; lượt kiểm tra lại đã hoàn tất.
+**Blocked by:** Historical [CI #785](https://github.com/miphu2804/smart-ledger/actions/runs/40218136882) lost its self-hosted runner connection before build/test; [CI #786](https://github.com/miphu2804/smart-ledger/actions/runs/40277351366) waited for a runner; [CI #787](https://github.com/miphu2804/smart-ledger/actions/runs/40278406256) was blocked before assignment by the owner's billing lock and its summary then failed in `fromJSON`. The optional artifact upload warning did not cause the Core/container failures.
 
-**Resolution:** `mvnw.cmd -B verify` trên đúng commit `976be02` trong checkout tạm sạch, dùng PostgreSQL 16.15 riêng, đạt BUILD SUCCESS: 1.422 test, không failure/error/skip. Đối chiếu tổng Maven với các testcase XML; gồm 22 test controller và 18 test PostgreSQL của dashboard, có assertion phiên DB UTC. Log local: `backend/core/target/admin-growth-full-verify-20261026.log` (ignored). Không dùng DB nghiệp vụ local/staging/production, không tạo migration mới.
+**Impact:** These runs did not provide passing PR evidence at the time. They are not current blockers for the already merged PR.
 
-**Next action:** Nhánh đã được duyệt push và công bố tại `6381054`; PR #368 đang mở vào staging. Xử lý các check CI/review, sau đó nghiệm thu FE integration, staging smoke/UAT và đánh giá tải thực tế; kết quả local không thay thế các bước này.
+**Resolution:** Verified through GitHub on 2026-11-07: [PR #368](https://github.com/miphu2804/smart-ledger/pull/368) is merged; `core`, `container-images` and `CI result summary` completed successfully. This does not prove that all later CI/CD runs or production execution passed.
 
-### [2026-09-15 21:46 UTC+07:00] — [Planning] Chưa gán được issue dashboard cho Hiep
+**Next action:** None for the historical PR interruption; use the open verification dependency above for integration acceptance.
 
-**Status:** Open
+### [2026-10-26] — [Validation] PostgreSQL regression for admin growth completed
 
-**Blocked by:** Chưa có GitHub username của Hiep và Hiep chưa xuất hiện trong danh sách collaborator của repository.
+**Status:** Resolved
 
-**Impact:** #17–#19 đã ghi Hiep là người phụ trách dự kiến nhưng GitHub assignee đang để trống.
+**Blocked by:** Docker Desktop previously reported a process error and the CLI could not connect to the Linux engine. The user restored Docker; the rerun completed.
 
-**Next action:** Cung cấp đúng GitHub username hoặc thêm Hiep làm collaborator, sau đó gán #17–#19.
+**Resolution:** Historical local evidence: `mvnw.cmd -B verify` on commit `976be02` in a clean temporary checkout, with its own PostgreSQL 16.15, reached BUILD SUCCESS: 1,422 tests, no failures/errors/skips. Totals were checked against XML testcases, including 22 controller tests and 18 PostgreSQL dashboard tests with a UTC DB session assertion. Local log: `backend/core/target/admin-growth-full-verify-20261026.log` (ignored). No local/staging/production business DB was used and no migration was created. These tests were not rerun in this documentation change.
+
+**Next action:** None for the completed local regression; FE/staging/load acceptance remains separate.
+
+### [2026-09-15] — [Planning] Dashboard issue assignment
+
+**Status:** Resolved
+
+**Blocked by:** Hiep's GitHub username and collaborator access were unknown at the time.
+
+**Impact:** #17–#19 originally had no GitHub assignee.
+
+**Resolution:** Verified through GitHub on 2026-11-07: issues [#17](https://github.com/miphu2804/smart-ledger/issues/17), [#18](https://github.com/miphu2804/smart-ledger/issues/18) and [#19](https://github.com/miphu2804/smart-ledger/issues/19) are closed and assigned to `orei1i`.
+
+**Next action:** None; do not recreate the historical assignment blocker.

@@ -1,0 +1,71 @@
+flowchart TB
+    subgraph Clients["Clients"]
+        OWNER["OWNER app / web<br/>Firebase ID token; shop header when required"]
+        ADMIN["ADMIN web<br/>Firebase ID token; DB role check"]
+        PUBLIC["Zalo LOGIN bootstrap<br/>public, feature-gated"]
+    end
+    subgraph Core["Core · Spring Boot"]
+        FILTER["BearerTokenAuthenticationFilter"]
+        CTRL["Controllers"]
+        AUTH["AuthSessionService<br/>session / me; no shop header"]
+        AVATAR["Current user's avatar<br/>own UID + ACTIVE user<br/>OWNER or ADMIN"]
+        INBOX["NotificationService · OWNER inbox<br/>ACTIVE OWNER + recipient<br/>shop ownership / event visibility"]
+        PROFILE["ShopService<br/>owned profile; INACTIVE remains readable"]
+        SHOP["ShopService<br/>active owned shop guard"]
+        SUPPORT["AdminAccessGuard<br/>dashboard support reads"]
+        STATUS["ShopService.updateStatus<br/>DB ADMIN / ACTIVE"]
+        SVC["Ledger / catalog / report services"]
+        ADM["AdminDashboardService<br/>read + mandatory audit transaction"]
+        MEDIA["MediaService<br/>scoped upload idempotency<br/>lease and cleanup outbox"]
+        OAUTH["ZaloAuthService / ZaloNativeAuthService<br/>browser binding, one-use proof/handoff<br/>LINK also requires verified recent OWNER"]
+        IDEM["IdempotencyService<br/>expense / repay / void<br/>stock-in / stock adjustment"]
+        AUDIT["Audit writers<br/>profile / ledger writes and ADMIN reads"]
+        AGENT["AgentServiceImpl<br/>verified OWNER + shop scope"]
+    end
+    subgraph External["Provider boundaries"]
+        ZALO["Zalo OAuth / profile"]
+        FIREBASE["Firebase Admin<br/>verification / custom token"]
+        CLOUD["Cloudinary"]
+        AI["AI /internal/v1/agent/*<br/>X-Internal-Token"]
+    end
+    PG[("Core PostgreSQL tables")]
+    CHAT[("AI chat / memory / read-only views")]
+    OWNER --> FILTER
+    ADMIN --> FILTER
+    FILTER --> FIREBASE
+    FILTER --> CTRL
+    PUBLIC --> OAUTH
+    CTRL --> AUTH
+    CTRL --> AVATAR
+    CTRL --> INBOX
+    CTRL --> PROFILE
+    CTRL --> SHOP
+    CTRL --> SUPPORT --> ADM
+    CTRL --> STATUS
+    CTRL -->|"authenticated LINK"| OAUTH
+    SHOP --> SVC
+    AVATAR --> MEDIA
+    SHOP --> MEDIA
+    SHOP --> AGENT --> AI --> CHAT
+    SVC --> IDEM
+    SVC -->|"audited writes"| AUDIT
+    ADM --> AUDIT
+    STATUS --> AUDIT
+    STATUS --> PG
+    AUTH --> PG
+    INBOX --> PG
+    PROFILE --> PG
+    SVC --> PG
+    IDEM --> PG
+    AUDIT --> PG
+    MEDIA --> PG
+    MEDIA --> AUDIT
+    MEDIA --> CLOUD
+    OAUTH --> ZALO
+    OAUTH --> FIREBASE
+    OAUTH --> PG
+    classDef default fill:#eef4ff,stroke:#5b8def,color:#1f2d3d
+    classDef store fill:#efe6ff,stroke:#8a63d2,color:#3d2a6b
+    classDef shared fill:#ffe9d6,stroke:#e07b24,color:#6b3500
+    class PG,CHAT store
+    class FILTER,SHOP,SUPPORT,IDEM,AUDIT shared

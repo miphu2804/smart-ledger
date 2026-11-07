@@ -39,12 +39,13 @@ describe('parseOrder: tên chung của nhiều mẫu', () => {
     assert.equal(r.disambiguations?.length, 0);
   });
 
-  it('chỉ một món chứa tên đã nói thì vẫn hỏi xác nhận', () => {
+  it('chỉ một món chứa tên đã nói thì ghi thẳng món đó', () => {
     const r = parseOrder('một cà phê', products);
     assert.deepEqual(
-      r.disambiguations?.[0].options.map((o) => o.name),
-      ['Cà phê sữa'],
+      r.items.map((i) => [i.name, i.qty]),
+      [['Cà phê sữa', 1]],
     );
+    assert.equal(r.disambiguations?.length, 0);
   });
 
   it('món có trong danh mục cùng câu vẫn được ghi', () => {

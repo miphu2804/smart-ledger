@@ -1,0 +1,26 @@
+flowchart LR
+    mobile["Mobile app · OWNER"]
+    admin["Web admin · ADMIN"]
+    idp["Firebase Auth"]
+    core["Core · business rules and authorization"]
+    media["Cloudinary media"]
+    ledger[("Business ledger")]
+    ai["AI · Agent chat"]
+    cache[("Redis history cache")]
+    history[("Chat history and optional memory")]
+    views["Read-only ledger views"]
+    models["OpenAI-compatible model gateway"]
+    traces["HoneyHive tracing"]
+
+    mobile --> core
+    admin --> core
+    core -->|verify sign-in| idp
+    core --> media
+    core --> ledger
+    core -->|user and shop| ai
+    ai -.-> cache
+    ai --> history
+    ai --> views
+    views --> ledger
+    ai --> models
+    ai -.-> traces

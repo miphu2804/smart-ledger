@@ -99,33 +99,32 @@ jobs:
       - name: Build and push core
         if: inputs.core
         run: scripts/ci/build-image.sh core "$CORE_IMAGE"
-      # The private key lives only in a job-local ssh-agent; the known_hosts secret pins the VPS host key, so a
-      # spoofed server is refused instead of trusted on first use.
-      - name: Start ssh-agent
-        env:
-          VPS_HOST: ${{ vars.VPS_HOST }}
-          VPS_USER: ${{ vars.VPS_USER || 'deploy' }}
-          VPS_SSH_KEY: ${{ secrets.VPS_SSH_KEY }}
-          VPS_KNOWN_HOSTS: ${{ secrets.VPS_KNOWN_HOSTS }}
-        run: scripts/ci/start-ssh-agent.sh
-      # Dopbase (docs/development/secrets-and-env.md) is the one source of the service variables: each deploy writes
-      # core.env and ai.env from it, so a value changed there reaches the VPS on the next deploy. The pinned CLI comes
-      # from .github/actions/setup-dopbase, shared with eval-regression.yml.
+      # Dopbase (docs/development/secrets-and-env.md) is the one source of the VPS and service variables. The pinned CLI
+      # comes from .github/actions/setup-dopbase, shared with infra-run.yml and eval-regression.yml.
       - uses: ./.github/actions/setup-dopbase
-        if: inputs.ai || inputs.core
+      # Each token is a runner token of one Dopbase environment (vps/<env>), so a leaked token reads only that group.
+      - name: Load the VPS keys from Dopbase
+        env:
+          DOPBASE_URL: ${{ vars.DOPBASE_URL }}
+          DOPBASE_TOKEN: ${{ secrets.DOPBASE_TOKEN_VPS }}
+        run: scripts/ci/load-dopbase.sh vps/${{ github.ref_name == 'main' && 'production' || 'staging' }} '(VPS_HOST|VPS_KNOWN_HOSTS|VPS_SSH_KEY)'
+      # The private key lives only in a job-local ssh-agent; VPS_KNOWN_HOSTS pins the VPS host key, so a spoofed server
+      # is refused instead of trusted on first use.
+      - name: Start ssh-agent
+        run: scripts/ci/start-ssh-agent.sh
       # Each token is a runner token of one Dopbase environment (core/<env>, ai/<env>), so a leaked token reads only
       # that service. The file goes over stdin, so no value shows in a process list.
       - name: Upload core settings
         if: inputs.core
         env:
           DOPBASE_URL: ${{ vars.DOPBASE_URL }}
-          DOPBASE_TOKEN: ${{ secrets.DOPBASE_CORE_TOKEN }}
+          DOPBASE_TOKEN: ${{ secrets.DOPBASE_TOKEN_CORE }}
         run: scripts/ci/upload-settings.sh core
       - name: Upload ai settings
         if: inputs.ai
         env:
           DOPBASE_URL: ${{ vars.DOPBASE_URL }}
-          DOPBASE_TOKEN: ${{ secrets.DOPBASE_AI_TOKEN }}
+          DOPBASE_TOKEN: ${{ secrets.DOPBASE_TOKEN_AI }}
         run: scripts/ci/upload-settings.sh ai
       - name: Deploy
         id: deploy
