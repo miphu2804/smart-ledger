@@ -1,3 +1,11 @@
+### 2026-11-07 — Unquote Dopbase values in CI
+
+| Area | Change |
+|---|---|
+| CI | • `load-dopbase.sh` strips the double quotes and escapes that `dopbase export --format dotenv` puts around every value, so `VPS_SSH_KEY` decodes and `VPS_KNOWN_HOSTS` is a valid known-hosts line again; staging backend deploys had failed since #553<br>• A multi-line value now fails with a clear error |
+
+Check: a fake `dopbase` printing quoted values loads the exact bytes, a multi-line value is refused, `shellcheck --severity=warning` passed; the stored staging key decodes to an OpenSSH private key once unquoted. CD rerun pending.
+
 ### 2026-11-07 — Move document metadata into the .okf bundle
 
 | Area | Change |
@@ -184,12 +192,4 @@ Check: `uv run pytest tests/unit_tests -q` (493 passed, 1 skipped), `ruff check`
 | AI eval | • Metric `no_time_echo` (gated at 1.0) flags a clock time in an answer<br>• Option `--limit N` asks only the first N `agent_chat` questions |
 
 Check: `uv run pytest tests/unit_tests -q` (493 passed, 1 skipped), `ruff check` and `ruff format --check`; `agent_chat --repeats 1 --limit 15` with model tiering on through a local Bifrost with staging's aliases: `no_time_echo` 0.87 with the old prompt (`orders_last_month`, `revenue_today` echoed the time) and 1.00 in two runs with the new one. Not verified: the other 8 cases and 3 repeats. Commit: the one that adds this entry.
-
-### 2026-11-05 — Read the chat hot path without a transaction
-
-| Area | Change |
-|---|---|
-| AI | • `PostgreDBClient.read_session()` opens a session on an autocommit connection, so a read sends no `BEGIN` or `COMMIT` and costs the pool pre-ping and the query instead of four round trips<br>• `recall_ready`, `search` and the database branch of `recent_messages` use it; writes, `lock=True` callers and every other read stay on `session()` |
-
-Check: `uv run pytest -q` (595 passed, 13 skipped) with `POSTGRES_TEST_URL` on a throwaway `pgvector/pgvector:pg17` container and `REDIS_TEST_URL` on a `redis:7-alpine`, both removed afterwards, `ruff check` and `ruff format --check`; a new integration test shows `read_session()` is autocommit and a later `session()` on the same pooled connection is not. A `select 1` through `PostgreDBClient` from Vietnam to the staging Supabase pooler took 167 ms p50 in `session()` and 83 ms in `read_session()`, and `session()` stayed at 164 ms afterwards. Not verified: the production gain on `memory ready`, `memory recall` and history misses. Commit: the one that adds this entry.
 
