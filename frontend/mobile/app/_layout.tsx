@@ -6,13 +6,16 @@ import {
   PlusJakartaSans_800ExtraBold,
   useFonts,
 } from '@expo-google-fonts/plus-jakarta-sans';
-import { Stack } from 'expo-router';
+import { Stack, useSegments } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
-import React from 'react';
+import React, { useEffect } from 'react';
 import { ActivityIndicator, Platform, View } from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
+import { AnalyticsConsentPrompt } from '../src/components/AnalyticsConsentPrompt';
 import { ToastProvider } from '../src/components/brand';
 import { UpdatePrompt } from '../src/components/UpdatePrompt';
+import { trackScreen } from '../src/lib/analytics';
+import { screenNameFromSegments } from '../src/lib/analyticsEvents';
 import { canOpenProtectedScreens, PROTECTED_SCREENS } from '../src/lib/authGate';
 import { AppStoreProvider, useApp } from '../src/store/AppStore';
 import { colors, WEB_FRAME_MAX_WIDTH } from '../src/theme';
@@ -20,6 +23,13 @@ import { SCREEN_ANIMATION } from '../src/motion';
 
 function AppStack() {
   const app = useApp();
+  // Ghi màn đang mở cho Google Analytics; SDK không tự ghi (`firebase.json`) vì nó chỉ thấy một Activity của React Native.
+  // Ghi lại cả khi vừa bật đồng ý, để màn đang đứng không bị thiếu.
+  const screen = screenNameFromSegments(useSegments());
+  const analyticsOn = app.settings.analytics;
+  useEffect(() => {
+    if (analyticsOn) trackScreen(screen);
+  }, [screen, analyticsOn]);
   return (
     <Stack
       screenOptions={{
@@ -68,6 +78,7 @@ export default function RootLayout() {
               <StatusBar style="dark" />
               <AppStack />
               <UpdatePrompt />
+              <AnalyticsConsentPrompt />
             </ToastProvider>
           </AppStoreProvider>
         </View>

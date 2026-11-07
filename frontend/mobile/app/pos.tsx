@@ -13,6 +13,7 @@ import { QuickNavButton } from '../src/components/QuickNav';
 import { TAB_HEADER_SIDE, TAB_HEADER_TOP, TabSearchBar } from '../src/components/TabSearchBar';
 import { Button, Chips, Dialog, EmptyState, Field, Row, Sheet, Stepper, T } from '../src/components/ui';
 import type { CategoryView, LineItem, ProductView } from '../src/data/types';
+import { track } from '../src/lib/analytics';
 import { categoryApi, productApi, type ProductListQuery } from '../src/lib/catalogApi';
 import { errorMessage } from '../src/lib/errors';
 import { triggerFeedback } from '../src/lib/feedback';
@@ -729,6 +730,7 @@ export default function Pos({ inTab = false }: { inTab?: boolean }) {
         tracked: false,
         stockQuantity: null,
       });
+      track('product_created', { via: 'pos' });
       rememberProducts([created]);
       addToCart(created.id, 1);
       void refresh();

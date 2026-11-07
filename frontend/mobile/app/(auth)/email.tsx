@@ -3,6 +3,7 @@ import React, { useState } from 'react';
 import { Pressable } from 'react-native';
 import { Button, Chips, Field, Header, Screen, T } from '../../src/components/ui';
 import { AuthError, authClient } from '../../src/lib/auth';
+import { track } from '../../src/lib/analytics';
 import { debugLog } from '../../src/lib/debug';
 import { describeError, errorMessage, isDisplayNameRequired } from '../../src/lib/errors';
 import { takeEmailDraft } from '../../src/lib/emailDraft';
@@ -66,6 +67,7 @@ export default function EmailAuth() {
       }
       const session = await signIn(); // gửi Firebase ID token xuống Core (POST /auth/session)
       void saveLastSignIn('email');
+      track('login', { method: 'email' });
       router.replace(session.needsOnboarding ? '/(auth)/setup' : '/(tabs)');
     } catch (e) {
       debugLog('auth', 'email flow ✗', describeError(e));

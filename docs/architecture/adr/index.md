@@ -11,3 +11,4 @@
 * [ADR-0007: The code sandbox runs model-written programs, not data tools](0007-sandbox-without-data-tools.md) - Accepted: the code sandbox runs model-written programs but holds no data tools.
 * [ADR-0008: Bifrost owns upstream routing and fallback, the AI service only picks an alias](0008-bifrost-owns-routing-and-fallback.md) - Accepted: the AI service picks a model alias; Bifrost owns upstream routing, fallback and content-free request logs.
 * [ADR-0009: Trace every Agent chat turn to HoneyHive, redacting sensitive data first](0009-end-to-end-tracing.md) - Accepted for AI: HoneyHive traces each Agent chat turn with redacted content; Core correlation still needs owner approval.
+* [ADR-0010: Measure mobile app usage with Google Analytics 4, only with user consent](0010-mobile-usage-analytics-ga4.md) - Proposed: the Android production app sends screen views and a fixed event catalogue to GA4 through Firebase only after the user agrees.

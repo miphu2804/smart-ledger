@@ -4,6 +4,7 @@ import React, { useCallback, useState } from 'react';
 import { BackHandler, Pressable, StyleSheet, View } from 'react-native';
 import { Button, Dialog, Field, Header, Progress, Screen, T } from '../../src/components/ui';
 import { industryList } from '../../src/data/mock';
+import { track } from '../../src/lib/analytics';
 import { errorMessage } from '../../src/lib/errors';
 import { PROFILE_MAX, shopNameError } from '../../src/lib/profileValidation';
 import { useApp } from '../../src/store/AppStore';
@@ -56,6 +57,7 @@ export default function Setup() {
               setErr('');
               try {
                 await finishOnboarding(name, picked); // tạo tiệm (POST /shops)
+                track('shop_created', { via: 'onboarding' });
                 router.replace('/(tabs)');
               } catch (e) {
                 setErr(errorMessage(e));

@@ -5,6 +5,7 @@ import { useToast } from '../../src/components/brand';
 import { Button, Header, Screen, T } from '../../src/components/ui';
 import { SUPPORT_EMAIL } from '../../src/config';
 import { authClient } from '../../src/lib/auth';
+import { track } from '../../src/lib/analytics';
 import { debugLog } from '../../src/lib/debug';
 import { describeError, errorMessage, isDisplayNameRequired } from '../../src/lib/errors';
 import { saveLastSignIn } from '../../src/lib/lastSignInStorage';
@@ -37,6 +38,7 @@ export default function VerifyEmail() {
       }
       const session = await signIn(); // gửi Firebase ID token xuống Core (POST /auth/session)
       void saveLastSignIn('email');
+      track('login', { method: 'email' });
       router.replace(session.needsOnboarding ? '/(auth)/setup' : '/(tabs)');
     } catch (e) {
       debugLog('auth', 'xác minh email ✗', describeError(e));
