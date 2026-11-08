@@ -190,3 +190,28 @@ Giữ an toàn dữ liệu và contract đang có dù là dự án môn học. D
 | `BO-004`, `BR-INV-001`–`BR-INV-008` | `FR-INV-001`–`FR-INV-007`, `NFR-004` | `AC-INV-001`–`AC-INV-002` provisional; không kích hoạt trước quyết định mục 8 |
 
 Đây là truy vết theo nhóm nghiệp vụ, không chứng nhận AC đạt. [Phụ lục kiểm định §4](business-requirements-audit.md#4-truy-vết-chi-tiết-frnfr-và-ac) liệt kê đầy đủ từng FR/NFR và liên kết AC trực tiếp, gồm khoảng trống chưa có AC. Không lấy số lượng mã/link hợp lệ làm bằng chứng tài liệu đã đúng nghiệp vụ.
+
+## SePay #570 — thiết kế nhận thanh toán
+
+Chủ dự án duyệt thiết kế nhận tiền ngày 2026-11-07 theo [#570](https://github.com/miphu2804/smart-ledger/issues/570) và sau đó chốt thêm subscription/quota trong chat. Đây là phần mở rộng thiết kế riêng, không đổi BR-010 về ghi nhận chuyển khoản bán hàng hoặc tự chứng nhận tính năng đã triển khai/nghiệm thu.
+
+| ID | Quy tắc kinh doanh | Truy vết |
+|---|---|---|
+| `BR-027` | OWNER trả phí cho Sổ Nghe Lời vào tài khoản của nhóm, tách khỏi tiền bán hàng của tiệm. Yêu cầu trả phí giữ giá/phiên bản/thời hạn gói và thông tin nhận lúc tạo, có hạn chuyển khoản 30 phút. Chỉ tự ghi nhận khi đúng mã, tài khoản và toàn bộ số tiền, Core nhận webhook hợp lệ trước hạn. Thiếu/dư tiền, sai/thiếu mã và thông báo muộn đều lưu chờ đối soát, kể cả giờ ngân hàng trước hạn; một giao dịch không ghi nhận hai lần. PAID là sự thật đã nhận tiền, còn kích hoạt/gia hạn phải có kết quả riêng, phục hồi được và không lặp. Free không thu qua SePay. | `FR-041`, `NFR-003`, `NFR-007`; `AC-128`–`AC-136` |
+
+Chủ dự án đã tạo tài khoản ngân hàng mô phỏng trong SePay Test mode, chỉ định người quản lý/đối soát và duyệt tạo migration cho schema ngày 2026-11-07. Ngân hàng nhận tiền Live, quyền truy cập vận hành, retention dữ liệu và cấu hình tích hợp còn phải chốt trước thu thật. Core V21 và migration receipt AI đã có tầng lưu trữ; đợt 3 bổ sung API yêu cầu thanh toán và HMAC webhook ở Core, mặc định tắt. Đợt 4 bổ sung cấp/gia hạn gói và API trạng thái/quota chỉ đọc, cờ cấp gói mặc định tắt; đợt 5 có receipt/cancel/replay nội bộ AI và migration hai cột metadata được duyệt riêng; đợt 6 bổ sung admission/trừ lượt/phục hồi Core trên V21 với cờ mặc định tắt, chưa nghiệm thu tích hợp hoặc bật quota dùng chung, chưa có phê duyệt giao dịch thật hoặc chạy migration dùng chung. [Contract SePay](../contracts/api-contracts.md#9-sepay-fee-payments--570) và [thiết kế nhận tiền](../architecture/sepay-payment-design.md) phân biệt phần đã chốt với API/kỹ thuật chưa triển khai.
+
+## Subscription và quota AI — quyết định lượt 1
+
+Chủ dự án đồng ý kế hoạch trong chat ngày 2026-11-07: gói theo tài khoản OWNER; 99.000đ/1 tháng lịch, 297.000đ/3 tháng lịch; hai gói trả phí có cùng quyền lợi và quota tuần. Chủ dự án xác nhận Free cũng có đầy đủ chức năng hiện có, chỉ khác quota AI; câu trả lời bình thường dù thiếu dữ liệu hoặc hỏi làm rõ vẫn tính lượt. Đây là yêu cầu cho triển khai sau, chưa mở bán hoặc giới hạn runtime hiện tại.
+
+| ID | Quy tắc kinh doanh | Truy vết |
+|---|---|---|
+| `BR-028` | Gói áp dụng cho tài khoản OWNER, dùng chung giữa các tiệm. Free giữ chức năng hiện có; trả phí không cấp quyền ADMIN hoặc vượt trạng thái tài khoản/tiệm. Gói 99.000đ có 1 tháng lịch, gói 297.000đ có 3 tháng lịch, đều bắt đầu khi kích hoạt thành công nếu chưa có gói còn hiệu lực. Gia hạn sớm nối tiếp thời hạn, giữ mốc tuần và số lượt đã dùng; không reset quota chỉ vì trả tiền. Hết hạn về Free, không xóa/khóa dữ liệu bán hàng. Giao dịch đã nhận tiền phải cấp gói đúng một lần hoặc có trạng thái chờ kích hoạt phục hồi được. | `FR-042`, `NFR-003`; `AC-137`–`AC-140`, `AC-150` |
+| `BR-029` | Free có 2 lượt chat AI mỗi ngày theo giờ Việt Nam, reset 00:00. Cả hai gói trả phí có 300 lượt mỗi 7 ngày từ mốc kích hoạt, không cộng dồn; tuần cuối ngắn vẫn có tối đa 300 lượt nhưng chỉ dùng khi gói còn hiệu lực. Một câu hỏi xử lý hoàn tất và lưu câu trả lời bình thường tính một lượt, kể cả hỏi làm rõ/thiếu dữ liệu; các tool/model bên trong không tính riêng. Lỗi kỹ thuật chưa có kết quả hoàn tất không trừ lượt; retry cùng câu hỏi không trừ hai lần. Quota dùng chung mọi tiệm/thiết bị; hết lượt chỉ chặn chat AI, không chặn chức năng khác hoặc đọc lịch sử. | `FR-043`, `NFR-003`, `NFR-007`; `AC-141`–`AC-150` |
+
+Quy tắc thời gian: dùng tháng lịch trong Asia/Ho_Chi_Minh, giữ ngày/giờ neo ban đầu của đợt trả phí liên tục và chặn ngày cuối tháng khi cần. Ví dụ bắt đầu 31/01/2027: một tháng kết thúc 28/02, gia hạn tổng hai tháng kết thúc 31/03, ba tháng kết thúc 30/04; không biến một tháng thành 30 ngày cố định. Sau gián đoạn hết gói, lần kích hoạt mới có mốc tuần mới. 300 lượt/tuần không được quảng cáo thành tổng lượt tháng/quý cố định.
+
+Nếu server đã lưu câu trả lời hoàn tất nhưng trình duyệt mất kết nối, câu đó vẫn là một lượt thành công và retry phải lấy lại đúng kết quả không tính thêm. Nếu stream lỗi/dừng trước khi hoàn tất thì không có lượt thành công; trường hợp chưa biết đã lưu hay chưa phải đối chiếu kết quả bền vững trước khi cộng/hoàn quota. Không dùng HTTP 200 hoặc một đoạn chữ đầu để quyết định trừ lượt.
+
+[PRD](product-requirements.md#subscription-và-quota-ai--thiết-kế-lượt-1) sở hữu hành vi/AC; [contract](../contracts/api-contracts.md#10-subscription-and-ai-quota) sở hữu API đề xuất; [thiết kế](../architecture/subscription-quota-design.md) giải thích dữ liệu và biên transaction. Không tự thu tiền định kỳ, hoàn tiền hoặc triển khai production; migration cần duyệt schema riêng.

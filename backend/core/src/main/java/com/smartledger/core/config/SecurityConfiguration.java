@@ -1,5 +1,6 @@
 package com.smartledger.core.config;
 
+import com.smartledger.core.billing.SePayWebhookRoute;
 import com.smartledger.core.exception.RestAuthenticationEntryPoint;
 import com.smartledger.core.security.BearerTokenAuthenticationFilter;
 import com.smartledger.core.security.UserRateLimitFilter;
@@ -54,6 +55,7 @@ public class SecurityConfiguration {
                         .requestMatchers(HttpMethod.GET, "/api/v1/auth/zalo/native/authorize",
                                 "/mobile/auth/zalo/complete", "/.well-known/assetlinks.json").permitAll()
                         .requestMatchers(HttpMethod.POST, "/api/v1/auth/zalo/native/exchange").permitAll()
+                        .requestMatchers(SePayWebhookRoute::matches).permitAll()
                         .anyRequest().authenticated())
                 .addFilterBefore(bearerTokenAuthenticationFilter, UsernamePasswordAuthenticationFilter.class);
         rateLimitFilter.ifAvailable(filter -> http.addFilterAfter(filter, BearerTokenAuthenticationFilter.class));

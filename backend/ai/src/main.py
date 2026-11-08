@@ -11,11 +11,17 @@ from fastapi.responses import JSONResponse
 from prometheus_fastapi_instrumentator import Instrumentator
 from pydantic_ai import Embedder
 
-from src.agent.errors import ConversationNotFoundError, GuardrailError
+from src.agent.errors import (
+    ConversationNotFoundError,
+    GuardrailError,
+    TurnProtocolError,
+)
 from src.agent.guardrails import GuardrailLimits
+from src.agent.receipts import AgentTurnRepository
 from src.agent.repository import AgentConversationRepository
 from src.agent.router import router as agent_router
 from src.agent.service import AgentService
+from src.agent.turns import AgentTurnService
 from src.app_config import app_config
 from src.calculation.service import CalculationLimits, CalculationService
 from src.infra.postgre_db_client import PostgreDBClient
@@ -248,6 +254,9 @@ async def lifespan(app: FastAPI):
     )
     conversations = AgentConversationRepository(postgres, cache)
     app.state.conversations = conversations
+    app.state.turns = AgentTurnService(
+        AgentTurnRepository(postgres), app_config.AGENT_TURN_RECEIPTS_ENABLED
+    )
     shop_data = build_shop_data(reader)
     memory = build_memory_service(chat_model, postgres, observability)
     app.state.memory = memory
@@ -315,6 +324,14 @@ async def ai_unavailable(request: Request, exc: Exception) -> JSONResponse:
     return JSONResponse(status_code=503, content={"detail": "ai_unavailable"})
 
 
+async def turn_protocol_error(request: Request, exc: TurnProtocolError) -> JSONResponse:
+    return JSONResponse(
+        status_code=exc.status,
+        content={"detail": exc.code},
+        headers={"Cache-Control": "no-store"},
+    )
+
+
 # Each flow's router is mounted here and inherits the internal-token check, so a new
 # flow cannot reach Core's callers without it.
 internal_router = APIRouter(
@@ -326,6 +343,7 @@ app = FastAPI(title=app_config.APP_TITLE, version="0.1.0", lifespan=lifespan)
 app.include_router(internal_router)
 app.add_exception_handler(ConversationNotFoundError, conversation_not_found)
 app.add_exception_handler(GuardrailError, guardrail_blocked)
+app.add_exception_handler(TurnProtocolError, turn_protocol_error)
 app.add_exception_handler(Exception, ai_unavailable)
 # Request rate, status class and latency per route for Grafana (deploy/monitoring/),
 # timed to the last streamed byte. /metrics skips the internal token: AI publishes no

@@ -38,6 +38,7 @@ from src.agent.tools import (
     build_shop_data_tool,
     suggest_screen,
 )
+from src.agent.turn_context import current_turn
 from src.calculation.service import CalculationService
 from src.llm_router.service import LLMRouterService, ModelSelection
 from src.memory.repository import RecalledMemory
@@ -667,14 +668,28 @@ class AgentService:
         selection: ModelSelection | None,
     ) -> AgentChatResult:
         with self.observability.span("save turn"):
-            saved_conversation_id, message_id = await asyncio.to_thread(
-                self.conversations.save_exchange,
-                user_id=context.user_id,
-                shop_id=context.shop_id,
-                conversation_id=conversation_id,
-                user_message=question,
-                assistant_message=answer,
-            )
+            execution = current_turn.get()
+            if execution is None:
+                saved_conversation_id, message_id = await asyncio.to_thread(
+                    self.conversations.save_exchange,
+                    user_id=context.user_id,
+                    shop_id=context.shop_id,
+                    conversation_id=conversation_id,
+                    user_message=question,
+                    assistant_message=answer,
+                )
+            else:
+                saved_conversation_id, message_id = await asyncio.to_thread(
+                    self.conversations.save_receipted_exchange,
+                    execution,
+                    conversation_id,
+                    question,
+                    answer,
+                    selection.model.model_name
+                    if selection is not None
+                    else self.model_name,
+                    version,
+                )
         if conversation_id is None:
             self.observability.link_conversation(saved_conversation_id)
         if self.memory is not None:

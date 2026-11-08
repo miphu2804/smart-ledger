@@ -7,6 +7,12 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.smartledger.core.billing.BillingController;
+import com.smartledger.core.billing.BillingService;
+import com.smartledger.core.billing.SubscriptionController;
+import com.smartledger.core.billing.SubscriptionService;
+import com.smartledger.core.billing.SePayWebhookController;
+import com.smartledger.core.billing.SePayWebhookService;
 import com.smartledger.core.controller.AuthController;
 import com.smartledger.core.controller.CustomerController;
 import com.smartledger.core.controller.DebtController;
@@ -48,7 +54,7 @@ class ApiDocumentationWebTest {
             FlywayAutoConfiguration.class})
     @Import({SecurityConfiguration.class, OpenApiConfiguration.class, AuthController.class, ProductController.class,
             SaleController.class, SaleDraftController.class, CustomerController.class,
-            DebtController.class, ExpenseController.class,
+            DebtController.class, ExpenseController.class, com.smartledger.core.controller.AgentController.class, BillingController.class, SubscriptionController.class, SePayWebhookController.class,
             BearerTokenAuthenticationFilter.class, RestAuthenticationEntryPoint.class})
     static class TestApplication { }
 
@@ -56,6 +62,10 @@ class ApiDocumentationWebTest {
         @Autowired protected MockMvc mvc;
         @Autowired protected ObjectMapper mapper;
         @MockitoBean protected FirebaseTokenVerifier verifier;
+        @MockitoBean protected com.smartledger.core.service.AgentService agent;
+        @MockitoBean protected BillingService billing;
+        @MockitoBean protected SubscriptionService subscriptions;
+        @MockitoBean protected SePayWebhookService sepay;
         @MockitoBean protected AuthSessionService service;
         @MockitoBean protected MediaService media;
         @MockitoBean protected ProductService products;
@@ -115,6 +125,45 @@ class ApiDocumentationWebTest {
                 assertThat(operation.path("responses").has(code)).isTrue();
             }
             verifyNoInteractions(sales);
+        }
+
+        @Test
+        void chatDocumentsConditionalKeyAndJsonPendingBeforeSseHeaders() throws Exception {
+            JsonNode api = mapper.readTree(mvc.perform(get("/v3/api-docs")).andExpect(status().isOk())
+                    .andReturn().getResponse().getContentAsString());
+            for (String path : List.of("/api/v1/agent/chat", "/api/v1/agent/chat/stream")) {
+                JsonNode operation = api.path("paths").path(path).path("post");
+                assertThat(parameter(operation, "Idempotency-Key").path("required").asBoolean()).isFalse();
+                assertThat(parameter(operation, "Idempotency-Key").path("description").asText()).contains("Required when AI quota");
+                assertThat(operation.path("responses").path("202").path("content").has("application/json")).isTrue();
+                assertThat(operation.path("responses").path("429").path("content").has("application/json")).isTrue();
+            }
+            verifyNoInteractions(agent);
+        }
+
+        @Test
+        void billingDocumentsRawJsonHmacAndCreationWithoutBorrowingShopAuthentication() throws Exception {
+            JsonNode api = mapper.readTree(mvc.perform(get("/v3/api-docs")).andExpect(status().isOk())
+                    .andReturn().getResponse().getContentAsString());
+            JsonNode create = api.path("paths").path("/api/v1/billing/payment-requests").path("post");
+            assertThat(create.path("requestBody").path("required").asBoolean()).isTrue();
+            assertThat(create.path("requestBody").path("content").has("application/json")).isTrue();
+            assertThat(create.path("responses").has("201")).isTrue();
+            assertThat(parameter(create, "Idempotency-Key").path("required").asBoolean()).isTrue();
+            JsonNode webhook = api.path("paths").path("/api/v1/webhooks/sepay/{integrationKey}").path("post");
+            assertThat(webhook.path("security").isArray()).isTrue();
+            assertThat(webhook.path("security").isEmpty()).isTrue();
+            assertThat(parameter(webhook, "X-SePay-Signature").path("required").asBoolean()).isTrue();
+            assertThat(parameter(webhook, "X-SePay-Timestamp").path("required").asBoolean()).isTrue();
+            assertThat(webhook.path("responses").has("201")).isTrue();
+            for (String path : List.of("/api/v1/billing/subscription", "/api/v1/agent/quota")) {
+                JsonNode read = api.path("paths").path(path).path("get");
+                assertThat(read.path("responses").has("200")).isTrue();
+                for (JsonNode parameter : read.path("parameters")) {
+                    assertThat(parameter.path("name").asText()).isNotEqualTo("X-Shop-Id");
+                }
+            }
+            verifyNoInteractions(billing, sepay);
         }
 
         @Test

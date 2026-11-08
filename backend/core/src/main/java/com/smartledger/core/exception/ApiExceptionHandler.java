@@ -27,6 +27,19 @@ import org.springframework.web.multipart.support.MissingServletRequestPartExcept
 
 @RestControllerAdvice
 public class ApiExceptionHandler {
+    @ExceptionHandler(com.smartledger.core.billing.ChatTurnPending.class)
+    ResponseEntity<com.smartledger.core.billing.ChatTurnPending.Response> handlePending(com.smartledger.core.billing.ChatTurnPending pending) {
+        return ResponseEntity.status(HttpStatus.ACCEPTED).contentType(org.springframework.http.MediaType.APPLICATION_JSON)
+                .header("Retry-After", "2").header("Cache-Control", "no-store")
+                .body(new com.smartledger.core.billing.ChatTurnPending.Response(pending.turnId(), "PENDING"));
+    }
+
+    @ExceptionHandler(com.smartledger.core.billing.ChatQuotaExceeded.class)
+    ResponseEntity<ApiErrorResponse> handleChatQuota(com.smartledger.core.billing.ChatQuotaExceeded exception, HttpServletRequest request) {
+        return ResponseEntity.status(HttpStatus.TOO_MANY_REQUESTS).contentType(org.springframework.http.MediaType.APPLICATION_JSON)
+                .header("Retry-After", Long.toString(exception.retryAfter())).header("Cache-Control", "no-store")
+                .body(new ApiErrorResponse(exception.getErrorCode().getCode(), exception.getMessage(), exception.getDetails(), traceId(request)));
+    }
     @ExceptionHandler(com.smartledger.core.ratelimit.RateLimitExceededException.class)
     ResponseEntity<ApiErrorResponse> handleRateLimit(
             com.smartledger.core.ratelimit.RateLimitExceededException exception, HttpServletRequest request) {
