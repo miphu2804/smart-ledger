@@ -28,11 +28,19 @@ function load(): Loaded {
   return loaded;
 }
 
-/** Gọi SDK không chặn luồng chính; lỗi chỉ ghi log vì mất một sự kiện không được làm hỏng thao tác của người dùng. */
-function call(label: string, run: (m: any, analytics: any) => Promise<unknown>): void {
+/**
+ * Gọi SDK không chặn luồng chính; lỗi chỉ ghi log vì mất một sự kiện không được làm hỏng thao tác của người dùng.
+ * `logEvent` bản modular không trả Promise và SDK kiểm tra tham số bằng cách ném lỗi ngay, nên phải bắt cả hai kiểu.
+ */
+function call(label: string, run: (m: any, analytics: any) => unknown): void {
   const sdk = load();
   if (!sdk) return;
-  run(sdk.m, sdk.analytics).catch((e) => debugLog('analytics', `${label} ✗`, String(e)));
+  const fail = (e: unknown) => debugLog('analytics', `${label} ✗`, String(e));
+  try {
+    Promise.resolve(run(sdk.m, sdk.analytics)).catch(fail);
+  } catch (e) {
+    fail(e);
+  }
 }
 
 /** Bật hoặc tắt thu thập theo lựa chọn của người dùng. Rút lại đồng ý thì xoá dữ liệu GA4 còn trên máy và ID cài đặt app. */
