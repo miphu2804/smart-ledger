@@ -1,3 +1,11 @@
+### 2026-11-09 — Define GA4 system boundaries and native verification
+
+| Area | Change |
+|---|---|
+| Docs | • Extend ADR-0010 with source-verified native event semantics, system ownership, consent/identity safeguards, report definitions and proposed rollout gates<br>• Add the editable GA4 system-boundary diagram with SVG/PNG exports, link the Mobile verification matrix and correct stale branch references without approving SQL analytics, native rollout or legal acceptance |
+
+Check: source inspected at staging `9613e47e`; Mobile typecheck, 205 unit tests and mock web export passed; OKF/link checks and `git diff --check` passed. Diagram rendered and visually inspected; validator: 0 errors, warnings, crossings or overlaps. Native delivery, Console settings and product/legal acceptance remain unverified; no runtime changes. Commit: the commit that adds this entry.
+
 ### 2026-11-07 — Block the unused Android data-sync foreground-service permission
 
 | Area | Change |

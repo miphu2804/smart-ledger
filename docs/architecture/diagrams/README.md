@@ -7,6 +7,7 @@ Repository diagrams explain logical responsibilities, data relationships, code p
 | Artifact | Meaning and boundary |
 |---|---|
 | [Logical architecture](images/logical-architecture.svg) ([source](src/logical-architecture.mmd)) | Current component responsibilities, not network placement or deployment evidence |
+| [GA4 system boundaries](images/system-ga4.svg) ([source](src/system-ga4.drawio), [PNG](images/system-ga4.png)) | Consent-based native analytics, environment separation and independent business/observability paths; [ADR-0010](../adr/0010-mobile-usage-analytics-ga4.md) owns the proposed design and rollout limits |
 | [ERD source](src/erd.dbml) | Checked-in Core/AI table structure; SQL migrations own checks, policies, triggers and partial indexes |
 | [ERD layout](src/erd.dbdiagram) | Editor positions only, not a schema definition |
 | [Service walkthrough](../service-walkthrough/README.md) | Source-reading and transaction diagrams with their own verification boundaries |
@@ -31,6 +32,12 @@ docs/architecture/service-walkthrough/export.sh
 ```
 
 ![Logical architecture](images/logical-architecture.svg)
+
+## GA4 system boundaries
+
+[ADR-0010](../adr/0010-mobile-usage-analytics-ga4.md) owns the event contract, consent and identity lifecycle, measurement definitions and approval gates. This diagram separates native Firebase → GA4 delivery from Mobile → Core business requests and AI traces; it is not deployment or consent-verification evidence. The two environment routes are alternatives selected by the build's verified native configuration, not dual delivery.
+
+![GA4 system boundaries](images/system-ga4.svg)
 
 ## Editing
 

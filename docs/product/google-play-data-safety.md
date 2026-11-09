@@ -4,7 +4,7 @@ Bảng trả lời cho form **Play Console → Nội dung ứng dụng → An to
 
 - Người đứng tên duyệt nội dung pháp lý: Minh Thọ.
 - Đối chiếu ngày 2026-11-01 với code trên `staging`, [hướng dẫn của Google](https://support.google.com/googleplay/android-developer/answer/10787469) và [khai báo của Firebase](https://firebase.google.com/docs/android/play-data-disclosure).
-- Phần Google Analytics đối chiếu ngày 2026-11-06 với nhánh `feat/mobile-ga4-analytics` ([ADR-0010](../architecture/adr/0010-mobile-usage-analytics-ga4.md)) và [danh sách dữ liệu của Google Analytics for Firebase](https://support.google.com/analytics/answer/11582702); các dòng đó chỉ đúng khi bản có Analytics được phát hành.
+- Phần Google Analytics giữ mốc đối chiếu ban đầu ngày 2026-11-06; rà lại sự hiện diện của code ngày 2026-11-09 tại `staging` revision `9613e47e`, chưa kiểm chứng bản native hay cấu hình Console thực tế. Tham chiếu [ADR-0010](../architecture/adr/0010-mobile-usage-analytics-ga4.md) và [danh sách dữ liệu của Google Analytics for Firebase](https://support.google.com/analytics/answer/11582702); các dòng đó chỉ đúng khi bản có Analytics được phát hành.
 - Đổi SDK, nhà cung cấp hay dữ liệu thu thập thì cập nhật cả tài liệu này, trang chính sách và form.
 
 ## Câu hỏi chung

@@ -47,6 +47,12 @@ WEB authorize/callback/exchange and recent-authentication LINK are implemented w
 
 ANDROID browser handoff and V18 are checked in, default-off. The service binds channel, client, request, purpose and verifier; it does not accept arbitrary return URLs. A checked-in sample does not prove shared-DB migration or native enablement. See the [contract](../contracts/api-contracts.md#zalo-android-core-016) and [Core verification guide](../../backend/core/docs/zalo-android-preparation.md).
 
+### Consent-based product analytics
+
+**Verified source addendum:** `staging` revision `9613e47eb8a8a3a134bb550966a666adfde4db80` includes Mobile's native Firebase Analytics adapter, default-off configuration, device-scoped consent, route-template screen views and seven interaction events. Expo web uses a no-op adapter. SDK errors are isolated from user actions; no Core/AI event-ingestion endpoint or migration is introduced by this client path.
+
+[ADR-0010](adr/0010-mobile-usage-analytics-ga4.md) owns the system-wide design and measurement limits; the [Mobile runbook](../../frontend/mobile/docs/operations.md#ga4-native-verification) owns native verification. Product/legal approval, actual Console settings, native delivery and `AC-119`–`AC-121` remain unverified. GA4 observes consenting clients; it does not replace Core business reports, CORE-018 activity, operational monitoring or AI traces.
+
 ### AI and client boundaries
 
 - Core authorizes the user/shop pair. AI authenticates a shared service token but does not independently verify that ownership; the token and restricted network access are part of the trust boundary.
