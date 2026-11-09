@@ -38,15 +38,9 @@ dopbase_backup_key_id: "{{ lookup('env', 'DOPBASE_BACKUP_KEY_ID') }}"
 dopbase_backup_secret: "{{ lookup('env', 'DOPBASE_BACKUP_SECRET') }}"
 dopbase_backup_hour: 3
 
-# Monitoring: an empty domain skips it everywhere, including the files each app role writes for it. The two
-# app_grafana_pg_* groups are one environment's read-only Supabase login (ADR-0003); an empty host skips it.
+# Monitoring: an empty domain skips it everywhere, including the files each app role writes for it.
 monitoring_domain: "{{ lookup('env', 'MONITOR_DOMAIN') }}"
 monitoring_grafana_admin_password: "{{ lookup('env', 'GRAFANA_ADMIN_PASSWORD') }}"
 monitoring_discord_webhook_url: "{{ lookup('env', 'MONITOR_DISCORD_WEBHOOK_URL') }}"
 monitoring_telegram_bot_token: "{{ lookup('env', 'MONITOR_TELEGRAM_BOT_TOKEN') }}"
 monitoring_telegram_chat_id: "{{ lookup('env', 'MONITOR_TELEGRAM_CHAT_ID') }}"
-app_grafana_pg_host: "{{ lookup('env', 'GRAFANA_PG_HOST') }}"
-app_grafana_pg_port: "{{ lookup('env', 'GRAFANA_PG_PORT') }}"
-app_grafana_pg_database: "{{ lookup('env', 'GRAFANA_PG_DATABASE') }}"
-app_grafana_pg_user: "{{ lookup('env', 'GRAFANA_PG_USER') }}"
-app_grafana_pg_password: "{{ lookup('env', 'GRAFANA_PG_PASSWORD') }}"

@@ -62,6 +62,6 @@ Danh mục đầy đủ, kèm mỗi sự kiện đo gì, là `ANALYTICS_EVENTS` 
 ## 4. Hệ quả
 
 - Số liệu GA4 chỉ gồm người đã đồng ý, nên thấp hơn thực tế và không thay ngày hoạt động của `BR-023`. Lần đăng nhập đầu tiên trên máy không được đếm, vì hộp thoại hỏi sau khi đăng nhập.
-- Các panel người dùng trong dashboard Grafana của ADR-0003 sẽ bỏ ở một thay đổi khác, sau khi GA4 có đủ dữ liệu để so.
+- Dashboard sản phẩm của ADR-0003 đã bỏ khỏi Grafana ngày 2026-11-09, cùng hai datasource PostgreSQL và login `grafana_reader`; Grafana chỉ còn theo dõi hệ thống.
 - Data safety phải khai thêm ID thiết bị và lượt tương tác qua Google Analytics; trang chính sách phải nêu Google Analytics và cách rút lại đồng ý. Dữ liệu đi ra máy chủ của Google ngoài Việt Nam, nên người đứng tên pháp lý cần xác nhận hồ sơ chuyển dữ liệu ra nước ngoài theo Luật Bảo vệ dữ liệu cá nhân 2025 trước khi phát hành.
 - Thêm sự kiện mới chỉ cần một dòng trong `AnalyticsEventParams` và `ANALYTICS_EVENTS`, rồi một lời gọi `track` ở chỗ thao tác thành công.

@@ -1,3 +1,12 @@
+### 2026-11-09 — Grafana monitors only the system
+
+| Area | Change |
+|---|---|
+| Deploy | • Overview drops its environment picker and repeats the Health and Services rows for each environment, with the alert list above them; Resources drops its unused picker<br>• Removed the product analytics dashboard, its two PostgreSQL datasources, the playbook tasks and template that wrote their login, and `GRAFANA_PG_*` from the monitor template, `run.sh` and the credential map, since GA4 now measures usage |
+| Docs | • ADR-0003 is superseded by ADR-0010, and ADR-0010 records the removal |
+
+Check: `scripts/infra/lint.sh` and `okf_sync.py --check` passed; a local Grafana 13.3.0 with fake `probe_success` metrics showed only the Infra folder, one Health and Services row per environment and no environment picker on Overview or Resources. Not verified on the VPS; `check-templates.sh` needs Dopbase and will flag `GRAFANA_PG_*` until those keys are deleted there. Commit: the commit that adds this entry.
+
 ### 2026-11-07 — Block the unused Android data-sync foreground-service permission
 
 | Area | Change |

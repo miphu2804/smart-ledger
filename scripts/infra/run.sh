@@ -63,19 +63,12 @@ export_service() {
     dopbase export "$service/$environment" --stdout --format dotenv > "$dir/.env.$service")
 }
 
-# The monitor group may not exist for an environment; every other group is required.
-for service in core ai bifrost vps monitor; do
-  if ! export_service "$service"; then
-    rm -f "$dir/.env.$service"
-    [ "$service" = monitor ] || { echo "export of $service/$environment failed" >&2; exit 1; }
-  fi
+for service in core ai bifrost vps; do
+  export_service "$service" || { echo "export of $service/$environment failed" >&2; exit 1; }
 done
 set -a
 # shellcheck source=/dev/null
 . "$dir/.env.vps"
-# The product dashboards' read-only Supabase login (GRAFANA_PG_*) comes from the monitor group.
-# shellcheck source=/dev/null
-[ ! -f "$dir/.env.monitor" ] || . "$dir/.env.monitor"
 set +a
 
 cd "$root/deploy/ansible"

@@ -1,6 +1,6 @@
 # ADR-0003: Product analytics in Grafana, read from Core and AI data
 
-- **Status:** Proposed. The P1 datasource, dashboard and playbook are already in the repo (`deploy/monitoring/`), but are not enabled in any environment: they are still waiting for the database owner to create the `grafana_reader` role and load `GRAFANA_PG_*` into Dopbase. There is no migration or Core/AI code; it is not product behavior until the product owner and the operations owner approve.
+- **Status:** Superseded by [ADR-0010](0010-mobile-usage-analytics-ga4.md). Grafana now only monitors the system: the product dashboard, the two PostgreSQL datasources, the playbook tasks that wrote their login and the `GRAFANA_PG_*` keys were removed on 2026-11-09 before any environment enabled them. The rest of this record describes the design as it was proposed, so its links to those files point at the git history.
 - **Date:** 2026-10-29
 - **Owner:** not assigned; needs a product owner for the metric definitions and a database owner for the read role.
 - Related: [OPS-004 #269](https://github.com/miphu2804/smart-ledger/issues/269) (monitoring), [CORE-018 #409](https://github.com/miphu2804/smart-ledger/issues/409) (DAU/MAU), the three infrastructure dashboards of PR #422.
@@ -151,7 +151,7 @@ Two datasources in [`datasources.yaml`](../../../deploy/monitoring/grafana/provi
 
 ### 7.3 Provisioning, playbook and secrets
 
-- The dashboard lives at [`deploy/monitoring/grafana/product/product.json`](../../../deploy/monitoring/grafana/product/product.json), outside the Infra provisioning folder because the provider reads subfolders too; a second provider puts it in the `Product` folder.
+- The dashboard lives at `deploy/monitoring/grafana/product/product.json`, outside the Infra provisioning folder because the provider reads subfolders too; a second provider puts it in the `Product` folder.
 - The read login lives in Dopbase's `monitor` group with the keys already in the [`.env.monitor`](../../../secrets/templates/.env.monitor) template: `GRAFANA_PG_HOST`, `GRAFANA_PG_PORT` (default 5432), `GRAFANA_PG_DATABASE` (default `postgres`), `GRAFANA_PG_USER`, `GRAFANA_PG_PASSWORD`. [`run.sh`](../../../scripts/infra/run.sh) loads this file together with `.env.vps`.
 - The playbook writes `postgres-<environment>.env` (0600, `no_log`) next to monitoring's `.env`; Compose reads both files as optional `env_file`s. Each environment writes only its own file, so a staging run does not erase the production datasource as it would with a shared `.env`.
 - If the host is empty, the playbook skips this step; the dashboard is still provisioned but the SQL panels show a connection error.

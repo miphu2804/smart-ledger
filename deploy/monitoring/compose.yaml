@@ -71,13 +71,7 @@ services:
 
   grafana:
     image: grafana/grafana:13.3.0
-    # Ansible writes one Postgres file per environment, so a run for one environment keeps the other's.
-    env_file:
-      - .env
-      - path: postgres-staging.env
-        required: false
-      - path: postgres-production.env
-        required: false
+    env_file: .env
     environment:
       GF_SERVER_ROOT_URL: https://${MONITOR_DOMAIN:?MONITOR_DOMAIN is required}
       # Applies on the first start only; later changes go through the Grafana UI or `grafana cli admin reset-admin-password`.
@@ -91,7 +85,6 @@ services:
       GF_DASHBOARDS_DEFAULT_HOME_DASHBOARD_PATH: /etc/grafana/provisioning/dashboards/overview.json
     volumes:
       - ./grafana/provisioning:/etc/grafana/provisioning:ro
-      - ./grafana/product:/etc/grafana/product:ro
       - grafana_data:/var/lib/grafana
     mem_limit: 256m
     depends_on: [prometheus, loki]
