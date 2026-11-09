@@ -27,13 +27,13 @@ Editable [draw.io source](../diagrams/src/system-ga4.drawio), [PNG](../diagrams/
 | Web ADMIN and public pages | Separate frontend from Mobile; not instrumented by this design | Do not add a tag, cookies or a shared identity stream; any future web collection needs its own consent/privacy and event review |
 | Core and PostgreSQL | Business APIs, reports, audit and the separately governed CORE-018 daily-activity capability | Remain authoritative for transactions, revenue, debt and business activity; no GA4 forwarding, endpoint, table or migration |
 | AI | Internal Agent chat behind Core | No direct GA4 events or chat payload export; usage is observed at Mobile's completed chat call |
-| Grafana/Prometheus/Loki | Monitoring infrastructure; SQL product dashboard is separately proposed in ADR-0003 | Own availability, latency and errors; do not treat GA4 as an alerting or audit backend |
+| Grafana/Prometheus/Loki | Monitoring infrastructure; the SQL product dashboard was removed in `staging` | Own availability, latency and errors; do not treat GA4 as an alerting or audit backend |
 | HoneyHive | AI trace boundary in [ADR-0009](0009-end-to-end-tracing.md) | Own execution diagnosis; never copy prompts, answers, SQL, tool results or trace IDs into GA4 |
 | Firebase → GA4 | Native SDK integration is checked in; actual destination configuration is not inspected | Direct outbound analytics path from the device; no data path through Core, the database or the VPS |
 
 The ordered data flow is: user chooses consent → `AppStore` applies settings and account identity → UI calls `track`/`trackScreen` → native adapter gates and isolates SDK errors → Firebase SDK delivers to the environment's GA4 property → the product team reads aggregate reports/explorations. Business requests independently go to Core; their success must never depend on this analytics path.
 
-[ADR-0003](0003-product-analytics-grafana.md) preserves the separate SQL proposal. GA4 is the proposed owner of consented UI behavior, not proof that the SQL dashboard has been retired or its activity source enabled. Any removal or database-role change is a separate approved change.
+[ADR-0003](0003-product-analytics-grafana.md) records the superseded SQL proposal. At `staging` revision `e7a3bad2`, the product dashboard, PostgreSQL datasource configuration and automation for its reader login were removed from the repository; live infrastructure and database-role removal are not verified. GA4 is the proposed owner of consented UI behavior, not evidence that the Core activity source is enabled.
 
 ## 3. Consent, identity and data minimization
 
@@ -131,6 +131,6 @@ The design intentionally cannot measure refused consent as a GA4 event, all sign
 2. **Configuration gate:** operations verifies actual native files → Firebase app → GA4 stream/property mapping, advertising controls, custom definitions, reporting timezone/identity and least-privilege access. Do not record private identifiers or credentials in repository evidence.
 3. **Staging gate:** Mobile runs the [native verification matrix](../../../frontend/mobile/docs/operations.md#ga4-native-verification), records build/commit/platform and sanitized results, and checks `AC-119`–`AC-121`. Unit tests and an Expo web export cannot close this gate.
 4. **Release gate:** approve the native artifact and release separately; inspect the final Android manifest for `AD_ID` and verify production routing with an authorized consenting test account. No production release or Console mutation is part of this documentation change.
-5. **Observation gate:** product validates processed reports after data arrives, records coverage and compares definitions rather than expecting parity with Core. Grafana retirement, if desired, is independently approved; it is not a prerequisite to collect consented UI events.
+5. **Observation gate:** product validates processed reports after data arrives, records coverage and compares definitions rather than expecting parity with Core. The repository removal of the Grafana product dashboard does not establish GA4 delivery or live infrastructure state.
 
 For a consent/payload defect, stop the rollout and ship a native update that explicitly disables SDK collection regardless of previously persisted consent and suppresses application tracking; changing the static default alone is insufficient. There is no verified fleet-wide kill switch. Local withdrawal applies only to that installation. Rollback does not delete previously uploaded data: operations/legal must separately handle Google-held data, any future exports and account-erasure requests with an auditable approved procedure. That procedure and live deletion evidence remain unverified.

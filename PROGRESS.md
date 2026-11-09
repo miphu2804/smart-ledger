@@ -1,18 +1,19 @@
-### 2026-11-09 — Clarify GA4 environments and external architecture
-
-| Area | Change |
-|---|---|
-| Docs | • Pin GA4 SVG exports to a white light-theme canvas and separate staging validation from production insights<br>• Rebalance logical architecture around Core business capabilities; add the consented Mobile → external GA4 path and icon to logical and runtime views while preserving the independent Core business path |
-
-Check: three SVGs render white in light/dark browser contexts; rendered diagrams inspected; GA4 validator has 0 warnings and runtime diagram has 0 errors/crossings, with existing grouping/overlap warnings retained. OKF and diff checks passed. Native delivery and Console remain unverified; no runtime changes. Commit: the commit that adds this entry.
-
 ### 2026-11-09 — Define GA4 system boundaries and native verification
 
 | Area | Change |
 |---|---|
-| Docs | • Extend ADR-0010 with source-verified native event semantics, system ownership, consent/identity safeguards, report definitions and proposed rollout gates<br>• Add the editable GA4 system-boundary diagram with SVG/PNG exports, link the Mobile verification matrix and correct stale branch references without approving SQL analytics, native rollout or legal acceptance |
+| Docs | • Extend ADR-0010 with verified event semantics and proposed consent, reporting and rollout safeguards; link the native verification matrix<br>• Add GA4 system boundaries and separate staging validation from production insights; rebalance logical architecture around business capabilities and add GA4 to the runtime view with white-background exports |
 
-Check: source inspected at staging `9613e47e`; Mobile typecheck, 205 unit tests and mock web export passed; OKF/link checks and `git diff --check` passed. Diagram rendered and visually inspected; validator: 0 errors, warnings, crossings or overlaps. Native delivery, Console settings and product/legal acceptance remain unverified; no runtime changes. Commit: the commit that adds this entry.
+Check: source inspected at staging `9613e47e`; Mobile typecheck, 205 unit tests and mock web export passed; OKF/link and diff checks passed. Three SVGs render white in light/dark; GA4 validator: 0 warnings; runtime diagram: 0 errors/crossings, with existing warnings. Native delivery, Console settings and product/legal acceptance remain unverified; no runtime changes. Commit: the commits that add this entry.
+
+### 2026-11-09 — Grafana monitors only the system
+
+| Area | Change |
+|---|---|
+| Deploy | • Overview drops its environment picker and repeats the Health and Services rows for each environment, with the alert list above them; Resources drops its unused picker<br>• Removed the product analytics dashboard, its two PostgreSQL datasources, the playbook tasks and template that wrote their login, and `GRAFANA_PG_*` from the monitor template, `run.sh` and the credential map, since GA4 now measures usage |
+| Docs | • ADR-0003 is superseded by ADR-0010, and ADR-0010 records the removal |
+
+Check: `scripts/infra/lint.sh` and `okf_sync.py --check` passed; a local Grafana 13.3.0 with fake `probe_success` metrics showed only the Infra folder, one Health and Services row per environment and no environment picker on Overview or Resources. Not verified on the VPS; `check-templates.sh` needs Dopbase and will flag `GRAFANA_PG_*` until those keys are deleted there. Commit: the commit that adds this entry.
 
 ### 2026-11-07 — Block the unused Android data-sync foreground-service permission
 

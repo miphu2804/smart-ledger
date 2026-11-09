@@ -1,5 +1,13 @@
 apiVersion: 1
 
+# Removing a datasource from this file leaves it in Grafana's database, so the product analytics datasources that
+# ADR-0003 provisioned are deleted by name; a name that no longer exists is skipped.
+deleteDatasources:
+  - name: SmartLedger staging
+    orgId: 1
+  - name: SmartLedger production
+    orgId: 1
+
 datasources:
   - name: Prometheus
     uid: prometheus
@@ -14,39 +22,3 @@ datasources:
     access: proxy
     url: http://loki:3100
     editable: false
-  # Product analytics (ADR-0003): each environment's Supabase through its session pooler as the read-only
-  # grafana_reader role. The playbook writes the variables to postgres-<environment>.env; an environment without them
-  # keeps an empty datasource whose panels say the connection failed. maxIdleConns 0 closes the connection after
-  # every query, so Grafana holds a pooler slot only while a panel refreshes.
-  - name: SmartLedger staging
-    uid: smartledger-staging-pg
-    type: grafana-postgresql-datasource
-    access: proxy
-    url: $SMARTLEDGER_STAGING_PG_URL
-    user: $SMARTLEDGER_STAGING_PG_USER
-    editable: false
-    jsonData:
-      database: $SMARTLEDGER_STAGING_PG_DATABASE
-      sslmode: require
-      postgresVersion: 1500
-      maxOpenConns: 1
-      maxIdleConns: 0
-      connMaxLifetime: 300
-    secureJsonData:
-      password: $SMARTLEDGER_STAGING_PG_PASSWORD
-  - name: SmartLedger production
-    uid: smartledger-production-pg
-    type: grafana-postgresql-datasource
-    access: proxy
-    url: $SMARTLEDGER_PRODUCTION_PG_URL
-    user: $SMARTLEDGER_PRODUCTION_PG_USER
-    editable: false
-    jsonData:
-      database: $SMARTLEDGER_PRODUCTION_PG_DATABASE
-      sslmode: require
-      postgresVersion: 1500
-      maxOpenConns: 1
-      maxIdleConns: 0
-      connMaxLifetime: 300
-    secureJsonData:
-      password: $SMARTLEDGER_PRODUCTION_PG_PASSWORD
