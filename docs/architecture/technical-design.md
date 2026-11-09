@@ -6,7 +6,7 @@ This document describes the responsibilities of the checked-in components of Sma
 
 - [BRD](../product/business-requirements.md) and [PRD](../product/product-requirements.md): source of `BO/BR → FR/NFR → AC`.
 - [Logical architecture](diagrams/README.md#logical-architecture): component and trust boundaries, not deployment topology.
-- [Target architecture](diagrams/images/architecture.svg) and [CI/CD and runtime topology](diagrams/images/ci-cd.svg): target components and delivery flow; the [diagram guide](diagrams/README.md) lists every diagram and its boundary.
+- [Target architecture](diagrams/images/architecture.svg) and [System design](diagrams/images/system-design.svg): runtime topology, external integrations and delivery flow; the [diagram guide](diagrams/README.md) lists every diagram and its boundary.
 - [API contracts](../contracts/api-contracts.md): FE ↔ Core and Core ↔ AI.
 - Current sources of evidence: [`frontend/mobile`](../../frontend/mobile/README.md), [`frontend/web`](../../frontend/web/README.md), [`backend/core`](../../backend/core/src/main/java/com/smartledger/core/controller/AuthController.java) and [`backend/ai`](../../backend/ai/src/agent/router.py). The EXE201 FE is the historical source used when the initial scope was drafted.
 

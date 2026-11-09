@@ -12,7 +12,7 @@ Repository diagrams explain logical responsibilities, data relationships, code p
 | [ERD layout](src/erd.dbdiagram) | Editor positions only, not a schema definition |
 | [Service walkthrough](../service-walkthrough/README.md) | Source-reading and transaction diagrams with their own verification boundaries |
 | [Target architecture](images/architecture.svg) ([source](src/architecture.drawio), [PNG](images/architecture.png)) | Target components including future services; [technical design §1](../technical-design.md#1-scope) records code status |
-| [CI/CD and runtime](images/ci-cd.svg) ([source](src/ci-cd.drawio)) | Delivery pipeline, VPS setup and request flow; explained in [CI/CD](../../development/ci-cd.md#delivery-and-runtime-topology) |
+| [System design](images/system-design.svg) ([source](src/system-design.drawio), [PNG](images/system-design.png)) | Runtime topology, external services, delivery and VPS setup; source-derived rather than proof of live deployment; explained in [CI/CD](../../development/ci-cd.md#delivery-and-runtime-topology) |
 | [VPS setup with Ansible](images/ansible-flow.svg) ([source](src/ansible-flow.drawio)) | Infra workflow, `run.sh`, role order and handlers; explained in [CI/CD](../../development/ci-cd.md#vps) |
 | [VPS networks](images/vps-network.svg) ([source](src/vps-network.drawio)) | Docker networks, container aliases and in-network ports from the tracked Compose files |
 | [AI evaluation and HoneyHive](images/ai-evaluation.svg) ([source](src/ai-evaluation.drawio)) | Offline evaluation run, its CI workflows and HoneyHive tracing, evaluators, charts and alerts; explained in the [evaluation README](../../../backend/ai/evaluation/README.md) |
@@ -43,6 +43,7 @@ docs/architecture/service-walkthrough/export.sh
 
 - Keep labels in English and show ownership, trust boundaries and data direction rather than environment addresses or internal hosts.
 - Edit the source, not only an exported image. Keep source and export consistent when an export is maintained.
+- The logical diagram disables Mermaid HTML labels so SVG renderers can show its text without `foreignObject`; its export script preserves whitespace in SVG text. For viewers that do not render draw.io HTML labels, use the system design PNG.
 - Keep diagram canvases white in both light and dark viewers. Export draw.io SVGs with `--svg-theme light -b ffffff`; a white model background alone still permits automatic dark-mode colors. Render Mermaid exports with `-b white`.
 - Use the repository's draw.io skill for editable draw.io changes; Mermaid remains appropriate for simple text diagrams.
 - Validate node/edge references, render the affected artifact when tooling is available, and inspect readability. Do not claim visual verification from a successful source edit alone.
