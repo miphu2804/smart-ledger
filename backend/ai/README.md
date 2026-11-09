@@ -11,6 +11,8 @@ SmartLedger AI is the internal FastAPI service for the owner's Agent chat. Core 
 | Code walkthrough | [Service walkthrough §8](../../docs/architecture/service-walkthrough/README.md#8-ai-service) |
 | Vector and memory decisions | [ADR-0001](../../docs/architecture/adr/0001-vector-store-pgvector.md), [ADR-0002](../../docs/architecture/adr/0002-agent-long-term-memory.md) |
 
+The explicit [Core–AI integration suite](../../docs/contracts/billing-ai-client-handoff.md#local-integration-evidence-and-rerun) starts the production AI router/chat/receipt code in a loopback test process driven by Core HTTP. Its test-only fixture is outside src and is not copied into the runtime image. It uses no live model or shared DB and does not certify FE/provider acceptance.
+
 ## Routes
 
 `src/main.py` is the composition root. Every `/internal/v1` route inherits the `X-Internal-Token` check. `/health` and `/metrics` are unauthenticated; hosted delivery must restrict them to the internal network. The local Compose stack publishes the AI port, so local reachability is not an access-control guarantee. `/health` checks no dependency.
@@ -19,6 +21,8 @@ SmartLedger AI is the internal FastAPI service for the owner's Agent chat. Core 
 |---|---|---|
 | `POST` | `/internal/v1/agent/chat` | One chat turn, JSON answer |
 | `POST` | `/internal/v1/agent/chat/stream` | The same turn as server-sent events; Core relays it |
+| `GET` | `/internal/v1/agent/turns/{turnId}` | Opt-in scoped durable receipt/result |
+| `POST` | `/internal/v1/agent/turns/{turnId}/cancel` | Opt-in terminal cancellation/tombstone |
 | `GET` | `/internal/v1/agent/conversations` | List the owner's conversations |
 | `GET` `PATCH` `DELETE` | `/internal/v1/agent/conversations/{id}` | Read, rename or delete a conversation |
 | `GET` `PUT` | `/internal/v1/agent/memory/settings` | Read or set the owner's memory switch |
@@ -50,7 +54,7 @@ AI returns answers and proposals only; it does not create sales, payments, debts
 5. Screen the answer, append approved screen actions, and save only an accepted turn.
 6. Extract memory facts in the background when long-term memory is enabled.
 
-Streaming checks input and history before the first byte and emits answer/progress events. Disconnect cancels the producer, but a database write already running may still commit. Event schemas and persistence semantics belong to the [stream contract](../../docs/contracts/api-contracts.md#chat-answer-stream).
+Streaming checks input and history before the first byte and emits answer/progress events. Disconnect cancels the producer, but a database write already running may still commit. The additive default-off [durable turn protocol](docs/runtime-reference.md#durable-turn-protocol--phase-five) makes that outcome recoverable for receipted calls, with atomic answer/receipt save and cancellation fencing. Phase-six Core consumes this protocol through default-off quota admission/recovery; keyless calls remain legacy while disabled. Shared enforcement/acceptance is not inferred. Event schemas and persistence semantics belong to the [stream contract](../../docs/contracts/api-contracts.md#chat-answer-stream).
 
 ## Run
 

@@ -1,17 +1,18 @@
 const labels: Record<string, string> = {
-  reading: "Reading the history",
-  checking: "Checking the question",
-  recall: "Recalling memories and picking the tier",
-  writing: "Model writing the answer",
-  tools: "Tools running",
-  retrying: "Answer rejected, text reset",
+  reading: "Read history",
+  checking: "Validate input",
+  recall: "Recall and select",
+  writing: "Generate answer",
+  tools: "Run tools",
+  retrying: "Screen retry",
   ready: "Answer ready",
-  saving: "Saving the exchange",
-  done: "Done sent, memory learns in the background",
-  refused503: "Refused: 503 ai_unavailable",
-  refused404: "Refused: 404 conversation_not_found",
-  refused422: "Refused: 422 input_too_long",
-  failed: "Failed: error event, nothing saved",
+  saving: "Atomic save",
+  done: "Done",
+  refused503: "503: unavailable",
+  refused404: "404: not found",
+  refused422: "422: guardrail",
+  failed: "Failed",
+  cancelled: "Cancelled",
 };
 export const state = (v: any) => labels[v.phase];
 
@@ -20,7 +21,7 @@ const groups: Record<string, string> = {
   recall: "Recall",
   writing: "Run", tools: "Run", retrying: "Run", ready: "Run",
   saving: "Save", done: "Save",
-  refused503: "Stopped", refused404: "Stopped", refused422: "Stopped", failed: "Stopped",
+  refused503: "Stopped", refused404: "Stopped", refused422: "Stopped", failed: "Stopped", cancelled: "Stopped",
 };
 export const group = (v: any) => groups[v.phase];
 export const colors = { Prepare: "blue", Recall: "purple", Run: "teal", Save: "yellow", Stopped: "pink" };
@@ -45,7 +46,8 @@ const steps: Record<string, string | null> = {
   RunFails: "timeout, limit, provider error, or app disconnects",
   SendRest: "the rest of the text is sent",
   SaveFails: "the save fails",
-  Saved: "the exchange is saved",
+  Saved: "the exchange and optional success receipt commit together",
+  Cancel: "durable cancellation wins before save",
   Done: null,
 };
 export const step = (action: string) => steps[action] ?? null;

@@ -1,3 +1,21 @@
+### 2026-11-09 — Keep SePay fulfillment scans fair under retries
+
+| Area | Change |
+|---|---|
+| Billing | • Capture a fixed upper request ID for each scan so both older retries and later eligible payments get a turn even when new requests keep arriving<br>• Test a valid payment after 120 failing requests and verify the scan boundary in PostgreSQL |
+| Integration | • Include both review fixes and integrate staging `2ba4f80`, preserving both sets of progress entries |
+
+Check: Core Maven verify passed 1,595 tests with no failures, errors, or skips. All 21 required PostgreSQL suites and 13 report gate self-tests passed. AI Ruff lint and format passed, and Linux pytest passed 627 tests with 14 optional skips. OKF and diff checks passed. The AI container image built, while the Core image build was stopped when the Windows system drive fell below 300 MB free. Commit: `b685202`.
+
+### 2026-11-09 — Prepare SePay, subscription and AI quota for staging review
+
+| Area | Change |
+|---|---|
+| Billing/AI | • Consolidate the seven approved phases on feat/sepay-payment-design and fast-forward the latest staging revision 9613e47 without conflicts<br>• Retain default-off collection, webhook, grant, receipt, quota admission and recovery gates; no shared migration or deployment |
+| Docs | • Correct the AI protocol guide to describe the implemented Core turn/fence integration<br>• Prepare the staging PR with migration/rollback boundaries, FE handoff and explicit remaining provider/FE acceptance |
+
+Check: retained reports confirm Core verify 1,591 tests and explicit Core–AI integration 9 tests, all without failures/errors/skips; Linux AI has 625 passed and 14 optional skips. Runtime sources did not change after those checks; the three fetched staging commits affect only Mobile and the eval workflow. Fresh Ruff lint/format, 21-suite PostgreSQL report gate, 13 gate self-tests, 123 added-document links, traceability, OKF (52 concepts, Linux read-only checker), proposed-file credential-pattern and diff checks passed. Exact Compose image builds were attempted twice but blocked by auth.docker.io connection resets before compilation; CI image-build verification remains required. Dopbase CLI is unavailable, so private credential-map regeneration was attempted but not completed. No live provider, transfer, FE acceptance, shared DB/configuration or deployment was exercised. Commit: included in this change.
+
 ### 2026-11-09 — Define GA4 system boundaries and native verification
 
 | Area | Change |
@@ -14,6 +32,62 @@ Check: source inspected at staging `9613e47e`; Mobile typecheck, 205 unit tests 
 | Docs | • ADR-0003 is superseded by ADR-0010, and ADR-0010 records the removal |
 
 Check: `scripts/infra/lint.sh` and `okf_sync.py --check` passed; a local Grafana 13.3.0 with fake `probe_success` metrics showed only the Infra folder, one Health and Services row per environment and no environment picker on Overview or Resources. Not verified on the VPS; `check-templates.sh` needs Dopbase and will flag `GRAFANA_PG_*` until those keys are deleted there. Commit: the commit that adds this entry.
+
+### 2026-11-08 — Verify Core–AI integration and hand off billing/quota to FE
+
+| Area | Change |
+|---|---|
+| Integration tests | • Explicit CoreAiQuotaIT uses real loopback Core HTTP → Python AI HTTP and disposable PostgreSQL, retaining production router/receipt/save/cancel logic<br>• Nine cases cover JSON/SSE replay, done-after-debit, pending/last slot, rollback/restart, fenced cancellation, failure, deletion, unavailable protocol and paid expiry |
+| Handoff/docs | • Add client payment/fulfillment state handling, stable chat attempts/202/429/410, quota display, rollout compatibility and rerun instructions<br>• Sync implementation/FR status, metadata and remaining phase-six descriptions; no FE/runtime behavior or migration changes |
+
+Check: explicit integration suite passed 9/9 without skips; Firebase verification/preliminary shop lookup, model and cache are fixtures. Restart recreates the Core context/facade and the AI process, not a separate Core JVM; paid activation is a SQL fixture, not SePay acceptance. Full Core verify passed (1,591 tests, no failures/errors/skips), all 21 required PostgreSQL suites and 13 gate self-tests passed. Linux AI Ruff lint/format passed (141 files); pytest passed (625 passed, 14 optional skips: 13 live-model and 1 Redis case). Local links/traceability, OKF (52 concepts) and diff checks passed. Dopbase CLI is missing, so credential-map generation remains blocked; only the nonsecret test-interpreter source entry was added. No shared DB/configuration, provider/real transfer, deployed FE acceptance, commit or push was performed.
+
+### 2026-11-08 — Connect Core chat quota to durable AI receipts
+
+| Area | Change |
+|---|---|
+| Core | • Default-off JSON/SSE quota admission with OWNER-wide atomic reservation, cross-transport stable keys and captured windows<br>• Receipt-based debit/release before result/done; 202 pending, safe 429/410/errors, no legacy fallback for keyed calls |
+| Recovery/docs | • Fenced restart/lease reconciliation never regenerates or releases an unknown outcome; cancellation tombstones preserve late-save safety<br>• Reuse approved V21 without new migrations; sync contracts, FR status, Core/AI guides, ERD, CoreQuota model/chart and nonsecret gates/templates |
+
+Check: full Maven verify passed (1,591 tests, no failures/errors/skips); affected HTTP/controller/transaction/Swagger suites passed again after final hardening. The required PostgreSQL report gate passed all 21 suites including 17 ChatQuotaPostgresTest cases, and its 13 self-tests passed. TLC checked CoreQuota separately (1,786 distinct states, no invariant errors); Pele SVG was rendered and inspected. DBML parsing, dummy Compose config, 105 added local links, traceability, OKF (51 concepts) and diff checks passed. Core uses a fake durable AI transport for transaction races plus scoped HTTP adapter tests; full deployed Core–AI/FE/provider acceptance and latency remain unverified. AI runtime was unchanged from phase five, whose Linux test evidence is retained below. Dopbase CLI is missing, so credential-map generation remains blocked. No shared migration/configuration, real transfer, commit or push was executed.
+
+### 2026-11-08 — Add opt-in durable AI turn receipts and cancellation
+
+| Area | Change |
+|---|---|
+| AI | • Default-off internal turn/fence protocol, one durable claim across JSON/SSE, scoped result/restart replay, 202 pending and terminal cancellation/tombstones<br>• Atomic exchange/success receipt, original model metadata and deletion-safe 410; no second generation, replay cache or Core quota accounting |
+| Schema/docs | • Owner-approved separate metadata-only AI migration; original receipt migration and V21 remain intact<br>• Update contract, FR status, runtime/rollback guide, ERD and chat/receipt models/charts; synchronize the nonsecret gate/templates |
+
+Check: Linux AI Ruff lint/format and pytest passed (625 passed, 14 skipped: 13 opt-in live model cases and 1 optional real Redis case); all 16 new real-PostgreSQL receipt/migration cases executed. Windows full pytest had 623 passed/14 skipped and two unchanged cache/Redis timing failures; both pass on Linux. Core Maven verify passed (1,564 tests, 0 failures/errors/skips), required PostgreSQL report gate and 13 gate self-tests passed. TLC checked AgentTurn (340 distinct states) and DurableTurn (49), separately from runtime tests; Pele-rendered SVGs were inspected. DBML parsing, Compose dummy config, local links/traceability, OKF and diff checks passed. Dopbase CLI is missing, so credential-map generation remains blocked. No shared migration/configuration, live provider call, FE acceptance or Core quota enforcement was executed. Commit: not created.
+
+### 2026-11-08 — Add durable subscription fulfillment and quota reads
+
+| Area | Change |
+|---|---|
+| Core | • Independently default-off grant worker atomically applies unique accepted payments, calendar-month renewal and APPLIED evidence with restart/concurrency recovery<br>• Shopless active-OWNER subscription/quota GETs; exact-expiry Free fallback, Vietnam/weekly windows and existing counters, enforcementEnabled=false; no chat admission/debit |
+| Safety/docs | • Disabled/unsupported payers and backward clocks retain pending money; skipped writes roll back; bounded cursor batches avoid failed-row starvation<br>• Reuse approved V21 without a new migration; sync contracts, FR status, runbook and default-off variable/templates |
+
+Check: final Maven verify passed (1,564 tests, 0 failures/errors/skips), including 11 required SubscriptionPostgresTest cases; the full PostgreSQL report gate and 13 gate self-tests passed. Compose validation used dummy values; local links/traceability, OKF (50 concepts) and diff checks passed. Initial sandbox Mockito attach was interrupted and rerun outside the sandbox with its agent preloaded. Dopbase CLI is missing, so credential-map generation remains blocked. No shared migration/configuration, SePay delivery, real transfer, FE acceptance or AI quota enforcement was executed. Commit: not created.
+
+### 2026-11-08 — Implement default-off SePay payment APIs
+
+| Area | Change |
+|---|---|
+| Core | • Add active-OWNER catalog/create/status without shop scope; immutable price/recipient snapshots, original-response replay and 30-minute expiry projection<br>• HMAC raw JSON ingress is the sole exact POST Firebase exception; provider/request locks and durable dedupe commit bank outcome plus PAID/PENDING once |
+| Safety | • Preserve missing/wrong/late/extra transfers for review; main-account matching only, no subscription/quota/ledger/role mutation<br>• Separate default-off creation/receipt gates; bounded input/SQL waits, safe failures and no raw provider data in records/logs |
+| Docs and Config | • Update contract/requirements/ERD and add Core setup/Test mode/reconciliation guide; document remaining shared-pool acquisition wait<br>• Keep seven env keys aligned in application, example, template and Compose; update Core→SePay credential-map source; generation blocked by missing Dopbase CLI |
+
+Check: final full Maven verify passed (1,543 tests, 0 failures/errors/skips), required PostgreSQL suites including 13 SePay transaction tests and 13 gate self-tests passed. Coverage includes HMAC/raw JSON, Swagger headers/body, same/different-ID concurrency, expiry races, rollback and silently skipped writes. Compose validation used dummy values only; 75 added local links/anchors, requirement uniqueness, OKF (50 concepts) and diff checks passed. Credential-map generation was blocked by missing Dopbase CLI. No shared configuration/migration, provider delivery, FE checkout or Live transfer was executed; subscription/AI quota execution remains pending. Commit: not created.
+
+### 2026-11-07 — Add approved billing and AI quota storage
+
+| Area | Change |
+|---|---|
+| Product | • Record approved BR-027–029 → FR-041–043 → AC-128–150: Free 2 AI turns/day; paid OWNER plans 99,000 VND/1 calendar month or 297,000 VND/3 months, both 300/week<br>• Preserve staging's existing chart AC-127; billing acceptance IDs are unpublished draft additions |
+| Core | • Owner-approved V21 creates six private tables with scoped payment/grant FKs, provider/key dedupe, period/window uniqueness and quota/state checks<br>• Append-only bank/grant guards; no existing ledger mutation or runtime writer |
+| AI and Docs | • Separate receipt migration preserves successful evidence after chat deletion; no receipt API/writer enabled<br>• Update schema, ERD/DBML, requirements/contracts and verification guides; sync staging 0cc94ec while preserving unrelated work |
+
+Check: Maven verify passed (1,523 tests, 0 failures/errors/skips); all required PostgreSQL suites including 9 BillingSchemaPostgresTest tests passed their report gate; 13 gate self-tests passed. Rehearsed V1–V21 plus all AI migrations on an isolated PostgreSQL 17 database (31 Core + 5 AI tables); DBML parser, 64 added local links/anchors, unique requirement definitions, OKF check (49 concepts) and git diff --check passed. Initial runs were interrupted by Docker Hub networking/low disk space; cache/temp moved to D and verification reran successfully. No shared migration, SePay delivery, subscription/quota enforcement or integrated acceptance is claimed. Commit: not created.
 
 ### 2026-11-07 — Block the unused Android data-sync foreground-service permission
 
@@ -39,6 +113,7 @@ Check: the script exits 1 for android-production without a keystore, 0 for andro
 | Mobile and Web | • Renamed the Vietnamese-named overview icons in `assets/tab1-overview` and `public/brand/icons` to English and updated their references |
 
 Check: Web lint, typecheck and build passed; Mobile typecheck passed and `npm test` 196 passed; every renamed image reference resolves to a file; the recaptured images were inspected. The landing page and the app were not opened after the icon rename. Commit: the commit that adds this entry.
+
 ### 2026-11-07 — Unquote Dopbase values in CI
 
 | Area | Change |
@@ -63,6 +138,7 @@ Check: `okf_sync.py --check` passes and a second write run changes nothing; fron
 | CI | • `sync-evaluators.sh` and `sync-dashboards.sh` move from the repository root to `scripts/honeyhive/`, beside the other script groups; workflows, CODEOWNERS and docs point at the new paths<br>• The Vercel build and deploy scripts build one argument list instead of repeating the command per target, and `apply.sh` drops its undocumented no-op `--keep-all` and `--backup` flags |
 
 Check: `actionlint`, `shellcheck --severity=warning` on every tracked script, `check-evaluator-ids.sh`, `check-provider-coupling.sh` and Ruff passed; the Vercel scripts ran against a stub CLI on bash 3.2 for both targets and still fail when the deploy fails. The HoneyHive and Vercel scripts were not run against the real services. Commit: the commit that adds this entry.
+
 ### 2026-11-07 — Clean README front pages and old document metadata
 
 | Area | Change |
@@ -110,90 +186,3 @@ Check: 72 Markdown documents and 715 internal links passed path/anchor/index/fro
 | Docs | • Audited the actual tracked tree at staging `a2766ee`; separated production operation from EXE201 delivery scope and implementation/enablement/deployment/acceptance<br>• Made landing pages domain-oriented, kept local indexes, moved service detail into owned Core/AI/Mobile guides, and preserved technical safeguards, dated decisions and rollout evidence<br>• Aligned root/Mobile instructions, English technical prose and lean OKF/plain authors; reconciled source facts and resolved obsolete merge/assignment blockers without claiming live acceptance |
 
 Check: internal paths/anchors, immediate-child index/frontmatter consistency and root navigation reachability passed; BRD/PRD stayed byte-identical, API contract body changed only link targets, all nine ADR decision statuses stayed intact, `config.ts` matched the baseline after removing comments, and `git diff --check` passed. Mobile typecheck passed; `npm test` had 192 pass/2 fail, reproduced with the same failures on baseline `a2766ee`. Source inventory and verification evidence are in the PR. Live deployment, provider/device UAT and acceptance were not verified. Commit: the commit that adds this entry.
-
-### 2026-11-07 — Fix stale setup, CI and mobile docs against the code
-
-| Area | Change |
-|---|---|
-| CI | • Path-filter table and deploy notes match `changes.sh`, `upload-settings.sh`, `infra-run.yml` and `deploy-backend.yml`: settings come from Dopbase, `container-images` runs only for the `containers` area, and `VPS_*` and the runner token names are the ones the workflows read |
-| AI | • `MODEL_FALLBACKS` is documented as `protocol:model`, as in `app_config.py` |
-| Honeyhive | • The sync workflows load keys from Dopbase `ai/production`, not repository secrets |
-| Mobile | • Sample sign-in, test script, guide steps, Zen ring and Home/Analytics data source match the code |
-| Web | • Bobi brand image names match `frontend/web/public/brand` |
-
-Check: each changed claim was checked with grep, `ls` and a read of the cited code at `f2be945`; no build or script was run. Left alone: `backend/core/**` (Core is out of scope under AGENTS.md) and the `github.sh` step in ci-cd. Commit: the one that adds this entry.
-
-### 2026-11-07 — Align quick-navigation test labels with the app
-
-| Area | Change |
-|---|---|
-| Mobile | • Update the quick-navigation label expectations to Tạo đơn and Trợ lý Bobi; keep runtime labels, routes and behavior unchanged |
-
-Check: `npm ci`, `npm test` (196 passed, 0 failed), `npm run typecheck`, mock-mode `npm run export:web` and `git diff --check` passed. Native Firebase files were not supplied; native and GA4 device verification were not performed. Commit: the commit that adds this entry.
-
-### 2026-11-06 — Mobile usage analytics in GA4 behind a consent prompt
-
-| Area | Change |
-|---|---|
-| Mobile | • `@react-native-firebase/analytics` 26.4.0 with `firebase.json` turning off automatic collection, advertising IDs and automatic screen reporting; Android blocks `AD_ID` and iOS builds without IDFA<br>• `AnalyticsConsentPrompt` asks once per device right after sign-in, and Settings has a "Gửi số liệu sử dụng" switch; nothing is sent until the user agrees, and withdrawing resets on-device Analytics data<br>• Screen views from expo-router segments with `[id]` kept as is, the Core account id as `user_id`, and the events in `analyticsEvents.ts`: `login`, `shop_created`, `sale_completed`, `voice_order_reviewed`, `ai_message_sent`, `product_created`, `expense_created`, with enum or count parameters only; the web build sends nothing |
-| Docs | • ADR-0010, `BR-026`, `FR-039`, `NFR-011`, `AC-119`–`AC-121` as proposed and awaiting approval; Data safety adds device IDs and the Google Analytics processor row with the checks the legal owner still has to make; the mobile README explains DebugView |
-
-Check: `npm run typecheck` passes; `npm test` 194 of 196 pass, and the two failures (`parseOrder` shared names, quick navigation labels) fail the same way on a clean `staging` checkout. Not verified: a native build, the consent dialog on a device, and events in DebugView. Commit: the one that adds this entry.
-
-### 2026-11-06 — Add shared documentation skills for agents
-
-| Area | Change |
-|---|---|
-| Agent tooling | • Add project-scoped `technical-writing`, `writing-for-agents` and `retro` skills with pinned hashes in `skills-lock.json`; expose Claude links through `.claude/skills` symlinks to `.agents/skills` |
-
-Check: `npx skills list --json` shows all three project skills for Claude Code, Codex, GitHub Copilot, Pi and Zed; `git diff --check`. No runtime changes. Commit: the one that adds this entry.
-
-### 2026-11-06 — Docs describe SmartLedger as running in production, are in English outside product and carry OKF frontmatter
-
-| Area | Change |
-|---|---|
-| Docs index | • All 31 documents in `docs/` start with OKF v0.2 frontmatter (`type`, `title`, `description`, `owner`, `status`, `generated`, `stale_after`); the owner and last-update rows left the metadata tables<br>• `docs/index.md` lists every document for agents and replaces the hand-kept document map in `docs/README.md`; a one-off script built the indexes and was then removed, so agents keep them by hand under the `AGENTS.md` rules<br>• `AGENTS.md` requires docs to change in the same pull request as the code, refreshed dates, an updated index and no new document for a topic that already has one |
-| Docs language and index | • Every document outside `docs/product/` is in English: technical design, API contracts, the ADRs, design, marketing, the READMEs under `docs/`, the frontend READMEs and `BLOCKERS.md`; anchors changed with the headings and 79 links across the repository were rewritten (0 broken)<br>• The index also covers 23 repository documents outside `docs/` (service READMEs, `backend/core/docs/`, `CONTRIBUTING.md`, `SECURITY.md` and others) with frontmatter, uses strict OKF entries (title, path and description) and gives every folder with two or more entries its own `index.md`<br>• `generated.by` names the person who last changed a document (`human:<GitHub login>`, from Git history for untouched documents) and every timestamp uses `+07:00`; `AGENTS.md` and the docs conventions state the rules<br>• Fixed on the way: the frontend README no longer says web admin has no Core API, the mobile README no longer lists Google sign-in as missing, and the ADR-0003 link to a missing anchor |
-| Docs | • `AGENTS.md`, the docs index, technical design, API contract, ERD description, diagram guide and the mobile README say SmartLedger runs in production and no longer call it documentation-first; the architecture is called the target architecture<br>• Stacked on #550: the product documents keep its EXE201 course MVP priorities and wording, gain frontmatter and index entries, and its new audit and demo documents are listed in `docs/product/index.md`; the EXE201 priority paragraph in technical design §1 is translated to English<br>• Warnings about provisional requirements, unaccepted features and the auth gap stay as they were |
-
-Check: `grep -rniE "\bMVP\b|prototype|documentation-first"` over the Markdown files; the remaining hits are scope or priority labels, dated decisions (ADRs, open questions, the mobile UI migration plan), design prototype references and the diagram label "MVP target" in `architecture.drawio`, left because its SVG and PNG would need a re-export. Commit: the one that adds this entry.
-
-### 2026-11-06 — Tập trung hoàn thành MVP môn EXE201
-
-| Area | Change |
-|---|---|
-| Docs | • Chốt ưu tiên demo đầu-cuối, UX và phản hồi người dùng; phân biệt luồng cốt lõi, chức năng có sẵn giữ nguyên và mở rộng có thể hoãn<br>• Thêm kịch bản demo/fixture và mẫu ghi kết quả; đồng bộ overview, BRD, PRD, bản đồ docs và cách đọc tài liệu kỹ thuật/audit; không yêu cầu đầu tư thêm cho tải lớn hoặc kiến trúc mới |
-
-Check: 377 link/anchor nội bộ hợp lệ, giữ nguyên 55 FR/NFR và 120 định nghĩa AC so với commit trước, full trace khớp; đối chiếu fixture 70.000đ doanh thu/42.000đ giá vốn/18.000đ lãi sau chi và kiểm tra không có diff runtime. Demo/người dùng chưa chạy trong đợt sửa docs, mẫu kết quả để chưa thử. Commit: commit thêm mục này; giữ log cũ theo yêu cầu append-only.
-
-### 2026-11-06 — Kiểm định lại BRD bằng ba chuyên môn
-
-| Area | Change |
-|---|---|
-| Docs | • Viết lại BRD theo mục tiêu, vai trò, phạm vi và quy tắc; tách inventory/code và truy vết chi tiết sang phụ lục kiểm định với 13 phát hiện<br>• Sửa AC-020/021/078 và mô tả privacy, Zalo, nhóm nợ; phân biệt context/lịch sử, local/Core, lưu Product/ảnh từng phần và cam kết xóa dữ liệu; không sửa runtime |
-
-Check: ba sub-agent rà độc lập Core, AI/chat và mobile/web, sau đó đọc lại bản sửa; kiểm 153 link/anchor nội bộ, 55 dòng trace, 120 mã AC ổn định (chỉ sửa nội dung AC-020/021/078), mã BO/BR/OQ cũ được giữ và `git diff --check`. Chưa chạy runtime/provider/UAT. Commit: commit thêm mục này; giữ log cũ theo yêu cầu append-only.
-
-### 2026-11-06 — Đối chiếu business requirements với staging
-
-| Area | Change |
-|---|---|
-| Docs | • Rà tĩnh Core, AI, mobile và web tại staging `494fa6c`; bổ sung bản đồ tính năng và bằng chứng code trong BRD<br>• Nối đủ 55 FR/NFR với nguồn BRD và AC hiện có; sửa mô tả voice, Zalo, avatar, tồn và media lỗi thời; ghi câu hỏi cần sản phẩm chốt, không đổi AC hoặc nâng scope từ mock/code |
-
-Check: kiểm tra 104 liên kết/anchor nội bộ, mã BRD, 55 dòng truy vết và 120 định nghĩa AC giữ nguyên; `git diff --check`. Chưa chạy runtime/provider/UAT vì chỉ sửa tài liệu. Commit: commit thêm mục này. Giữ nguyên log cũ theo yêu cầu append-only của phiên làm việc.
-
-### 2026-11-06 — Stop spans from asking HoneyHive to create their session
-
-| Area | Change |
-|---|---|
-| AI | • `Observability.start` turns off the SDK's `_session_auto_create` flag, which `skip_backend_session_creation` turned on: every span asked HoneyHive to create its session, and a span arriving after a session update often replaced the session that `start_turn_session` had opened with a bare one (source `api`, start time 0, no inputs), so after #542 production still showed 8 of 9 turns that way<br>• A new test runs a real tracer in test mode and checks that a turn's span carries its session id without the auto-create attribute |
-
-Check: `uv run pytest tests/unit_tests -q` (496 passed, 1 skipped), `ruff check` and `ruff format --check`; the new test fails without the fix. Against real HoneyHive: with a session update before the span, the flag on gave 6 of 8 bare sessions and the flag off 0 of 8; five streamed turns through the local service (uvicorn, local database, OpenAI direct) read back bare 5 of 5 before the fix and complete 5 of 5 after it (source, start time, question, `history_ms`, child spans). Not verified: production after deploy. Commit: the one that adds this entry.
-
-### 2026-11-06 — Bobi refers to itself by name only
-
-| Area | Change |
-|---|---|
-| AI | • The shop agent prompt says to refer to itself only by the name "Bobi", never by a pronoun, and to address the owner as "anh/chị", because "call yourself Bobi" was read as calling Bobi: a production answer opened with "Bobi ơi", and mercury-3 answered "bạn là ai" with "Tôi", "Tớ" or "Em" in every run |
-
-Check: `uv run pytest tests/unit_tests -q` (495 passed, 1 skipped) and `ruff check`; five chat cases through the real agent and the local database, three runs on mercury-3 medium and one on gpt-6-luna high: no answer called itself "tôi", "tớ" or "em" or opened with "Bobi ơi", and "bạn là ai" answered with "Bobi" in all runs. Not verified: "Bobi ơi" did not reproduce on the old prompt either, so the fix for it is inferred; mercury-3 still sometimes says "bạn" to the owner. Commit: the one that adds this entry.

@@ -31,6 +31,8 @@ class AppConfig(BaseSettings):
 
     # service credential shared with Core; unset rejects every /internal/v1 route
     INTERNAL_API_TOKEN: str | None = None
+    # Additive internal turn protocol only; does not enable Core quota admission/debit.
+    AGENT_TURN_RECEIPTS_ENABLED: bool = False
 
     # postgres
     POSTGRES_URL: str | None = None

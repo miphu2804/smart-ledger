@@ -28,4 +28,14 @@ public class AiClientConfiguration {
                 .requestFactory(requestFactory)
                 .build();
     }
+
+    /** Receipt/cancel calls do not inherit the model-generation read timeout. */
+    @Bean
+    RestClient aiReceiptRestClient(RestClient.Builder builder, AiProperties properties) {
+        SimpleClientHttpRequestFactory factory = new SimpleClientHttpRequestFactory();
+        factory.setConnectTimeout(Duration.ofSeconds(3));
+        factory.setReadTimeout(Duration.ofSeconds(5));
+        return builder.baseUrl(properties.getBaseUrl()).defaultHeader("X-Internal-Token", properties.getInternalToken())
+                .requestFactory(factory).build();
+    }
 }

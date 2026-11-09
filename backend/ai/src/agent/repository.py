@@ -142,38 +142,13 @@ class AgentConversationRepository:
         assistant_message: str,
     ) -> tuple[int, int]:
         with self.postgres.session() as session:
-            if conversation_id is None:
-                conversation = ChatConversation(
-                    user_id=user_id,
-                    shop_id=shop_id,
-                    title=" ".join(user_message.split())[:255],
-                )
-                session.add(conversation)
-            else:
-                conversation = self._owned_conversation(
-                    session, conversation_id, user_id, shop_id, lock=True
-                )
-            conversation.last_message_at = func.now()
-            conversation.updated_at = func.now()
-            # Flushed first, so a new conversation has its id for the messages.
-            session.flush()
-
-            question = ChatMessage(
-                conversation_id=conversation.id,
-                role="USER",
-                content=user_message,
-            )
-            reply = ChatMessage(
-                conversation_id=conversation.id,
-                role="ASSISTANT",
-                content=assistant_message,
-            )
-            session.add_all([question, reply])
-            session.flush()
-            saved_conversation_id, question_id, reply_id = (
-                conversation.id,
-                question.id,
-                reply.id,
+            saved_conversation_id, question_id, reply_id = self._write_exchange(
+                session,
+                user_id,
+                shop_id,
+                conversation_id,
+                user_message,
+                assistant_message,
             )
 
         # After the commit, so a failed save leaves the cache untouched.
@@ -191,6 +166,77 @@ class AgentConversationRepository:
             ]
             self._cache_history(key, entry["limit"], messages[-entry["limit"] :])
         return saved_conversation_id, reply_id
+
+    def _write_exchange(
+        self,
+        session,
+        user_id,
+        shop_id,
+        conversation_id,
+        user_message,
+        assistant_message,
+    ):
+        if conversation_id is None:
+            conversation = ChatConversation(
+                user_id=user_id,
+                shop_id=shop_id,
+                title=" ".join(user_message.split())[:255],
+            )
+            session.add(conversation)
+        else:
+            conversation = self._owned_conversation(
+                session, conversation_id, user_id, shop_id, lock=True
+            )
+        conversation.last_message_at = func.now()
+        conversation.updated_at = func.now()
+        # Flushed first, so a new conversation has its id for the messages.
+        session.flush()
+
+        question = ChatMessage(
+            conversation_id=conversation.id,
+            role="USER",
+            content=user_message,
+        )
+        reply = ChatMessage(
+            conversation_id=conversation.id,
+            role="ASSISTANT",
+            content=assistant_message,
+        )
+        session.add_all([question, reply])
+        session.flush()
+        saved_conversation_id, question_id, reply_id = (
+            conversation.id,
+            question.id,
+            reply.id,
+        )
+        return saved_conversation_id, question_id, reply_id
+
+    def save_receipted_exchange(
+        self,
+        execution,
+        conversation_id,
+        user_message,
+        assistant_message,
+        model,
+        model_version,
+    ):
+        cid, mid = execution.store.complete(
+            execution,
+            self,
+            conversation_id,
+            user_message,
+            assistant_message,
+            model,
+            model_version,
+        )
+        # Do not cache replay answers; deletion must make the result unavailable.
+        try:
+            self.cache.delete(
+                self._history_key(cid, execution.user_id, execution.shop_id)
+            )
+        except Exception:
+            pass  # Cache availability cannot undo committed receipt/answer evidence.
+        return cid, mid
 
     def rename_conversation(
         self, conversation_id: int, user_id: int, shop_id: int, title: str

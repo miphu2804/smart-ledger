@@ -2,7 +2,7 @@
 
 Reading paths, architecture, contracts, design, development, marketing and product documents.
 
-* [API Contract — SmartLedger](contracts/api-contracts.md) - Implemented FE ↔ Core and Core ↔ AI endpoint contracts, authorization, errors and stream semantics.
+* [API contracts and consumer handoffs](contracts/index.md) - FE–Core and Core–AI wire contracts, client integration guidance and verification boundaries.
 * [Architecture](architecture/index.md) - Technical design, data model, decisions, diagrams and service walkthroughs.
 * [Design](design/index.md) - Mobile UI style and wording decisions.
 * [Development and operations](development/index.md) - Local setup, CI/CD, secrets and release guides.

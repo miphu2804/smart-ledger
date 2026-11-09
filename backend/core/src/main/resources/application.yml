@@ -68,6 +68,9 @@ ai:
   internal-token: ${INTERNAL_API_TOKEN:}
 
 smartledger:
+  ai-quota:
+    enabled: ${AI_QUOTA_ENABLED:false}
+    recovery-enabled: ${AI_QUOTA_RECOVERY_ENABLED:false}
   rate-limit:
     # Apply merged V20 and upgrade all writers before enabling on shared environments.
     enabled: ${USER_RATE_LIMIT_ENABLED:false}
@@ -80,6 +83,17 @@ smartledger:
     ttl-days: ${IDEMPOTENCY_TTL_DAYS:30}
   media:
     upload-lease-seconds: ${MEDIA_UPLOAD_LEASE_SECONDS:300}
+
+billing:
+  subscription:
+    fulfillment-enabled: ${BILLING_FULFILLMENT_ENABLED:false}
+  enabled: ${BILLING_ENABLED:false}
+  webhook-enabled: ${SEPAY_WEBHOOK_ENABLED:false}
+  integration-key: ${SEPAY_INTEGRATION_KEY:}
+  webhook-secret: ${SEPAY_WEBHOOK_SECRET:}
+  recipient-bank-code: ${BILLING_RECIPIENT_BANK_CODE:}
+  recipient-account-number: ${BILLING_RECIPIENT_ACCOUNT_NUMBER:}
+  recipient-account-name: ${BILLING_RECIPIENT_ACCOUNT_NAME:}
 
 management:
   endpoints:

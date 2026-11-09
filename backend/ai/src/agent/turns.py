@@ -1,0 +1,161 @@
+"""Opt-in durable protocol around the existing guarded JSON/SSE agent flow."""
+
+import asyncio
+from collections.abc import AsyncIterator
+
+from src.agent.errors import (
+    ConversationNotFoundError,
+    GuardrailError,
+    TurnProtocolError,
+)
+from src.agent.receipts import AgentTurnRepository
+from src.agent.service import AgentChatResult, Done
+from src.agent.turn_context import TurnExecution, current_turn
+
+
+class AgentTurnService:
+    def __init__(self, repository: AgentTurnRepository, enabled: bool = False):
+        self.repository = repository
+        self.enabled = enabled
+
+    def require_enabled(self):
+        if not self.enabled:
+            raise TurnProtocolError("ai_turn_unavailable", 503)
+
+    async def admit(self, payload):
+        self.require_enabled()
+        created, row, fingerprint = await asyncio.to_thread(
+            self.repository.admit,
+            payload.turn_id,
+            payload.user_id,
+            payload.shop_id,
+            payload.conversation_id,
+            payload.message,
+            payload.execution_fence,
+        )
+        execution = TurnExecution(
+            self.repository,
+            payload.turn_id,
+            payload.user_id,
+            payload.shop_id,
+            payload.execution_fence,
+            fingerprint,
+        )
+        return created, row, execution
+
+    async def read(self, turn, user, shop):
+        self.require_enabled()
+        return await asyncio.to_thread(self.repository.get, turn, user, shop)
+
+    async def cancel(self, turn, user, shop, fence):
+        self.require_enabled()
+        return await asyncio.to_thread(self.repository.cancel, turn, user, shop, fence)
+
+    async def replay(self, execution):
+        row = await self.read(execution.turn_id, execution.user_id, execution.shop_id)
+        if row["state"] == "IN_PROGRESS":
+            return None
+        if row["state"] == "SUCCEEDED":
+            if not row["resultAvailable"]:
+                raise TurnProtocolError("ai_turn_result_removed", 410)
+            return AgentChatResult(
+                **{k: v for k, v in row["result"].items() if k != "request_id"}
+            )
+        code = row["failure_code"]
+        raise TurnProtocolError(
+            code,
+            409
+            if row["state"] == "CANCELLED"
+            else 404
+            if code == "conversation_not_found"
+            else 422
+            if code in {"input_too_long", "answer_unavailable", "answer_timeout"}
+            else 503,
+        )
+
+    async def _failed(self, execution, error):
+        code = (
+            error.code
+            if isinstance(error, (GuardrailError, TurnProtocolError))
+            else (
+                "conversation_not_found"
+                if isinstance(error, ConversationNotFoundError)
+                else "ai_unavailable"
+            )
+        )
+        await asyncio.to_thread(self.repository.fail, execution, code)
+
+    @staticmethod
+    def _raise_safe(error):
+        if isinstance(
+            error, (GuardrailError, ConversationNotFoundError, TurnProtocolError)
+        ):
+            raise error
+        raise TurnProtocolError("ai_unavailable", 503) from None
+
+    async def chat(self, agent, payload, execution):
+        token = current_turn.set(execution)
+        try:
+            return await agent.chat(
+                user_id=payload.user_id,
+                shop_id=payload.shop_id,
+                message=payload.message,
+                conversation_id=payload.conversation_id,
+            )
+        except asyncio.CancelledError:
+            # A running DB write races cancellation under the receipt lock.
+            await self.cancel(
+                execution.turn_id, execution.user_id, execution.shop_id, execution.fence
+            )
+            raise
+        except Exception as error:
+            await self._failed(execution, error)
+            self._raise_safe(error)
+        finally:
+            current_turn.reset(token)
+
+    async def stream(self, agent, payload, execution):
+        token = current_turn.set(execution)
+        try:
+            events = await agent.stream_chat(
+                user_id=payload.user_id,
+                shop_id=payload.shop_id,
+                message=payload.message,
+                conversation_id=payload.conversation_id,
+            )
+        except asyncio.CancelledError:
+            await self.cancel(
+                execution.turn_id, execution.user_id, execution.shop_id, execution.fence
+            )
+            raise
+        except Exception as error:
+            await self._failed(execution, error)
+            self._raise_safe(error)
+        finally:
+            current_turn.reset(token)
+
+        async def iterate() -> AsyncIterator:
+            token = current_turn.set(execution)
+            completed = False
+            try:
+                async for event in events:
+                    if isinstance(event, Done):
+                        completed = True
+                    yield event
+            except Exception as error:
+                await self._failed(execution, error)
+                self._raise_safe(error)
+            finally:
+                try:
+                    await events.aclose()
+                finally:
+                    if not completed:
+                        await self.cancel(
+                            execution.turn_id,
+                            execution.user_id,
+                            execution.shop_id,
+                            execution.fence,
+                        )
+                    current_turn.reset(token)
+
+        return iterate()
