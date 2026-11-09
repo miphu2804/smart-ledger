@@ -1,3 +1,11 @@
+### 2026-11-09 — Clarify GA4 environments and external architecture
+
+| Area | Change |
+|---|---|
+| Docs | • Pin GA4 SVG exports to a white light-theme canvas and separate staging validation from production insights<br>• Rebalance logical architecture around Core business capabilities; add the consented Mobile → external GA4 path and icon to logical and runtime views while preserving the independent Core business path |
+
+Check: three SVGs render white in light/dark browser contexts; rendered diagrams inspected; GA4 validator has 0 warnings and runtime diagram has 0 errors/crossings, with existing grouping/overlap warnings retained. OKF and diff checks passed. Native delivery and Console remain unverified; no runtime changes. Commit: the commit that adds this entry.
+
 ### 2026-11-09 — Define GA4 system boundaries and native verification
 
 | Area | Change |
@@ -188,12 +196,3 @@ Check: `uv run pytest tests/unit_tests -q` (496 passed, 1 skipped), `ruff check`
 | AI | • The shop agent prompt says to refer to itself only by the name "Bobi", never by a pronoun, and to address the owner as "anh/chị", because "call yourself Bobi" was read as calling Bobi: a production answer opened with "Bobi ơi", and mercury-3 answered "bạn là ai" with "Tôi", "Tớ" or "Em" in every run |
 
 Check: `uv run pytest tests/unit_tests -q` (495 passed, 1 skipped) and `ruff check`; five chat cases through the real agent and the local database, three runs on mercury-3 medium and one on gpt-6-luna high: no answer called itself "tôi", "tớ" or "em" or opened with "Bobi ơi", and "bạn là ai" answered with "Bobi" in all runs. Not verified: "Bobi ơi" did not reproduce on the old prompt either, so the fix for it is inferred; mercury-3 still sometimes says "bạn" to the owner. Commit: the one that adds this entry.
-
-### 2026-11-05 — Line charts, preambles in the thinking line and steadier chat sheets
-
-| Area | Change |
-|---|---|
-| AI | • The shop agent prompt draws figures over time as a line chart and keeps bar charts for a few separate items, states only the key figures in words instead of listing every chart point, and reads a short or vague message as a follow-up to the last turns<br>• The `suggest_screen` docstring says the reply still names where the screen is |
-| Mobile | • Text the model writes before a tool call becomes that step's label in the thinking line, at the same size and weight as the waiting phrase, instead of staying in the answer; text before `suggest_screen` stays in the answer<br>• The line chart tooltip grows to fit large amounts and stays inside the chart<br>• Quick transaction chat fades its backdrop in, keeps the conversation when a suggested screen button opens a screen and reopens on return, and puts each disclaimer sentence on its own line<br>• The Bobi history and assistant settings sheets open at one fixed height and fade their content in; memory graph labels use the app font |
-
-Check: `uv run pytest tests/unit_tests -q` (495 passed, 1 skipped) and `ruff check`; mobile `npx tsc --noEmit` and `npm test` (192 passed, 2 failing before this change: `parseOrder`, `quickNav`). Ten chat cases on main's prompt and this one through the real agent and the local database, mercury-3 medium and gpt-6-luna high: time series now come back as line charts on both models, "chỗ nào nhỉ" gets the Quản lý → Hàng hoá path, and three more Luna runs of the chart case listed no points and named the right highest day. Not verified: a real device and the deployed models. Commit: the one that adds this entry.

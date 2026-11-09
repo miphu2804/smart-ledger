@@ -99,7 +99,7 @@ Use separate Firebase projects and GA4 properties for staging/test and productio
 
 ### 5.2 Measurement plan
 
-Every saved report records property, date range, timezone, platform/app-version filters, reporting identity, numerator, denominator and known data gaps. Production reports exclude test builds; staging exists to validate events, not to estimate real adoption. GA4 data may arrive late or be thresholded/sampled; annotate those limitations and avoid promises of exact real-time counts.
+Every saved report records property, date range, timezone, platform/app-version filters, reporting identity, numerator, denominator and known data gaps. Production reports exclude test builds; staging exists to validate events, not to estimate real adoption. The staging property can also exercise funnels, retention and parameter breakdowns using synthetic/test traffic, but its reports remain separate from production insights and never contribute to production user counts. GA4 data may arrive late or be thresholded/sampled; annotate those limitations and avoid promises of exact real-time counts.
 
 | Question | Report definition using existing events | Limit |
 |---|---|---|
