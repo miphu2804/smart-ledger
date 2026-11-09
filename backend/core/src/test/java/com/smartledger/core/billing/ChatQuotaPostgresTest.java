@@ -275,6 +275,20 @@ class ChatQuotaPostgresTest {
         assertCounts(0, 0); assertThat(ai.generations.get()).isZero();
     }
 
+    @Test void missingConversationKeepsItsCodeAcrossRetriesAndReleasesOnce() throws Exception {
+        ai.mode = "MISSING_CONVERSATION";
+        var question = new AgentChatRequest(999_999L, "Today's revenue?");
+        assertCode(() -> service.chat(TOKEN, sid(), question, "missing"), ErrorCode.CONVERSATION_NOT_FOUND);
+        assertCode(() -> service.chat(TOKEN, sid(), question, "missing"), ErrorCode.CONVERSATION_NOT_FOUND);
+        assertCode(() -> service.stream(TOKEN, sid(), question, "missing"), ErrorCode.CONVERSATION_NOT_FOUND);
+        assertCode(() -> service.stream(TOKEN, sid(), question, "missing-stream"), ErrorCode.CONVERSATION_NOT_FOUND);
+        assertCode(() -> service.chat(TOKEN, sid(), question, "missing-stream"), ErrorCode.CONVERSATION_NOT_FOUND);
+        assertThat(ai.dispatches.get()).isEqualTo(2); assertThat(ai.cancels.get()).isZero();
+        assertThat(sql.queryForList("SELECT failure_code FROM ai_turn_usages", String.class))
+                .containsExactly("conversation_not_found", "conversation_not_found");
+        assertCounts(0, 0); assertThat(ai.generations.get()).isZero();
+    }
+
     @Test void recoveryBatchesAdvancePastUnavailableRowsWithoutReleasingUnknownWork() {
         period(SubscriptionPolicy.now(clock.instant()), 1);
         for (int i = 0; i < 25; i++) ledger.admit(TOKEN, shop, QUESTION, "pending-" + i);
@@ -360,13 +374,17 @@ class ChatQuotaPostgresTest {
             var old = receipts.get(row.id());
             if (old != null && old.state().equals("CANCELLED")) return 409;
             if (mode.equals("THROW_BEFORE")) throw ChatQuotaLedger.unavailable();
+            if (mode.equals("MISSING_CONVERSATION")) {
+                receipts.put(row.id(), new Receipt(row.id(), row.fence(), "FAILED", false, null, "conversation_not_found"));
+                return 404;
+            }
             generations.incrementAndGet();
             if (mode.equals("PENDING")) receipts.put(row.id(), new Receipt(row.id(), row.fence(), "IN_PROGRESS", false, null, null));
             else succeed(row);
             return mode.equals("PENDING") ? 202 : 200;
         }
         @Override public StreamReply stream(ChatQuotaStore.Usage row, AgentChatRequest input) {
-            dispatch(row, input);
+            if (dispatch(row, input) == 404) return new StreamReply(404, null);
             return new StreamReply(200, new Upstream() {
                 boolean closed;
                 @Override public java.io.InputStream body() { return new ByteArrayInputStream(frames.getBytes(StandardCharsets.UTF_8)); }

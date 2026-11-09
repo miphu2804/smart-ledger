@@ -229,7 +229,9 @@ def test_scope_fingerprint_fence_and_paired_fields_fail_before_model(receipt_env
         )
     missing = payload(env, conversation_id=99999)
     assert env.client.post("/internal/v1/agent/chat", json=missing).status_code == 404
-    assert rows(env, "agent_turn_receipts") == 1
+    # The missing conversation leaves a committed FAILED receipt, not a rollback.
+    assert rows(env, "agent_turn_receipts") == 2
+    assert receipt(env, missing).json()["failure_code"] == "conversation_not_found"
     assert len(env.model.requests) == 1
 
 
@@ -548,3 +550,27 @@ def test_metadata_migration_preserves_old_success_and_rolls_back_column_collisio
     assert receipt(env, body).status_code == 503
     assert env.client.post("/internal/v1/agent/chat", json=body).status_code == 503
     assert len(env.model.requests) == 1
+
+
+@pytest.mark.parametrize(
+    "path", ["/internal/v1/agent/chat", "/internal/v1/agent/chat/stream"]
+)
+def test_missing_conversation_commits_a_failed_receipt_that_retries_replay(
+    receipt_env, path
+):
+    env = receipt_env
+    body = payload(env, conversation_id=999_999)
+    first = env.client.post(path, json=body)
+    assert first.status_code == 404
+    assert first.json() == {"detail": "conversation_not_found"}
+    stored = receipt(env, body).json()
+    assert stored["state"] == "FAILED"
+    assert stored["failure_code"] == "conversation_not_found"
+    for retry_path in ("/internal/v1/agent/chat", "/internal/v1/agent/chat/stream"):
+        retry = env.client.post(retry_path, json=body)
+        assert retry.status_code == 404
+        assert retry.json() == {"detail": "conversation_not_found"}
+    # A late cancel keeps the committed failure instead of rewriting it.
+    assert cancel(env, body).json()["failure_code"] == "conversation_not_found"
+    assert env.model.requests == []
+    assert rows(env, "chat_messages") == 0

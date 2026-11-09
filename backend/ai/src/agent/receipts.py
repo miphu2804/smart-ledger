@@ -8,7 +8,7 @@ from uuid import UUID
 from sqlalchemy import text
 from sqlalchemy.exc import SQLAlchemyError
 
-from src.agent.errors import TurnProtocolError
+from src.agent.errors import ConversationNotFoundError, TurnProtocolError
 from src.agent.repository import AgentConversationRepository
 from src.agent.turn_context import TurnExecution
 from src.infra.postgre_db_client import PostgreDBClient
@@ -67,6 +67,7 @@ class AgentTurnRepository:
         fence: int,
     ):
         fingerprint = self.fingerprint(user, shop, conversation, message)
+        missing_conversation = False
         with self.transaction() as session:
             # A concurrent cancel may insert the tombstone first; never replace it.
             inserted = session.execute(
@@ -93,10 +94,28 @@ class AgentTurnRepository:
             if row["state"] != "CANCELLED" and row["execution_fence"] != fence:
                 raise TurnProtocolError("ai_turn_conflict", 409)
             if inserted is not None and conversation is not None:
-                AgentConversationRepository._owned_conversation(
-                    session, conversation, user, shop
-                )
+                try:
+                    AgentConversationRepository._owned_conversation(
+                        session, conversation, user, shop
+                    )
+                except ConversationNotFoundError:
+                    # Commit the failure instead of rolling the claim back: Core reads
+                    # this receipt to settle quota and must see 404, not a missing turn
+                    # it would cancel into ai_turn_cancelled.
+                    changed = session.execute(
+                        text("""
+                        UPDATE agent_turn_receipts SET state='FAILED',
+                        completed_at=GREATEST(clock_timestamp(), created_at),
+                        failure_code='conversation_not_found'
+                        WHERE turn_id=:id AND state='IN_PROGRESS'
+                        """),
+                        {"id": turn},
+                    )
+                    self._one(changed.rowcount)
+                    missing_conversation = True
             # A silently skipped INSERT must not become admission.
+        if missing_conversation:
+            raise ConversationNotFoundError
         return inserted is not None, row, fingerprint
 
     def get(self, turn: UUID, user: int, shop: int):
