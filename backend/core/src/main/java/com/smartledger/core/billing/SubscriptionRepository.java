@@ -20,6 +20,8 @@ public class SubscriptionRepository {
             rs.getObject("activated_at", OffsetDateTime.class), rs.getInt("purchased_months"),
             rs.getInt("quota_policy_version"), rs.getObject("expires_at", OffsetDateTime.class), rs.getLong("version"));
 
+    static final int CANDIDATE_BATCH = 20;
+
     List<Long> candidates(long afterId) {
         return jdbc.query("""
                 SELECT r.id FROM billing_payment_requests r JOIN users u ON u.id=r.payer_user_id
@@ -27,8 +29,8 @@ public class SubscriptionRepository {
                     AND r.id>? AND r.plan_version=1 AND r.quota_policy_version=1
                     AND ((r.plan_code='FULL_MONTHLY' AND r.duration_months=1)
                         OR (r.plan_code='FULL_QUARTERLY' AND r.duration_months=3))
-                ORDER BY r.id LIMIT 20
-                """, (rs, row) -> rs.getLong(1), afterId);
+                ORDER BY r.id LIMIT ?
+                """, (rs, row) -> rs.getLong(1), afterId, CANDIDATE_BATCH);
     }
 
     Optional<Purchase> lockPurchase(long id) {
