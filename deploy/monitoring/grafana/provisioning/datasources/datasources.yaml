@@ -1,5 +1,13 @@
 apiVersion: 1
 
+# Removing a datasource from this file leaves it in Grafana's database, so the product analytics datasources that
+# ADR-0003 provisioned are deleted by name; a name that no longer exists is skipped.
+deleteDatasources:
+  - name: SmartLedger staging
+    orgId: 1
+  - name: SmartLedger production
+    orgId: 1
+
 datasources:
   - name: Prometheus
     uid: prometheus
