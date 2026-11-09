@@ -21,12 +21,13 @@ Branch and review rules are in [CONTRIBUTING](../../CONTRIBUTING.md). Workflow d
 
 ## Delivery and runtime topology
 
-![CI/CD flow](../architecture/diagrams/images/ci-cd.svg)
+![System design: runtime, external services and delivery](../architecture/diagrams/images/system-design.svg)
 
-Green numbers are the deploy, purple the VPS setup with Ansible, from `infra.yml` or `scripts/infra/run.sh`, and orange the runtime requests. Gray dashed arrows are secrets: the deploy exports `core` and `ai` from Dopbase with runner tokens kept in the GitHub environment, and `scripts/infra/run.sh` exports the VPS files for Ansible. The application icons depict a stack template, not shared containers: staging and production each run as an isolated Compose project with their own Core, AI, Bifrost and Redis instances and separate Supabase databases. The VPS network diagram below shows these environment boundaries. The diagram shows the target setup; [technical design §1](../architecture/technical-design.md#1-scope) records what is implemented. Edit [`ci-cd.drawio`](../architecture/diagrams/src/ci-cd.drawio) and re-export:
+Green numbers are the deploy, purple the VPS setup with Ansible, from `infra.yml` or `scripts/infra/run.sh`, and orange the runtime requests. Gray dashed arrows are secrets: the deploy exports `core` and `ai` from Dopbase with runner tokens kept in the GitHub environment, and `scripts/infra/run.sh` exports the VPS files for Ansible. The application icons depict a stack template, not shared containers: staging and production each run as an isolated Compose project with their own Core, AI, Bifrost and Redis instances and separate Supabase databases. The VPS network diagram below shows these environment boundaries. The direct Mobile → Google Analytics 4 path in External represents consented native app usage, not business transactions or server telemetry; it bypasses Caddy/Core. Separate staging and production destinations are proposed, not verified ([ADR-0010](../architecture/adr/0010-mobile-usage-analytics-ga4.md)). The diagram shows the target setup; [technical design §1](../architecture/technical-design.md#1-scope) records what is implemented. Edit [`system-design.drawio`](../architecture/diagrams/src/system-design.drawio) and re-export:
 
 ```bash
-drawio -x -f svg -e --embed-svg-images --svg-theme light -b ffffff -o docs/architecture/diagrams/images/ci-cd.svg docs/architecture/diagrams/src/ci-cd.drawio
+drawio -x -f svg -e --embed-svg-images --svg-theme light -b ffffff -o docs/architecture/diagrams/images/system-design.svg docs/architecture/diagrams/src/system-design.drawio
+drawio -x -f png --width 2400 -o docs/architecture/diagrams/images/system-design.png docs/architecture/diagrams/src/system-design.drawio
 ```
 
 ![VPS Docker networks and ports](../architecture/diagrams/images/vps-network.svg)

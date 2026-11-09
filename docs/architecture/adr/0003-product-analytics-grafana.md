@@ -5,6 +5,8 @@
 - **Owner:** not assigned; needs a product owner for the metric definitions and a database owner for the read role.
 - Related: [OPS-004 #269](https://github.com/miphu2804/smart-ledger/issues/269) (monitoring), [CORE-018 #409](https://github.com/miphu2804/smart-ledger/issues/409) (DAU/MAU), the three infrastructure dashboards of PR #422.
 
+**Related design review (2026-11-09):** [ADR-0010](0010-mobile-usage-analytics-ga4.md) now defines consented GA4 UI analytics and its separation from Core business reporting, monitoring and AI tracing. Its native client code is present at `staging` revision `9613e47e`, while rollout and approval remain unverified. This superseded SQL proposal and its P2/P3 roadmap are historical, not authorization to add another client collector.
+
 ## 1. Context
 
 - The monitoring infrastructure already has three Infra layers in Grafana 12.1.1: overview, service and resources ([CI/CD](../../development/ci-cd.md#monitoring), [`deploy/monitoring/`](../../../deploy/monitoring/)). They answer "is the system okay", not "which features does the shop owner use".

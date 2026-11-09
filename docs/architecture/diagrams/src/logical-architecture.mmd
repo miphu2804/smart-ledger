@@ -1,26 +1,44 @@
+%%{init: {"htmlLabels": false, "flowchart": {"htmlLabels": false, "wrappingWidth": 180}, "themeCSS": ".edgeLabel rect { fill: white !important; opacity: 1 !important; }"}}%%
 flowchart LR
-    mobile["Mobile app · OWNER"]
-    admin["Web admin · ADMIN"]
-    idp["Firebase Auth"]
-    core["Core · business rules and authorization"]
-    media["Cloudinary media"]
-    ledger[("Business ledger")]
-    ai["AI · Agent chat"]
-    cache[("Redis history cache")]
-    history[("Chat history and optional memory")]
-    views["Read-only ledger views"]
-    models["OpenAI-compatible model gateway"]
-    traces["HoneyHive tracing"]
+    mobile["Mobile app<br/>OWNER"]
+    admin["Web dashboard<br/>ADMIN support"]
 
-    mobile --> core
-    admin --> core
-    core -->|verify sign-in| idp
-    core --> media
-    core --> ledger
-    core -->|user and shop| ai
-    ai -.-> cache
-    ai --> history
-    ai --> views
-    views --> ledger
-    ai --> models
-    ai -.-> traces
+    subgraph core["Core · business capabilities"]
+        direction TB
+        access["Account / shop"]
+        catalog["Catalog / stock"]
+        sales["Sales &amp; refunds"]
+        money["Expenses &amp; debt"]
+        reports["Reports"]
+        support["ADMIN support"]
+        inbox["Notifications"]
+    end
+
+    ledger[("Business data<br/>Ledger and audit trail")]
+    assistant["Bobi assistant<br/>Read-only"]
+
+    subgraph external["External services"]
+        direction TB
+        auth["Firebase Auth<br/>Sign-in identity"]
+        media["Cloudinary<br/>Media storage"]
+        ga4["Google Analytics 4<br/>App usage"]
+        models["Model providers<br/>Inference"]
+        traces["HoneyHive<br/>AI tracing"]
+    end
+
+    mobile -->|business requests| core
+    admin -->|audited support requests| core
+    core -->|authoritative records| ledger
+    core -->|verify identity| auth
+    core -->|media operations| media
+    core -->|chat proxy| assistant
+    assistant --> models
+    assistant -.->|when enabled| traces
+    mobile -->|after consent only| ga4
+
+    classDef capability fill:#ffffff,stroke:#64748b,color:#1f2937;
+    classDef service fill:#ffffff,stroke:#64748b,color:#1f2937;
+    class access,catalog,sales,money,reports,support,inbox capability;
+    class mobile,admin,ledger,assistant,auth,media,ga4,models,traces service;
+    style core fill:#f5f9ff,stroke:#60a5fa,color:#1d4ed8;
+    style external fill:#f3f4f6,stroke:#9ca3af,color:#374151;

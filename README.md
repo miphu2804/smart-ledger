@@ -34,7 +34,7 @@ Core verifies client identity and shop access before forwarding Agent requests w
 
 ## System architecture
 
-![SmartLedger system architecture](docs/architecture/diagrams/images/ci-cd.svg)
+![SmartLedger system architecture](docs/architecture/diagrams/images/system-design.svg)
 
 | Color | Flow |
 |---|---|
