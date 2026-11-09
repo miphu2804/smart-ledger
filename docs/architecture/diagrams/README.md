@@ -21,6 +21,8 @@ Repository diagrams explain logical responsibilities, data relationships, code p
 | [APK release](images/apk-release.svg) ([source](src/apk-release.drawio)) | Android release build and landing-page download path |
 | [Memory decision diagram](src/agent-memory.drawio) | Supporting artifact for ADR-0002; the ADR's status remains authoritative |
 
+The logical architecture is a system-level capability overview; the walkthrough's [Core services](../service-walkthrough/README.md#2-core-service-interfaces) and [request resolution](../service-walkthrough/README.md#1-request-resolution-logic) drill into code ownership and authorization. System design shows deployment and delivery topology, while the GA4 diagram focuses on consent, environment separation and reporting limits. They share components but answer different questions; do not duplicate implementation detail across them.
+
 The [technical design](../technical-design.md#1-scope) records source-level implementation; the [ERD description](../erd-description.md) records migration alignment. Neither a diagram nor a checked-in migration proves live deployment, runtime enablement or integrated acceptance.
 
 ## Logical architecture
