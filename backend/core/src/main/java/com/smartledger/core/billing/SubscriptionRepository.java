@@ -22,15 +22,19 @@ public class SubscriptionRepository {
 
     static final int CANDIDATE_BATCH = 20;
 
-    List<Long> candidates(long afterId) {
+    long latestRequestId() {
+        return jdbc.queryForObject("SELECT COALESCE(MAX(id), 0) FROM billing_payment_requests", Long.class);
+    }
+
+    List<Long> candidates(long afterId, long throughId) {
         return jdbc.query("""
                 SELECT r.id FROM billing_payment_requests r JOIN users u ON u.id=r.payer_user_id
                 WHERE r.status='PAID' AND r.fulfillment_status='PENDING' AND u.status='ACTIVE' AND u.system_role='OWNER'
-                    AND r.id>? AND r.plan_version=1 AND r.quota_policy_version=1
+                    AND r.id>? AND r.id<=? AND r.plan_version=1 AND r.quota_policy_version=1
                     AND ((r.plan_code='FULL_MONTHLY' AND r.duration_months=1)
                         OR (r.plan_code='FULL_QUARTERLY' AND r.duration_months=3))
                 ORDER BY r.id LIMIT ?
-                """, (rs, row) -> rs.getLong(1), afterId, CANDIDATE_BATCH);
+                """, (rs, row) -> rs.getLong(1), afterId, throughId, CANDIDATE_BATCH);
     }
 
     Optional<Purchase> lockPurchase(long id) {

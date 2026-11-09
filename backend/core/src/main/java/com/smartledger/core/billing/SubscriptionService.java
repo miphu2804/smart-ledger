@@ -71,8 +71,12 @@ public class SubscriptionService {
         });
     }
 
-    List<Long> pending(long afterId) {
-        return properties.fulfillmentEnabled() ? inTransaction(() -> repository.candidates(afterId)) : List.of();
+    long latestRequestId() {
+        return properties.fulfillmentEnabled() ? inTransaction(repository::latestRequestId) : 0;
+    }
+
+    List<Long> pending(long afterId, long throughId) {
+        return properties.fulfillmentEnabled() ? inTransaction(() -> repository.candidates(afterId, throughId)) : List.of();
     }
 
     /** A worker retry cannot apply a second grant. Capture activation time after the owner/period locks. */

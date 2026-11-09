@@ -10,25 +10,27 @@ import org.springframework.stereotype.Component;
 public class SubscriptionFulfillmentWorker {
     private static final Logger log = LoggerFactory.getLogger(SubscriptionFulfillmentWorker.class);
     private final SubscriptionService service;
-    /** Full batches scanned before the cursor wraps, so a steady inflow cannot postpone old retries forever. */
-    static final int MAX_FULL_BATCHES = 6;
     private long cursor;
-    private int fullBatches;
+    private long cycleEnd;
     public SubscriptionFulfillmentWorker(SubscriptionService service) { this.service = service; }
 
     @Scheduled(fixedDelay = 10000, initialDelay = 10000)
     public void run() {
         try {
-            var pending = service.pending(cursor);
+            if (cycleEnd == 0) {
+                cycleEnd = service.latestRequestId();
+                if (cycleEnd == 0) return;
+            }
+            var pending = service.pending(cursor, cycleEnd);
             for (long request : pending) {
                 cursor = request;
                 try { service.fulfill(request); }
                 catch (RuntimeException exception) { log.warn("Subscription fulfillment rolled back; pending payment retained"); }
             }
-            // A short batch reached the newest payment: start over so failed older payments retry next poll.
-            if (pending.size() < SubscriptionRepository.CANDIDATE_BATCH || ++fullBatches >= MAX_FULL_BATCHES) {
+            // Bound the scan by the IDs present at its start so new arrivals cannot delay retries.
+            if (pending.size() < SubscriptionRepository.CANDIDATE_BATCH || cursor == cycleEnd) {
                 cursor = 0;
-                fullBatches = 0;
+                cycleEnd = 0;
             }
         } catch (RuntimeException exception) { log.warn("Subscription pending scan unavailable; retry on next poll"); }
     }

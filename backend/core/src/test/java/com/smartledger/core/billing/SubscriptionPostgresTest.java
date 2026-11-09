@@ -109,6 +109,18 @@ class SubscriptionPostgresTest {
         assertThat(sql.queryForObject("SELECT system_role FROM users WHERE id=?", String.class, owner)).isEqualTo("OWNER");
     }
 
+    @Test void pendingScanHonorsTheRequestIdCapturedBeforeNewPaymentsArrive() {
+        var first = paid("FULL_MONTHLY");
+        long cycleEnd = service.latestRequestId();
+        var next = paid("FULL_QUARTERLY");
+
+        assertThat(cycleEnd).isEqualTo(first.id());
+        assertThat(service.pending(0, cycleEnd)).containsExactly(first.id());
+        assertThat(service.pending(first.id(), cycleEnd)).isEmpty();
+        assertThat(service.pending(0, service.latestRequestId())).containsExactly(first.id(), next.id());
+        assertThat(instance(false).latestRequestId()).isZero();
+    }
+
     @Test void concurrentMixedRenewalsPreserveOriginalCalendarAndWeeklyAnchor() throws Exception {
         var first = paid("FULL_MONTHLY"); service.fulfill(first.id());
         var original = service.subscription(TOKEN).activatedAt();
@@ -155,7 +167,7 @@ class SubscriptionPostgresTest {
     @Test void disabledPayerKeepsPaidMoneyPendingUntilActualActivation() {
         var request = paid("FULL_MONTHLY");
         sql.update("UPDATE users SET status='DISABLED' WHERE id=?", owner);
-        assertThat(service.pending(0)).isEmpty(); assertThat(service.fulfill(request.id())).isFalse();
+        assertThat(service.pending(0, service.latestRequestId())).isEmpty(); assertThat(service.fulfill(request.id())).isFalse();
         clock.advance(86400);
         sql.update("UPDATE users SET status='ACTIVE' WHERE id=?", owner);
         assertThat(service.fulfill(request.id())).isTrue();
@@ -239,7 +251,7 @@ class SubscriptionPostgresTest {
         var request = paid("FULL_QUARTERLY");
         sql.update("UPDATE users SET system_role='ADMIN' WHERE id=?", owner);
         assertThat(service.fulfill(request.id())).isFalse();
-        assertThat(service.pending(0)).isEmpty(); assertThat(count("billing_subscription_grants")).isZero();
+        assertThat(service.pending(0, service.latestRequestId())).isEmpty(); assertThat(count("billing_subscription_grants")).isZero();
     }
 
     @Test void backwardClockCannotReplaceCurrentEpochWithAnOverlappingTerm() {
