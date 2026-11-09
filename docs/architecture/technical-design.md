@@ -6,7 +6,7 @@ This document describes the responsibilities of the checked-in components of Sma
 
 - [BRD](../product/business-requirements.md) and [PRD](../product/product-requirements.md): source of `BO/BR → FR/NFR → AC`.
 - [Logical architecture](diagrams/README.md#logical-architecture): component and trust boundaries, not deployment topology.
-- [Target architecture](diagrams/images/architecture.svg) and [CI/CD and runtime topology](diagrams/images/ci-cd.svg): target components and delivery flow; the [diagram guide](diagrams/README.md) lists every diagram and its boundary.
+- [Target architecture](diagrams/images/architecture.svg) and [System design](diagrams/images/system-design.svg): runtime topology, external integrations and delivery flow; the [diagram guide](diagrams/README.md) lists every diagram and its boundary.
 - [API contracts](../contracts/api-contracts.md): FE ↔ Core and Core ↔ AI.
 - Current sources of evidence: [`frontend/mobile`](../../frontend/mobile/README.md), [`frontend/web`](../../frontend/web/README.md), [`backend/core`](../../backend/core/src/main/java/com/smartledger/core/controller/AuthController.java) and [`backend/ai`](../../backend/ai/src/agent/router.py). The EXE201 FE is the historical source used when the initial scope was drafted.
 
@@ -50,6 +50,12 @@ WEB authorize/callback/exchange and recent-authentication LINK are implemented w
 ### Zalo Android CORE-016
 
 ANDROID browser handoff and V18 are checked in, default-off. The service binds channel, client, request, purpose and verifier; it does not accept arbitrary return URLs. A checked-in sample does not prove shared-DB migration or native enablement. See the [contract](../contracts/api-contracts.md#zalo-android-core-016) and [Core verification guide](../../backend/core/docs/zalo-android-preparation.md).
+
+### Consent-based product analytics
+
+**Verified source addendum:** `staging` revision `9613e47eb8a8a3a134bb550966a666adfde4db80` includes Mobile's native Firebase Analytics adapter, default-off configuration, device-scoped consent, route-template screen views and seven interaction events. Expo web uses a no-op adapter. SDK errors are isolated from user actions; no Core/AI event-ingestion endpoint or migration is introduced by this client path.
+
+[ADR-0010](adr/0010-mobile-usage-analytics-ga4.md) owns the system-wide design and measurement limits; the [Mobile runbook](../../frontend/mobile/docs/operations.md#ga4-native-verification) owns native verification. Product/legal approval, actual Console settings, native delivery and `AC-119`–`AC-121` remain unverified. GA4 observes consenting clients; it does not replace Core business reports, CORE-018 activity, operational monitoring or AI traces.
 
 ### AI and client boundaries
 

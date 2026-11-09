@@ -69,16 +69,6 @@
     ansible.builtin.copy: { owner: "{{ sl_deploy_user }}", group: "{{ sl_deploy_user }}" }
     ansible.builtin.template: { owner: "{{ sl_deploy_user }}", group: "{{ sl_deploy_user }}" }
   block:
-    # One file per environment, because the monitoring .env is rewritten by the all-scope run.
-    - name: Set this environment's product analytics login
-      ansible.builtin.template:
-        src: postgres.env.j2
-        dest: "{{ sl_monitoring_dir }}/postgres-{{ app_env }}.env"
-        mode: "0600"
-      when: app_grafana_pg_host | length > 0
-      no_log: true
-      notify: Apply monitoring
-
     # Alloy reloads this file by itself.
     # CADDY_DOMAIN may list several comma-separated names for one site; the first is probed.
     # Liveness answers while Core runs; readiness also checks Core's database connection, so it fails when Supabase does.

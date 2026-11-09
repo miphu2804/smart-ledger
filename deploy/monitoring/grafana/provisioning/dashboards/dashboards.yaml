@@ -10,11 +10,3 @@ providers:
     allowUiUpdates: false
     options:
       path: /etc/grafana/provisioning/dashboards
-  # Product analytics sit outside this directory because a provider also reads every subdirectory of its path.
-  - name: smart-ledger-product
-    folder: Product
-    type: file
-    disableDeletion: true
-    allowUiUpdates: false
-    options:
-      path: /etc/grafana/product
