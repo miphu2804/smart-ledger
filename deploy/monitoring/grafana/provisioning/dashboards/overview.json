@@ -1,7 +1,7 @@
 {
   "uid": "smart-ledger-overview",
   "title": "SmartLedger overview",
-  "description": "Layer 1: is anything wrong in one environment, and which service. Open Service for one service, Resources for the VPS and containers.",
+  "description": "Layer 1: is anything wrong, and in which environment and service. Each environment gets its own Health and Services rows, so there is no environment picker. Open Service for one service, Resources for the VPS and containers.",
   "tags": [
     "smart-ledger",
     "layer-overview"
@@ -47,12 +47,50 @@
         "definition": "label_values(probe_success, env)",
         "refresh": 2,
         "sort": 1,
-        "includeAll": false,
-        "multi": false
+        "includeAll": true,
+        "multi": true,
+        "hide": 2,
+        "current": {
+          "text": [
+            "All"
+          ],
+          "value": [
+            "$__all"
+          ]
+        }
       }
     ]
   },
   "panels": [
+    {
+      "type": "alertlist",
+      "title": "Firing and pending alerts",
+      "gridPos": {
+        "h": 5,
+        "w": 24,
+        "x": 0,
+        "y": 0
+      },
+      "description": "Every provisioned alert, for all environments; Discord and Telegram receive the same.",
+      "options": {
+        "viewMode": "list",
+        "groupMode": "default",
+        "maxItems": 20,
+        "sortOrder": 1,
+        "dashboardAlerts": false,
+        "showInstances": true,
+        "stateFilter": {
+          "firing": true,
+          "pending": true,
+          "noData": false,
+          "normal": false,
+          "error": true
+        },
+        "alertInstanceLabelFilter": "",
+        "folder": null
+      },
+      "id": 8
+    },
     {
       "type": "row",
       "title": "Health of $env",
@@ -61,10 +99,11 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 0
+        "y": 5
       },
       "panels": [],
-      "id": 1
+      "id": 1,
+      "repeat": "env"
     },
     {
       "id": 2,
@@ -79,7 +118,7 @@
         "h": 4,
         "w": 4,
         "x": 0,
-        "y": 1
+        "y": 6
       },
       "targets": [
         {
@@ -149,7 +188,7 @@
         "h": 4,
         "w": 4,
         "x": 4,
-        "y": 1
+        "y": 6
       },
       "targets": [
         {
@@ -219,7 +258,7 @@
         "h": 4,
         "w": 4,
         "x": 8,
-        "y": 1
+        "y": 6
       },
       "targets": [
         {
@@ -289,7 +328,7 @@
         "h": 4,
         "w": 4,
         "x": 12,
-        "y": 1
+        "y": 6
       },
       "targets": [
         {
@@ -359,7 +398,7 @@
         "h": 4,
         "w": 4,
         "x": 16,
-        "y": 1
+        "y": 6
       },
       "targets": [
         {
@@ -418,7 +457,7 @@
         "h": 4,
         "w": 4,
         "x": 20,
-        "y": 1
+        "y": 6
       },
       "targets": [
         {
@@ -465,35 +504,6 @@
       }
     },
     {
-      "type": "alertlist",
-      "title": "Firing and pending alerts",
-      "gridPos": {
-        "h": 5,
-        "w": 24,
-        "x": 0,
-        "y": 5
-      },
-      "description": "Every provisioned alert, for all environments; Discord and Telegram receive the same.",
-      "options": {
-        "viewMode": "list",
-        "groupMode": "default",
-        "maxItems": 20,
-        "sortOrder": 1,
-        "dashboardAlerts": false,
-        "showInstances": true,
-        "stateFilter": {
-          "firing": true,
-          "pending": true,
-          "noData": false,
-          "normal": false,
-          "error": true
-        },
-        "alertInstanceLabelFilter": "",
-        "folder": null
-      },
-      "id": 8
-    },
-    {
       "type": "row",
       "title": "Services in $env",
       "collapsed": false,
@@ -504,7 +514,8 @@
         "y": 10
       },
       "panels": [],
-      "id": 9
+      "id": 9,
+      "repeat": "env"
     },
     {
       "type": "table",

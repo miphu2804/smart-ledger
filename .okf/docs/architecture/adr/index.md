@@ -4,7 +4,7 @@ Architecture decision records, one decision per file.
 
 * [ADR-0001: Use pgvector on Supabase as the vector store instead of Qdrant](0001-vector-store-pgvector.md) - Accepted: embeddings live in Supabase PostgreSQL with pgvector instead of Qdrant.
 * [ADR-0002: Agent long-term memory modeled on TencentDB for PostgreSQL, built on Supabase pgvector](0002-agent-long-term-memory.md) - Accepted: pgvector design for agent long-term memory; option A is approved by the product owner and enabled in production through `AGENT_MEMORY_ENABLED`.
-* [ADR-0003: Product analytics in Grafana, read from Core and AI data](0003-product-analytics-grafana.md) - Proposed: product usage metrics in Grafana, read from Core and AI data through a read-only role.
+* [ADR-0003: Product analytics in Grafana, read from Core and AI data](0003-product-analytics-grafana.md) - Superseded by ADR-0010: product usage metrics in Grafana through a read-only role, removed so Grafana only monitors the system.
 * [ADR-0004: The agent reads shop data through model-written, read-only SQL](0004-agent-read-only-text-to-sql.md) - Accepted: the agent reads shop data through model-written, read-only SQL.
 * [ADR-0005: Send a fixed window of chat history, never a summary](0005-chat-history-window-without-summary.md) - Accepted: send a fixed window of chat history to the model, never a summary.
 * [ADR-0006: Agent guardrails are deterministic code, not model checks](0006-deterministic-agent-guardrails.md) - Accepted: agent guardrails are deterministic code, not model checks.
