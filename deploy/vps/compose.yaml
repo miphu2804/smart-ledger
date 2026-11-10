@@ -81,7 +81,7 @@ services:
   # authoritative over the config store in the volume; bifrost.env holds the provider key, the virtual key and the
   # admin login it references, a resolved copy of secrets/<env>/env/.env.bifrost.
   bifrost:
-    image: maximhq/bifrost:v2.4.0@sha256:a1c90607dcfd13c1fb2f9476ceb3bb24407a50ade7fdf3e61a59fb42b09e5c57
+    image: maximhq/bifrost:v2.5.0@sha256:b5258c5f11c79064fc8280e49513f54c0b1da81c78bd11d3b4c1f62f8926d1ab
     env_file:
       - bifrost.env
     environment:
@@ -114,7 +114,7 @@ services:
   # restart only makes the next turns read PostgreSQL. Started by the playbook and by AI's depends_on, not rolled by
   # deploy.sh; a new version is a change to this file.
   redis:
-    image: redis:7.4.12-alpine@sha256:8da19c7399dca900c6822a1cf30f9d2285585e2c4b457ff4095b0f4500054d3f
+    image: redis:8.10.3-alpine@sha256:71885d8cc6e42f2bc0aa2eb853bfc4be200b5108a46ac50e117ae1df0531fb80
     command: ["redis-server", "--maxmemory", "64mb", "--maxmemory-policy", "allkeys-lru", "--save", "", "--appendonly", "no"]
     mem_limit: 96m
     healthcheck:
