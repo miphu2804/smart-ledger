@@ -2,10 +2,15 @@ import logging
 
 from pydantic_ai.models import Model
 from pydantic_ai.models.fallback import FallbackModel
+from pydantic_ai.models.openai import (
+    OpenAIChatModel,
+    OpenAIChatModelSettings,
+    OpenAIResponsesModel,
+    OpenAIResponsesModelSettings,
+)
 
 from src.app_config import AppConfig
-from src.providers.openai_chat_provider import OpenAIChatProvider
-from src.providers.openai_responses_provider import OpenAIResponsesProvider
+from src.providers.openai_model_provider import OpenAIModelProvider
 
 logger = logging.getLogger(__name__)
 
@@ -13,7 +18,15 @@ logger = logging.getLogger(__name__)
 # value; `.env.example` leaves it blank, so a blank setting resolves here instead.
 OPENAI_DEFAULT_BASE_URL = "https://api.openai.com/v1"
 
-Provider = OpenAIChatProvider | OpenAIResponsesProvider
+# The model and settings classes of each protocol `MODEL_ALIASES` may name.
+PROTOCOLS = {
+    # Reasoning models reject function tools on /v1/chat/completions, so OpenAI's own
+    # models only get the agent's tools through the Responses API.
+    "openai_responses": (OpenAIResponsesModel, OpenAIResponsesModelSettings),
+    # OpenAI-compatible models such as Inception's Mercury serve only
+    # /chat/completions.
+    "openai_chat": (OpenAIChatModel, OpenAIChatModelSettings),
+}
 
 
 class LLMFactory:
@@ -88,7 +101,7 @@ class LLMFactory:
 
     def _build_provider(
         self, protocol: str, effort: str, service_tier: str | None
-    ) -> Provider | None:
+    ) -> OpenAIModelProvider | None:
         config = self.config
         options = {
             "api_key": config.OPENAI_API_KEY,
@@ -97,9 +110,8 @@ class LLMFactory:
             "reasoning_effort": effort,
             "service_tier": service_tier,
         }
-        if protocol == "openai_responses":
-            return OpenAIResponsesProvider(**options)
-        if protocol == "openai_chat":
-            return OpenAIChatProvider(**options)
-        logger.warning("unknown model protocol: %s", protocol)
-        return None
+        classes = PROTOCOLS.get(protocol)
+        if classes is None:
+            logger.warning("unknown model protocol: %s", protocol)
+            return None
+        return OpenAIModelProvider(*classes, **options)
