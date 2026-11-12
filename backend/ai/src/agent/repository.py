@@ -16,6 +16,7 @@ from sqlalchemy.dialects.postgresql import ENUM
 from sqlalchemy.orm import Mapped, Session, mapped_column
 
 from src.agent.errors import ConversationNotFoundError
+from src.agent.turn_context import TurnExecution
 from src.infra.postgre_db_client import Base, PostgreDBClient
 from src.infra.redis_client import RedisClient
 
@@ -81,7 +82,7 @@ class AgentConversationRepository:
         self, conversation_id: int, user_id: int, shop_id: int
     ) -> dict:
         with self.postgres.session() as session:
-            conversation = self._owned_conversation(
+            conversation = self.owned_conversation(
                 session, conversation_id, user_id, shop_id
             )
             messages = session.scalars(
@@ -118,7 +119,7 @@ class AgentConversationRepository:
 
         # Two autocommit statements: a delete between them only shortens the history.
         with self.postgres.read_session() as session:
-            self._owned_conversation(session, conversation_id, user_id, shop_id)
+            self.owned_conversation(session, conversation_id, user_id, shop_id)
             messages = session.scalars(
                 select(ChatMessage)
                 .where(ChatMessage.conversation_id == conversation_id)
@@ -142,7 +143,7 @@ class AgentConversationRepository:
         assistant_message: str,
     ) -> tuple[int, int]:
         with self.postgres.session() as session:
-            saved_conversation_id, question_id, reply_id = self._write_exchange(
+            saved_conversation_id, question_id, reply_id = self.write_exchange(
                 session,
                 user_id,
                 shop_id,
@@ -167,15 +168,22 @@ class AgentConversationRepository:
             self._cache_history(key, entry["limit"], messages[-entry["limit"] :])
         return saved_conversation_id, reply_id
 
-    def _write_exchange(
+    def write_exchange(
         self,
-        session,
-        user_id,
-        shop_id,
-        conversation_id,
-        user_message,
-        assistant_message,
-    ):
+        session: Session,
+        user_id: int,
+        shop_id: int,
+        conversation_id: int | None,
+        user_message: str,
+        assistant_message: str,
+    ) -> tuple[int, int, int]:
+        """Write one question and reply inside the caller's transaction.
+
+        Returns the conversation, question and reply ids. The caller owns `session`,
+        so `AgentTurnRepository.complete` can commit the exchange together with its
+        receipt; an existing conversation is locked here unless the caller already
+        holds its lock.
+        """
         if conversation_id is None:
             conversation = ChatConversation(
                 user_id=user_id,
@@ -184,7 +192,7 @@ class AgentConversationRepository:
             )
             session.add(conversation)
         else:
-            conversation = self._owned_conversation(
+            conversation = self.owned_conversation(
                 session, conversation_id, user_id, shop_id, lock=True
             )
         conversation.last_message_at = func.now()
@@ -213,13 +221,19 @@ class AgentConversationRepository:
 
     def save_receipted_exchange(
         self,
-        execution,
-        conversation_id,
-        user_message,
-        assistant_message,
-        model,
-        model_version,
-    ):
+        execution: TurnExecution,
+        conversation_id: int | None,
+        user_message: str,
+        assistant_message: str,
+        model: str,
+        model_version: str,
+    ) -> tuple[int, int]:
+        """Save a receipted turn's exchange atomically with its receipt.
+
+        The receipt repository owns that transaction and its lock order (conversation
+        row, then receipt row) and writes the messages through `write_exchange`; this
+        method then drops the cached history.
+        """
         cid, mid = execution.store.complete(
             execution,
             self,
@@ -269,7 +283,7 @@ class AgentConversationRepository:
         self, conversation_id: int, user_id: int, shop_id: int
     ) -> None:
         with self.postgres.session() as session:
-            conversation = self._owned_conversation(
+            conversation = self.owned_conversation(
                 session, conversation_id, user_id, shop_id, lock=True
             )
             session.execute(
@@ -293,7 +307,7 @@ class AgentConversationRepository:
         )
 
     @staticmethod
-    def _owned_conversation(
+    def owned_conversation(
         session: Session,
         conversation_id: int,
         user_id: int,
