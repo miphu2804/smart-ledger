@@ -373,15 +373,7 @@ class AgentService:
         """Run the agent; return the screened answer and the model version."""
         async with (
             self.guardrails.run_limits(),
-            self.agent.iter(
-                self._with_current_time(prompt),
-                message_history=self._model_messages(history),
-                deps=context,
-                usage_limits=self.guardrails.usage_limits,
-                model_settings=session_settings(session_id, context.shop_id),
-                # One model for every step of the turn, tool calls included.
-                model=selection.model if selection is not None else None,
-            ) as run,
+            self._iter(prompt, history, context, session_id, selection) as run,
         ):
             answer = ""
             returns = None
@@ -499,15 +491,7 @@ class AgentService:
         first_text_ms = None
         async with (
             self.guardrails.run_limits(),
-            self.agent.iter(
-                self._with_current_time(prompt),
-                message_history=self._model_messages(history),
-                deps=context,
-                usage_limits=self.guardrails.usage_limits,
-                model_settings=session_settings(session_id, context.shop_id),
-                # One model for every step of the turn, tool calls included.
-                model=selection.model if selection is not None else None,
-            ) as run,
+            self._iter(prompt, history, context, session_id, selection) as run,
         ):
             # The answer a response wrote alongside screen-button calls only.
             answer = ""
@@ -554,6 +538,25 @@ class AgentService:
                 delivered,
                 *self._read_result(run, answer, returns, first_text_ms),
             )
+
+    def _iter(
+        self,
+        prompt: str,
+        history: list[dict],
+        context: AgentContext,
+        session_id: str,
+        selection: ModelSelection | None,
+    ):
+        """Open the turn's agent run; the JSON and streaming routes share it."""
+        return self.agent.iter(
+            self._with_current_time(prompt),
+            message_history=self._model_messages(history),
+            deps=context,
+            usage_limits=self.guardrails.usage_limits,
+            model_settings=session_settings(session_id, context.shop_id),
+            # One model for every step of the turn, tool calls included.
+            model=selection.model if selection is not None else None,
+        )
 
     @staticmethod
     async def _queue_tool_events(
