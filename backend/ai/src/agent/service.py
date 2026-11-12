@@ -640,6 +640,7 @@ class AgentService:
         recalled: list[RecalledMemory],
         selection: ModelSelection | None,
     ) -> AgentChatResult:
+        model = selection.model.model_name if selection is not None else self.model_name
         with self.observability.span("save turn"):
             execution = current_turn.get()
             if execution is None:
@@ -658,9 +659,7 @@ class AgentService:
                     conversation_id,
                     question,
                     answer,
-                    selection.model.model_name
-                    if selection is not None
-                    else self.model_name,
+                    model,
                     version,
                 )
         if conversation_id is None:
@@ -681,9 +680,7 @@ class AgentService:
             conversation_id=saved_conversation_id,
             message_id=message_id,
             answer=answer,
-            model=(
-                selection.model.model_name if selection is not None else self.model_name
-            ),
+            model=model,
             model_version=version,
         )
 

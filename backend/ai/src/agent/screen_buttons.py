@@ -49,8 +49,11 @@ def accepted_screens(messages: list[ModelMessage]) -> list[str]:
 
 
 def with_screen_buttons(answer: str, screens: list[str]) -> str:
-    # Stored with the answer, so the buttons come back with the conversation;
-    # the app renders the block as buttons, like a ```ui block as charts and cards.
+    """`answer` followed by the ```actions block of `screens`, if there are any.
+
+    Stored with the answer, so the buttons come back with the conversation; the app
+    renders the block as buttons, like a ```ui block as charts and cards.
+    """
     if not screens:
         return answer
     return f"{answer}\n\n```actions\n{json.dumps(screens)}\n```"

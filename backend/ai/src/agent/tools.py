@@ -16,10 +16,10 @@ from src.prompt_templates import (
 from src.restock.service import RestockService
 from src.sql.repository import ShopDataRepository
 
-# The guard and the repository raise ValueError("CODE: reason") for a query the model
-# can fix. Any other ValueError is a bug and must not reach the model.
 logger = logging.getLogger(__name__)
 
+# The guard and the repository raise ValueError("CODE: reason") for a query the model
+# can fix. Any other ValueError is a bug and must not reach the model.
 MODEL_ERROR = re.compile(r"([A-Z][A-Z_]*): (.*)", re.DOTALL)
 
 

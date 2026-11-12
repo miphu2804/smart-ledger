@@ -194,9 +194,7 @@ def _sse_frame(event: AgentStreamEvent, request_id: str | None = None) -> bytes:
 
 
 def _stream_error_code(error: Exception) -> str:
-    if isinstance(error, TurnProtocolError):
-        return error.code
-    if isinstance(error, GuardrailError):
+    if isinstance(error, (TurnProtocolError, GuardrailError)):
         return error.code
     if isinstance(error, ConversationNotFoundError):
         return "conversation_not_found"

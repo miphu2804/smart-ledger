@@ -214,7 +214,7 @@ async def lifespan(app: FastAPI):
     shop_data = build_shop_data(reader)
     memory = build_memory_service(chat_model, postgres, observability)
     app.state.memory = memory
-    app.state.agent = AgentService(
+    agent = AgentService(
         chat_model,
         conversations,
         observability=observability,
@@ -236,10 +236,9 @@ async def lifespan(app: FastAPI):
         history_turns=app_config.AGENT_HISTORY_TURNS,
         llm_router=llm_router,
     )
+    app.state.agent = agent
     app.state.turns = AgentTurnService(
-        AgentTurnRepository(postgres),
-        app.state.agent,
-        app_config.AGENT_TURN_RECEIPTS_ENABLED,
+        AgentTurnRepository(postgres), agent, app_config.AGENT_TURN_RECEIPTS_ENABLED
     )
     try:
         yield

@@ -205,7 +205,7 @@ class AgentMemoryService:
         self.writes.add(task)
         task.add_done_callback(self.writes.discard)
 
-    async def finish_writes(self, timeout: float | None) -> None:
+    async def finish_writes(self, timeout: float) -> None:
         """Wait up to `timeout` seconds for running writes, then cancel the rest.
 
         Cancelled writes are awaited, so none is still writing when the caller closes
@@ -214,9 +214,9 @@ class AgentMemoryService:
         if not self.writes:
             return
         _, unfinished = await asyncio.wait(self.writes, timeout=timeout)
-        for task in unfinished:
-            task.cancel()
         if unfinished:
+            for task in unfinished:
+                task.cancel()
             logger.warning("memory writes cancelled at shutdown: %d", len(unfinished))
             await asyncio.gather(*unfinished, return_exceptions=True)
 

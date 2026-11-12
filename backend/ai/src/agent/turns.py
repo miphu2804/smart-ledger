@@ -89,30 +89,30 @@ class AgentTurnService:
             if not row["resultAvailable"]:
                 raise TurnProtocolError("ai_turn_result_removed", 410)
             return AgentChatResult(
-                **{k: v for k, v in row["result"].items() if k != "request_id"}
+                **{
+                    key: value
+                    for key, value in row["result"].items()
+                    if key != "request_id"
+                }
             )
         code = row["failure_code"]
-        raise TurnProtocolError(
-            code,
-            409
-            if row["state"] == "CANCELLED"
-            else 404
-            if code == "conversation_not_found"
-            else 422
-            if code in {"input_too_long", "answer_unavailable", "answer_timeout"}
-            else 503,
-        )
+        if row["state"] == "CANCELLED":
+            status = 409
+        elif code == "conversation_not_found":
+            status = 404
+        elif code in {"input_too_long", "answer_unavailable", "answer_timeout"}:
+            status = 422
+        else:
+            status = 503
+        raise TurnProtocolError(code, status)
 
     async def _failed(self, execution, error):
-        code = (
-            error.code
-            if isinstance(error, (GuardrailError, TurnProtocolError))
-            else (
-                "conversation_not_found"
-                if isinstance(error, ConversationNotFoundError)
-                else "ai_unavailable"
-            )
-        )
+        if isinstance(error, (GuardrailError, TurnProtocolError)):
+            code = error.code
+        elif isinstance(error, ConversationNotFoundError):
+            code = "conversation_not_found"
+        else:
+            code = "ai_unavailable"
         await asyncio.to_thread(self.repository.fail, execution, code)
 
     @staticmethod

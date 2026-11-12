@@ -212,12 +212,7 @@ class AgentConversationRepository:
         )
         session.add_all([question, reply])
         session.flush()
-        saved_conversation_id, question_id, reply_id = (
-            conversation.id,
-            question.id,
-            reply.id,
-        )
-        return saved_conversation_id, question_id, reply_id
+        return conversation.id, question.id, reply.id
 
     def drop_cached_history(
         self, conversation_id: int, user_id: int, shop_id: int
