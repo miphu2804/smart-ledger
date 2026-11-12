@@ -29,6 +29,7 @@ from src.llm_router.tier import Tier
 from src.log_formatter import LevelColorFormatter
 from src.memory.embedder import build_embedder
 from src.memory.repository import AgentMemoryRepository
+from src.memory.router import router as memory_router
 from src.memory.service import AgentMemoryService
 from src.observability import Observability
 from src.prompt_templates import TIER_CLASSIFIER_PROMPT, TIER_DESCRIPTIONS
@@ -285,6 +286,7 @@ internal_router = APIRouter(
     prefix="/internal/v1", dependencies=[Depends(require_internal_token)]
 )
 internal_router.include_router(agent_router)
+internal_router.include_router(memory_router)
 
 app = FastAPI(title=app_config.APP_TITLE, version="0.1.0", lifespan=lifespan)
 app.include_router(internal_router)
