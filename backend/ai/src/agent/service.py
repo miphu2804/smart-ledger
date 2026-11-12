@@ -41,7 +41,7 @@ from src.agent.tools import (
     build_restock_tool,
     build_shop_data_tool,
 )
-from src.agent.turn_context import current_turn
+from src.agent.turn_context import TurnExecution, current_turn
 from src.calculation.service import CalculationService
 from src.llm_router.service import LLMRouterService, ModelSelection
 from src.memory.repository import RecalledMemory
@@ -653,7 +653,7 @@ class AgentService:
                 )
             else:
                 saved_conversation_id, message_id = await asyncio.to_thread(
-                    self.conversations.save_receipted_exchange,
+                    self._save_receipted_exchange,
                     execution,
                     conversation_id,
                     question,
@@ -686,6 +686,36 @@ class AgentService:
             ),
             model_version=version,
         )
+
+    def _save_receipted_exchange(
+        self,
+        execution: TurnExecution,
+        conversation_id: int | None,
+        question: str,
+        answer: str,
+        model: str,
+        version: str,
+    ) -> tuple[int, int]:
+        """Save the exchange atomically with the turn's receipt, then drop the cached
+        history.
+
+        One worker-thread call, so a disconnect after the commit still drops the cache.
+        `AgentTurnRepository.complete` owns the transaction and its lock order
+        (conversation row, then receipt row).
+        """
+        saved_conversation_id, message_id = execution.store.complete(
+            execution,
+            self.conversations,
+            conversation_id,
+            question,
+            answer,
+            model,
+            version,
+        )
+        self.conversations.drop_cached_history(
+            saved_conversation_id, execution.user_id, execution.shop_id
+        )
+        return saved_conversation_id, message_id
 
     @staticmethod
     def _current_time() -> str:

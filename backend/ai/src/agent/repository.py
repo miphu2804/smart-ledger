@@ -17,7 +17,6 @@ from sqlalchemy.dialects.postgresql import ENUM
 from sqlalchemy.orm import Mapped, Session, mapped_column
 
 from src.agent.errors import ConversationNotFoundError
-from src.agent.turn_context import TurnExecution
 from src.infra.postgre_db_client import Base, PostgreDBClient
 from src.infra.redis_client import RedisClient
 
@@ -220,37 +219,17 @@ class AgentConversationRepository:
         )
         return saved_conversation_id, question_id, reply_id
 
-    def save_receipted_exchange(
-        self,
-        execution: TurnExecution,
-        conversation_id: int | None,
-        user_message: str,
-        assistant_message: str,
-        model: str,
-        model_version: str,
-    ) -> tuple[int, int]:
-        """Save a receipted turn's exchange atomically with its receipt.
+    def drop_cached_history(
+        self, conversation_id: int, user_id: int, shop_id: int
+    ) -> None:
+        """Drop the conversation's cached history after a receipted save.
 
-        The receipt repository owns that transaction and its lock order (conversation
-        row, then receipt row) and writes the messages through `write_exchange`; this
-        method then drops the cached history.
+        Replay answers are not cached, so a deleted conversation makes the result
+        unavailable. A cache failure is ignored: it cannot undo the committed receipt
+        and answer.
         """
-        cid, mid = execution.store.complete(
-            execution,
-            self,
-            conversation_id,
-            user_message,
-            assistant_message,
-            model,
-            model_version,
-        )
-        # Do not cache replay answers; deletion must make the result unavailable.
-        # Cache availability cannot undo committed receipt/answer evidence.
         with suppress(Exception):
-            self.cache.delete(
-                self._history_key(cid, execution.user_id, execution.shop_id)
-            )
-        return cid, mid
+            self.cache.delete(self._history_key(conversation_id, user_id, shop_id))
 
     def rename_conversation(
         self, conversation_id: int, user_id: int, shop_id: int, title: str
