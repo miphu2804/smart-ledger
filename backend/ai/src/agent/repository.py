@@ -181,8 +181,8 @@ class AgentConversationRepository:
 
         Returns the conversation, question and reply ids. The caller owns `session`,
         so `AgentTurnRepository.complete` can commit the exchange together with its
-        receipt; an existing conversation is locked here unless the caller already
-        holds its lock.
+        receipt. An existing conversation is always locked here; a caller that already
+        holds the lock takes it again in the same transaction, which does not wait.
         """
         if conversation_id is None:
             conversation = ChatConversation(

@@ -10,7 +10,7 @@ from pydantic_ai.providers.openai import OpenAIProvider
 
 
 class OpenAIModelProvider:
-    """Builds models of one OpenAI API protocol on the shared gateway client."""
+    """Builds models of one OpenAI API protocol on its own gateway client."""
 
     def __init__(
         self,
