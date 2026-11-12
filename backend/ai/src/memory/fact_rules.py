@@ -1,17 +1,17 @@
 """Pure rules that decide which proposed facts become memories (ADR-0002).
 
-No I/O: the memory service asks the models for facts and decisions, and these rules
-screen what the models return, because a prompt alone does not bind a model.
+No I/O: the memory service asks the models for facts and decisions in the shapes
+below, and these rules screen what the models return, because a prompt alone does not
+bind a model.
 """
 
 import re
 from dataclasses import replace
-from typing import TYPE_CHECKING
+from typing import Literal
+
+from pydantic import BaseModel, Field
 
 from src.memory.repository import NewMemory
-
-if TYPE_CHECKING:
-    from src.memory.service import MemoryDecision, MemoryFact
 
 # A Vietnamese phone number: 0, 84 or +84, then nine digits that spaces, dots or
 # dashes may split. The lookbehind keeps a digit run inside a longer number, such as
@@ -19,14 +19,33 @@ if TYPE_CHECKING:
 PHONE_NUMBER = re.compile(r"(?<![\d.,])(?:\+84|84|0)(?:[\s.\-]?\d){9}(?!\d)")
 
 
-def without_phone_numbers(facts: list["MemoryFact"]) -> list["MemoryFact"]:
+class MemoryFact(BaseModel):
+    """One fact the extraction model proposes."""
+
+    memory_type: Literal["preference", "semantic", "procedural", "episodic"]
+    content: str = Field(min_length=1, max_length=500)
+    importance: float = Field(ge=0, le=1)
+    # Id of an "Already remembered" fact this one corrects or updates.
+    replaces: int | None = None
+
+
+class MemoryDecision(BaseModel):
+    """What one new fact does to the remembered ones, after Hy Memory's reconcile."""
+
+    # 1-based number of the new fact, as listed to the model.
+    fact: int
+    action: Literal["new", "replaces", "known"]
+    replaces: int | None = None
+
+
+def without_phone_numbers(facts: list[MemoryFact]) -> list[MemoryFact]:
     """`facts` without those that hold a phone number."""
     return [fact for fact in facts if not PHONE_NUMBER.search(fact.content)]
 
 
 def screened_extraction(
-    facts: list["MemoryFact"], allowed_types: frozenset[str], recalled_ids: set[int]
-) -> list["MemoryFact"]:
+    facts: list[MemoryFact], allowed_types: frozenset[str], recalled_ids: set[int]
+) -> list[MemoryFact]:
     """The extracted facts of an allowed type and without a phone number.
 
     The model could name any id; only a memory this turn recalled may be replaced.
@@ -44,7 +63,7 @@ def screened_extraction(
 
 def reconciled(
     open_facts: list[NewMemory],
-    decisions: list["MemoryDecision"],
+    decisions: list[MemoryDecision],
     shown_ids: set[int],
 ) -> list[NewMemory]:
     """`open_facts` after the reconcile model's decisions.

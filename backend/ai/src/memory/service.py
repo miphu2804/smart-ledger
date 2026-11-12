@@ -16,13 +16,14 @@ import asyncio
 import logging
 import uuid
 from collections import OrderedDict
-from typing import Literal
 
 from pydantic import BaseModel, Field
 from pydantic_ai import Agent, Embedder, PromptedOutput
 from pydantic_ai.models import Model
 
 from src.memory.fact_rules import (
+    MemoryDecision,
+    MemoryFact,
     reconciled,
     screened_extraction,
     without_phone_numbers,
@@ -52,16 +53,6 @@ from src.utils import get_time
 logger = logging.getLogger(__name__)
 
 
-class MemoryFact(BaseModel):
-    """One fact the extraction model proposes."""
-
-    memory_type: Literal["preference", "semantic", "procedural", "episodic"]
-    content: str = Field(min_length=1, max_length=500)
-    importance: float = Field(ge=0, le=1)
-    # Id of an "Already remembered" fact this one corrects or updates.
-    replaces: int | None = None
-
-
 class MemoryFacts(BaseModel):
     """Structured output schema the extraction model must return."""
 
@@ -72,15 +63,6 @@ class MemorySummary(BaseModel):
     """Structured output schema of a summary: never empty, so nothing is lost."""
 
     facts: list[MemoryFact] = Field(min_length=1, max_length=5)
-
-
-class MemoryDecision(BaseModel):
-    """What one new fact does to the remembered ones, after Hy Memory's reconcile."""
-
-    # 1-based number of the new fact, as listed to the model.
-    fact: int
-    action: Literal["new", "replaces", "known"]
-    replaces: int | None = None
 
 
 class MemoryDecisions(BaseModel):
