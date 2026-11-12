@@ -153,7 +153,7 @@ async def test_recalled_memories_lead_the_prompt_but_not_the_stored_message() ->
     )
 
     await agent.chat(user_id=3, shop_id=15, message="nhập gạo ở đâu?")
-    await agent.memory.finish_writes(timeout=None)
+    await asyncio.gather(*agent.memory.writes)
 
     (shop_id, user_id, _, limit, preference_limit, text) = repository.searches[0]
     assert (shop_id, user_id, limit, preference_limit) == (15, 3, 5, 10)
@@ -180,7 +180,7 @@ async def test_streamed_turns_get_the_same_memories() -> None:
     events = await agent.stream_chat(user_id=3, shop_id=15, message="gạo?")
     async for _ in events:
         pass
-    await agent.memory.finish_writes(timeout=None)
+    await asyncio.gather(*agent.memory.writes)
 
     assert RICE_SUPPLIER in sent_prompt(chat_model)
 
@@ -196,7 +196,7 @@ async def test_a_failed_search_answers_without_memories(
 
     with caplog.at_level(logging.WARNING):
         result = await agent.chat(user_id=3, shop_id=15, message="gạo?")
-        await agent.memory.finish_writes(timeout=None)
+        await asyncio.gather(*agent.memory.writes)
 
     assert result.answer == "ok"
     assert sent_prompt(chat_model) == "gạo?"
@@ -213,7 +213,7 @@ async def test_saved_turn_is_remembered_under_its_owner_and_conversation() -> No
     await agent.chat(
         user_id=3, shop_id=15, message="Anh nhập gạo ở chú Tư nhé", conversation_id=9
     )
-    await agent.memory.finish_writes(timeout=None)
+    await asyncio.gather(*agent.memory.writes)
 
     (shop_id, user_id, conversation_id, memories) = repository.added[0]
     assert (shop_id, user_id, conversation_id) == (15, 3, 9)
@@ -434,7 +434,7 @@ async def test_a_fact_may_replace_only_a_memory_this_turn_recalled() -> None:
 async def collect_events(agent: AgentService, message: str = "gạo?") -> list:
     events = await agent.stream_chat(user_id=3, shop_id=15, message=message)
     found = [event async for event in events]
-    await agent.memory.finish_writes(timeout=None)
+    await asyncio.gather(*agent.memory.writes)
     return found
 
 
