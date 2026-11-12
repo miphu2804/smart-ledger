@@ -65,7 +65,9 @@ class LLMFactory:
         )
         if primary is None:
             return None
-        fallbacks = [self._build_fallback(e) for e in self.config.MODEL_FALLBACKS]
+        fallbacks = [
+            self._build_fallback(entry) for entry in self.config.MODEL_FALLBACKS
+        ]
         fallbacks = [model for model in fallbacks if model is not None]
         logger.info(
             "model alias %s configured: %s (%s), %d fallback(s)",
@@ -94,24 +96,16 @@ class LLMFactory:
         effort: str,
         service_tier: str | None = None,
     ) -> Model | None:
-        provider = self._build_provider(protocol, effort, service_tier)
-        if provider is None:
-            return None
-        return provider.create_model(model_name)
-
-    def _build_provider(
-        self, protocol: str, effort: str, service_tier: str | None
-    ) -> OpenAIModelProvider | None:
-        config = self.config
-        options = {
-            "api_key": config.OPENAI_API_KEY,
-            "base_url": config.OPENAI_BASE_URL or OPENAI_DEFAULT_BASE_URL,
-            "timeout": config.MODEL_TIMEOUT_SECONDS,
-            "reasoning_effort": effort,
-            "service_tier": service_tier,
-        }
         classes = PROTOCOLS.get(protocol)
         if classes is None:
             logger.warning("unknown model protocol: %s", protocol)
             return None
-        return OpenAIModelProvider(*classes, **options)
+        provider = OpenAIModelProvider(
+            *classes,
+            api_key=self.config.OPENAI_API_KEY,
+            base_url=self.config.OPENAI_BASE_URL or OPENAI_DEFAULT_BASE_URL,
+            timeout=self.config.MODEL_TIMEOUT_SECONDS,
+            reasoning_effort=effort,
+            service_tier=service_tier,
+        )
+        return provider.create_model(model_name)
