@@ -12,8 +12,9 @@ from tests.support import TEST_GUARDRAIL_LIMITS, ScriptedModel, transcript
 
 from src.agent.service import AgentService, Done, MemoryRecalled, TextDelta
 from src.main import app
+from src.memory.fact_rules import PHONE_NUMBER
 from src.memory.repository import MemoryGroup, RecalledMemory, StoredMemory
-from src.memory.service import PHONE_NUMBER, AgentMemoryService
+from src.memory.service import AgentMemoryService
 from src.prompt_templates import MEMORY_PROMPT
 
 pytestmark = pytest.mark.anyio

@@ -14,16 +14,19 @@ model merge the owner's memories older than 7 days.
 
 import asyncio
 import logging
-import re
 import uuid
 from collections import OrderedDict
-from dataclasses import replace
 from typing import Literal
 
 from pydantic import BaseModel, Field
 from pydantic_ai import Agent, Embedder, PromptedOutput
 from pydantic_ai.models import Model
 
+from src.memory.fact_rules import (
+    reconciled,
+    screened_extraction,
+    without_phone_numbers,
+)
 from src.memory.repository import (
     AgentMemory,
     AgentMemoryRepository,
@@ -47,11 +50,6 @@ from src.utils import get_time
 # A failure here can carry the extractor model's output, which names customers, so
 # WARNING keeps the error type and the traceback goes to DEBUG.
 logger = logging.getLogger(__name__)
-
-# A Vietnamese phone number: 0, 84 or +84, then nine digits that spaces, dots or
-# dashes may split. The lookbehind keeps a digit run inside a longer number, such as
-# the money amount "120.000.000đ", from matching.
-PHONE_NUMBER = re.compile(r"(?<![\d.,])(?:\+84|84|0)(?:[\s.\-]?\d){9}(?!\d)")
 
 
 class MemoryFact(BaseModel):
@@ -388,21 +386,11 @@ class AgentMemoryService:
             )
             logger.debug("memory not reconciled: shop=%s", shop_id, exc_info=True)
             return memories
-        decisions = {decision.fact: decision for decision in result.output.decisions}
-        known_ids = {memory.id for memory in similar}
-        checked = []
-        for number, memory in enumerate(open_facts, 1):
-            decision = decisions.get(number)
-            if decision is not None and decision.action == "known":
-                continue
-            # Only a memory shown to the model may be replaced.
-            if (
-                decision is not None
-                and decision.action == "replaces"
-                and decision.replaces in known_ids
-            ):
-                memory = replace(memory, supersedes=decision.replaces)
-            checked.append(memory)
+        checked = reconciled(
+            open_facts,
+            result.output.decisions,
+            {memory.id for memory in similar},
+        )
         logger.info(
             "memory reconciled: shop=%s candidates=%d facts=%d kept=%d replaced=%d",
             shop_id,
@@ -442,11 +430,7 @@ class AgentMemoryService:
             model_settings=session_settings(uuid.uuid4().hex, shop_id),
             metadata={"shop_id": shop_id},
         )
-        facts = [
-            fact
-            for fact in result.output.facts
-            if not PHONE_NUMBER.search(fact.content)
-        ]
+        facts = without_phone_numbers(result.output.facts)
         # Replacing with nothing would forget the group, so it stays for a later turn.
         if not facts:
             return
@@ -540,15 +524,8 @@ class AgentMemoryService:
             model_settings=session_settings(uuid.uuid4().hex, shop_id),
             metadata={"shop_id": shop_id},
         )
-        known = {memory.id for memory in recalled}
-        # The model could name any id; only a memory this turn recalled may be replaced.
-        # Types and phone numbers are screened here too, because the prompt alone does
-        # not bind the model.
-        return [
-            fact.model_copy(
-                update={"replaces": fact.replaces if fact.replaces in known else None}
-            )
-            for fact in result.output.facts
-            if fact.memory_type in self.allowed_types
-            and not PHONE_NUMBER.search(fact.content)
-        ]
+        return screened_extraction(
+            result.output.facts,
+            self.allowed_types,
+            {memory.id for memory in recalled},
+        )
