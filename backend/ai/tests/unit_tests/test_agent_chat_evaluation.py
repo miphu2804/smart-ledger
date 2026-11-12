@@ -212,7 +212,8 @@ async def test_blocked_memory_writes_store_nothing() -> None:
     service = memory_service(extractor, repository)
     memory = WithoutMemoryWrites(service)
 
-    await memory.remember(15, 3, 9, "gạo nhập của cô Ba", "Dạ.", [])
+    memory.remember_in_background(15, 3, 9, "gạo nhập của cô Ba", "Dạ.", [])
+    await memory.finish_writes(timeout=None)
 
     assert repository.added == []
     assert extractor.requests == []

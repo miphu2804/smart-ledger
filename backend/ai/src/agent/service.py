@@ -161,9 +161,6 @@ class AgentService:
         self.memory = memory
         # None runs every turn on `model`; otherwise each turn picks a tier model.
         self.llm_router = llm_router
-        # Memory writes run after the reply; held here so they are not garbage
-        # collected mid-run.
-        self.memory_writes: set[asyncio.Task] = set()
         instructions = "\n\n".join(prompt_parts)
         # Short and stable, so traces and evaluation runs can be grouped by prompt. The
         # tool definitions count too: the model reads their descriptions and schemas.
@@ -693,7 +690,14 @@ class AgentService:
         if conversation_id is None:
             self.observability.link_conversation(saved_conversation_id)
         if self.memory is not None:
-            self._remember(context, saved_conversation_id, question, answer, recalled)
+            self.memory.remember_in_background(
+                context.shop_id,
+                context.user_id,
+                saved_conversation_id,
+                question,
+                answer,
+                recalled,
+            )
         if selection is not None:
             # After the save, so a new conversation keeps its tier under its new id.
             self.llm_router.remember(saved_conversation_id, selection)
@@ -706,28 +710,6 @@ class AgentService:
             ),
             model_version=version,
         )
-
-    def _remember(
-        self,
-        context: AgentContext,
-        conversation_id: int,
-        question: str,
-        answer: str,
-        recalled: list[RecalledMemory],
-    ) -> None:
-        """Store what the turn taught without making the owner wait for it."""
-        task = asyncio.create_task(
-            self.memory.remember(
-                context.shop_id,
-                context.user_id,
-                conversation_id,
-                question,
-                answer,
-                recalled,
-            )
-        )
-        self.memory_writes.add(task)
-        task.add_done_callback(self.memory_writes.discard)
 
     @staticmethod
     def _current_time() -> str:

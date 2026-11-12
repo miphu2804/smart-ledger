@@ -132,6 +132,9 @@ class AgentMemoryService:
         # Held by the one `remember` that is writing; the lock wakes waiters in the
         # order they arrived.
         self.writing = asyncio.Lock()
+        # Writes started by remember_in_background; held here so they are not garbage
+        # collected mid-run.
+        self.writes: set[asyncio.Task] = set()
         # Prompted JSON works on every provider, including those that reject native
         # structured output.
         self.extractor = Agent(
@@ -205,6 +208,37 @@ class AgentMemoryService:
         return await asyncio.to_thread(
             self.repository.forget, shop_id, user_id, memory_id
         )
+
+    def remember_in_background(
+        self,
+        shop_id: int,
+        user_id: int,
+        conversation_id: int,
+        question: str,
+        answer: str,
+        recalled: list[RecalledMemory],
+    ) -> None:
+        """Start `remember` without making the owner wait for it."""
+        task = asyncio.create_task(
+            self.remember(shop_id, user_id, conversation_id, question, answer, recalled)
+        )
+        self.writes.add(task)
+        task.add_done_callback(self.writes.discard)
+
+    async def finish_writes(self, timeout: float | None) -> None:
+        """Wait up to `timeout` seconds for running writes, then cancel the rest.
+
+        Cancelled writes are awaited, so none is still writing when the caller closes
+        the database pool.
+        """
+        if not self.writes:
+            return
+        _, unfinished = await asyncio.wait(self.writes, timeout=timeout)
+        for task in unfinished:
+            task.cancel()
+        if unfinished:
+            logger.warning("memory writes cancelled at shutdown: %d", len(unfinished))
+            await asyncio.gather(*unfinished, return_exceptions=True)
 
     async def remember(
         self,

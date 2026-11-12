@@ -1,4 +1,3 @@
-import asyncio
 import logging
 import sys
 from contextlib import asynccontextmanager
@@ -244,17 +243,8 @@ async def lifespan(app: FastAPI):
     finally:
         # Memory writes still running would be lost on restart, and their spans
         # belong to the turn's session, so they finish before the flush.
-        memory_writes = app.state.agent.memory_writes
-        if memory_writes:
-            _, unfinished = await asyncio.wait(memory_writes, timeout=10)
-            # Cancelled and awaited, so none is still writing when the pool closes.
-            for task in unfinished:
-                task.cancel()
-            if unfinished:
-                logger.warning(
-                    "memory writes cancelled at shutdown: %d", len(unfinished)
-                )
-                await asyncio.gather(*unfinished, return_exceptions=True)
+        if memory is not None:
+            await memory.finish_writes(timeout=10)
         if decisions is not None:
             await decisions.aclose()
         await observability.flush()
