@@ -25,7 +25,7 @@ from sqlalchemy import select, update
 
 from src.app_config import app_config
 from src.infra.postgre_db_client import PostgreDBClient
-from src.main import build_memory_embedder
+from src.memory.embedder import build_embedder
 from src.memory.repository import EMBEDDING_DIMENSIONS, AgentMemory
 
 logger = logging.getLogger(__name__)
@@ -42,7 +42,12 @@ def main() -> int:
     apply = parser.parse_args().apply
     logging.basicConfig(level=logging.INFO, format="%(message)s")
 
-    embedder = build_memory_embedder()
+    embedder = build_embedder(
+        app_config.AGENT_MEMORY_EMBEDDING_PROVIDER,
+        app_config.AGENT_MEMORY_EMBEDDING_MODEL,
+        app_config.CLOUDFLARE_ACCOUNT_ID,
+        app_config.CLOUDFLARE_API_TOKEN,
+    )
     if embedder is None:
         logger.error("no embedder: check AGENT_MEMORY_EMBEDDING_* (see the log above)")
         return 1

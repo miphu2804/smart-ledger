@@ -2,14 +2,12 @@ import asyncio
 import logging
 import sys
 from contextlib import asynccontextmanager
-from pathlib import Path
 
 import httpx
 import pydantic_ai
 from fastapi import APIRouter, Depends, FastAPI, Request
 from fastapi.responses import JSONResponse
 from prometheus_fastapi_instrumentator import Instrumentator
-from pydantic_ai import Embedder
 
 from src.agent.errors import (
     ConversationNotFoundError,
@@ -30,10 +28,9 @@ from src.llm_router.bifrost_tier_classifier import BifrostTierClassifier
 from src.llm_router.service import LLMRouterService
 from src.llm_router.tier import Tier
 from src.log_formatter import LevelColorFormatter
-from src.memory.onnx_embedding import OnnxEmbeddingModel
-from src.memory.repository import EMBEDDING_DIMENSIONS, AgentMemoryRepository
+from src.memory.embedder import build_embedder
+from src.memory.repository import AgentMemoryRepository
 from src.memory.service import AgentMemoryService
-from src.memory.workers_ai_embedding import WorkersAIEmbeddingModel
 from src.observability import Observability
 from src.prompt_templates import TIER_CLASSIFIER_PROMPT, TIER_DESCRIPTIONS
 from src.providers.llm_factory import LLMFactory
@@ -161,7 +158,12 @@ def build_memory_service(
     if chat_model is None or postgres.sessions is None:
         logger.warning("memory enabled without a chat model or postgres; memory off")
         return None
-    embedder = build_memory_embedder()
+    embedder = build_embedder(
+        app_config.AGENT_MEMORY_EMBEDDING_PROVIDER,
+        app_config.AGENT_MEMORY_EMBEDDING_MODEL,
+        app_config.CLOUDFLARE_ACCOUNT_ID,
+        app_config.CLOUDFLARE_API_TOKEN,
+    )
     if embedder is None:
         return None
     return AgentMemoryService(
@@ -175,51 +177,6 @@ def build_memory_service(
         ),
         observability=observability,
     )
-
-
-def build_memory_embedder() -> Embedder | None:
-    provider = app_config.AGENT_MEMORY_EMBEDDING_PROVIDER
-    model = app_config.AGENT_MEMORY_EMBEDDING_MODEL
-    if provider == "cloudflare":
-        account_id = app_config.CLOUDFLARE_ACCOUNT_ID
-        api_token = app_config.CLOUDFLARE_API_TOKEN
-        if not account_id or not api_token:
-            logger.error("cloudflare embeddings need an account id and token")
-            return None
-        return Embedder(
-            WorkersAIEmbeddingModel(
-                model,
-                account_id=account_id,
-                api_token=api_token,
-                dimensions=EMBEDDING_DIMENSIONS,
-            )
-        )
-    if provider == "onnx":
-        try:
-            return Embedder(
-                OnnxEmbeddingModel(Path(model), dimensions=EMBEDDING_DIMENSIONS)
-            )
-        except Exception as error:
-            # Missing or unreadable model files turn memory off; chat still works.
-            logger.error("onnx embedding model at %r failed to load: %s", model, error)
-            return None
-    if provider != "sentence-transformers":
-        logger.error("unknown memory embedding provider %r; memory off", provider)
-        return None
-    try:
-        # Resolved now, so a missing `memory` dependency group shows at startup rather
-        # than on the first chat; the weights still load on first use.
-        return Embedder(
-            f"sentence-transformers:{model}",
-            settings={
-                "sentence_transformers_normalize_embeddings": True,
-                "dimensions": EMBEDDING_DIMENSIONS,
-            },
-            defer_model_check=False,
-        )
-    except ImportError:
-        logger.error("memory enabled but the memory dependency group is missing")
-        return None
 
 
 @asynccontextmanager
