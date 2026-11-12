@@ -8,8 +8,8 @@ from tests.support import (
     transcript,
 )
 
+from src.agent.screen_buttons import suggest_screen
 from src.agent.service import AgentService, Done, Reset, TextDelta
-from src.agent.tools import suggest_screen
 
 pytestmark = pytest.mark.anyio
 

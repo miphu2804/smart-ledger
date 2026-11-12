@@ -2,7 +2,6 @@ import asyncio
 import hashlib
 import json
 import logging
-import re
 import time
 import uuid
 from collections.abc import AsyncGenerator, AsyncIterator
@@ -17,7 +16,6 @@ from pydantic_ai.messages import (
     ModelResponse,
     TextPart,
     ToolCallPart,
-    ToolReturnPart,
     UserPromptPart,
 )
 from pydantic_ai.models import Model
@@ -25,6 +23,12 @@ from pydantic_ai.models import Model
 from src.agent.errors import GuardrailError
 from src.agent.guardrails import GuardrailLimits, GuardrailService
 from src.agent.repository import AgentConversationRepository
+from src.agent.screen_buttons import (
+    SCREEN_BUTTONS,
+    accepted_screens,
+    suggest_screen,
+    with_screen_buttons,
+)
 from src.agent.tool_events import (
     ToolFinished,
     ToolStarted,
@@ -36,7 +40,6 @@ from src.agent.tools import (
     build_calculation_tool,
     build_restock_tool,
     build_shop_data_tool,
-    suggest_screen,
 )
 from src.agent.turn_context import current_turn
 from src.calculation.service import CalculationService
@@ -61,11 +64,6 @@ from src.sql.repository import ShopDataRepository
 from src.utils import get_time
 
 logger = logging.getLogger(__name__)
-
-# A reply links to at most this many screens, so the buttons fit under it on a phone.
-MAX_SCREEN_BUTTONS = 2
-# The screen-button block _with_screen_buttons appends to a stored answer.
-SCREEN_BUTTONS = re.compile(r"\n*```actions\n.*?\n```\s*$", re.DOTALL)
 
 
 @dataclass(frozen=True)
@@ -605,7 +603,7 @@ class AgentService:
         )
         if returns is not None:
             messages = [*messages, returns]
-        answer = self._with_screen_buttons(answer, self._screens(messages))
+        answer = with_screen_buttons(answer, accepted_screens(messages))
         self.observability.finish_turn(answer, usage, first_text_ms)
         return answer, model_name or self.model_name
 
@@ -631,28 +629,6 @@ class AgentService:
             part.content for part in response.parts if isinstance(part, TextPart)
         ).rstrip()
         return text if self.guardrails.allows_answer(text) else ""
-
-    @staticmethod
-    def _screens(messages: list[ModelMessage]) -> list[str]:
-        """The screens suggest_screen accepted this run, in order, without repeats."""
-        screens = []
-        for message in messages:
-            for part in message.parts:
-                if (
-                    isinstance(part, ToolReturnPart)
-                    and part.tool_name == suggest_screen.__name__
-                    and part.metadata["screen"] not in screens
-                ):
-                    screens.append(part.metadata["screen"])
-        return screens[:MAX_SCREEN_BUTTONS]
-
-    @staticmethod
-    def _with_screen_buttons(answer: str, screens: list[str]) -> str:
-        # Stored with the answer, so the buttons come back with the conversation;
-        # the app renders the block as buttons, like a ```ui block as charts and cards.
-        if not screens:
-            return answer
-        return f"{answer}\n\n```actions\n{json.dumps(screens)}\n```"
 
     async def _save_turn(
         self,
