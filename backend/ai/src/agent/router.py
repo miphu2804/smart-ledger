@@ -34,7 +34,6 @@ from src.agent.service import (
     AgentChatResult,
     AgentService,
     AgentStreamEvent,
-    Done,
     MemoryRecalled,
     Reset,
     TextDelta,
@@ -97,13 +96,7 @@ async def agent_chat(
     payload: AgentChatRequest, agent: AgentServiceDep, turns: TurnsDep
 ):
     if payload.turn_id is not None:
-        turns = _require_turns(turns)
-        created, _, execution = await turns.admit(payload)
-        result = (
-            await turns.chat(agent, payload, execution)
-            if created
-            else await turns.replay(execution)
-        )
+        result = await _require_turns(turns).chat_turn(payload)
         if result is None:
             return _pending(payload)
         return JSONResponse(
@@ -135,19 +128,9 @@ async def agent_chat_stream(
     payload: AgentChatRequest, agent: AgentServiceDep, turns: TurnsDep
 ):
     if payload.turn_id is not None:
-        turns = _require_turns(turns)
-        created, _, execution = await turns.admit(payload)
-        if created:
-            events = await turns.stream(agent, payload, execution)
-        else:
-            result = await turns.replay(execution)
-            if result is None:
-                return _pending(payload)
-
-            async def replay():
-                yield Done(result)
-
-            events = replay()
+        events = await _require_turns(turns).stream_turn(payload)
+        if events is None:
+            return _pending(payload)
         return EventSourceResponse(
             _sse_events(events, str(payload.turn_id)),
             headers={"Cache-Control": "no-store"},

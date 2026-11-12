@@ -9,13 +9,19 @@ from src.agent.errors import (
     TurnProtocolError,
 )
 from src.agent.receipts import AgentTurnRepository
-from src.agent.service import AgentChatResult, Done
+from src.agent.service import AgentChatResult, AgentService, Done
 from src.agent.turn_context import TurnExecution, current_turn
 
 
 class AgentTurnService:
-    def __init__(self, repository: AgentTurnRepository, enabled: bool = False):
+    def __init__(
+        self,
+        repository: AgentTurnRepository,
+        agent: AgentService,
+        enabled: bool = False,
+    ):
         self.repository = repository
+        self.agent = agent
         self.enabled = enabled
 
     def require_enabled(self):
@@ -42,6 +48,30 @@ class AgentTurnService:
             fingerprint,
         )
         return created, row, execution
+
+    async def chat_turn(self, payload) -> AgentChatResult | None:
+        """Run a receipted turn once; a retry replays its outcome.
+
+        Returns None while another execution of the turn is still running.
+        """
+        created, _, execution = await self.admit(payload)
+        if created:
+            return await self.chat(payload, execution)
+        return await self.replay(execution)
+
+    async def stream_turn(self, payload) -> AsyncIterator | None:
+        """The streaming form of `chat_turn`: a replay streams only its `Done`."""
+        created, _, execution = await self.admit(payload)
+        if created:
+            return await self.stream(payload, execution)
+        result = await self.replay(execution)
+        if result is None:
+            return None
+        return self._replayed(result)
+
+    @staticmethod
+    async def _replayed(result: AgentChatResult) -> AsyncIterator:
+        yield Done(result)
 
     async def read(self, turn, user, shop):
         self.require_enabled()
@@ -93,10 +123,10 @@ class AgentTurnService:
             raise error
         raise TurnProtocolError("ai_unavailable", 503) from None
 
-    async def chat(self, agent, payload, execution):
+    async def chat(self, payload, execution):
         token = current_turn.set(execution)
         try:
-            return await agent.chat(
+            return await self.agent.chat(
                 user_id=payload.user_id,
                 shop_id=payload.shop_id,
                 message=payload.message,
@@ -114,10 +144,10 @@ class AgentTurnService:
         finally:
             current_turn.reset(token)
 
-    async def stream(self, agent, payload, execution):
+    async def stream(self, payload, execution):
         token = current_turn.set(execution)
         try:
-            events = await agent.stream_chat(
+            events = await self.agent.stream_chat(
                 user_id=payload.user_id,
                 shop_id=payload.shop_id,
                 message=payload.message,
