@@ -5,6 +5,7 @@ from collections.abc import Iterator
 import psycopg
 import pytest
 from psycopg import sql
+from sqlalchemy import event
 from sqlalchemy import inspect as sa_inspect
 from sqlalchemy.engine import make_url
 from tests.support import REPO_ROOT, apply_ai_baseline, apply_core_migrations
@@ -526,6 +527,66 @@ def test_similar_finds_close_live_memories_without_recording_a_use(
     assert admin.execute(
         "SELECT count(*) FROM agent_memories WHERE last_used_at IS NOT NULL"
     ).fetchone() == (0,)
+
+
+def test_similar_checks_every_embedding_in_one_statement(memory_db) -> None:
+    _, postgres, ids = memory_db
+    memories = AgentMemoryRepository(postgres)
+    conversation = new_conversation(postgres, ids["user_a"], ids["shop_a"])
+    memories.add(
+        ids["shop_a"],
+        ids["user_a"],
+        conversation,
+        [
+            memory("gạo cô Ba", 1, 0.2),
+            memory("gạo chú Tư", 1, 0),
+            memory("nghỉ chủ nhật", 0.2, 1),
+            memory("đóng cửa 22h", 0, 1),
+        ],
+    )
+    statements: list[str] = []
+    event.listen(
+        postgres.engine,
+        "before_cursor_execute",
+        lambda connection, cursor, statement, *rest: statements.append(statement),
+    )
+
+    found = memories.similar(
+        ids["shop_a"], ids["user_a"], [vector(1, 0), vector(0, 1)], 0.7, 1, []
+    )
+
+    # The nearest one of each embedding, in the embeddings' order.
+    assert [item.content for item in found] == ["gạo chú Tư", "đóng cửa 22h"]
+    assert len(statements) == 1
+
+
+def test_similar_is_exact_when_other_owners_hold_closer_memories(memory_db) -> None:
+    admin, postgres, ids = memory_db
+    memories = AgentMemoryRepository(postgres)
+    conversation_a = new_conversation(postgres, ids["user_a"], ids["shop_a"])
+    conversation_b = new_conversation(postgres, ids["user_b"], ids["shop_b"])
+    # With one owner holding a large share of the rows, PostgreSQL orders by distance
+    # through the HNSW index, which hands back its 40 nearest of every owner: here all
+    # shop B's, so a search ordered in SQL finds none of shop A's.
+    insert = (
+        "INSERT INTO agent_memories (shop_id, user_id, source_conversation_id,"
+        " memory_type, content, embedding)"
+        " SELECT %s, %s, %s, 'semantic', 'gạo ' || number, %s::vector"
+        " FROM generate_series(1, %s) AS number"
+    )
+    admin.execute(
+        insert,
+        (ids["shop_b"], ids["user_b"], conversation_b, str(vector(1, 0)), 600),
+    )
+    admin.execute(
+        insert,
+        (ids["shop_a"], ids["user_a"], conversation_a, str(vector(1, 0.2)), 400),
+    )
+    admin.execute("ANALYZE agent_memories")
+
+    found = memories.similar(ids["shop_a"], ids["user_a"], [vector(1, 0)], 0.7, 3, [])
+
+    assert len(found) == 3
 
 
 def test_a_often_used_memory_does_not_outrank_a_closer_one(memory_db) -> None:

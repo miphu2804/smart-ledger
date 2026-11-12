@@ -1,3 +1,12 @@
+### 2026-11-12 — Make agent memory writes exact and ordered
+
+| Area | Change |
+|---|---|
+| AI | • `AgentMemoryRepository.similar` reads the owner's live memories in one statement and ranks them in the service, so reconcile no longer loses its candidates to the HNSW index when one owner holds a large share of the rows<br>• `AgentMemoryService.remember` writes one exchange at a time in turn order, so a follow-up turn is reconciled against the facts the turn before it stored |
+| Docs | • ADR-0002 and the AI runtime reference record both behaviours and the shutdown trade-off |
+
+Check: AI Ruff lint and format passed; pytest passed 630 tests with 14 skipped, with the memory and conversation PostgreSQL suites on a disposable local database. The three new tests failed before the change. The memory recall evaluation is unchanged (recall 0.75 before and after on the ONNX embedder, below its embeddinggemma bounds before the change too). A local `agent_chat` run, each of the 23 questions once on `gpt-6-luna`, scored `correct` 1.00 and `recalled_expected` 1.00; its gate failed only on `answer_faithfulness` 3.00 against 4.00, as the 2026-11-04 run of the same suite did at 2.96. Commit: the commit that adds this entry.
+
 ### 2026-11-09 — Keep SePay fulfillment scans fair under retries
 
 | Area | Change |

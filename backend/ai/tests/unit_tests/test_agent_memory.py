@@ -745,3 +745,26 @@ async def test_recall_does_not_record_use() -> None:
     await memory_service(ScriptedModel(), repository).with_memories(15, 3, "gạo?")
 
     assert repository.used == []
+
+
+async def test_memory_writes_run_one_at_a_time_in_arrival_order() -> None:
+    service = memory_service(ScriptedModel(facts()))
+    release = asyncio.Event()
+    steps: list[str] = []
+
+    async def store(shop_id, user_id, conversation_id, *exchange) -> None:
+        steps.append(f"start {conversation_id}")
+        await release.wait()
+        steps.append(f"end {conversation_id}")
+
+    service._store = store
+    writes = [
+        asyncio.create_task(service.remember(15, 3, conversation_id, "q", "a", []))
+        for conversation_id in (1, 2)
+    ]
+    # Long enough for the second write to reach its store step if nothing held it.
+    await asyncio.sleep(0.05)
+    release.set()
+    await asyncio.gather(*writes)
+
+    assert steps == ["start 1", "end 1", "start 2", "end 2"]

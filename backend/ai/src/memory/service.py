@@ -129,6 +129,9 @@ class AgentMemoryService:
         # cannot crowd the prompt.
         self.preference_limit = preference_limit
         self.query_vectors: OrderedDict[str, list[float]] = OrderedDict()
+        # Held by the one `remember` that is writing; the lock wakes waiters in the
+        # order they arrived.
+        self.writing = asyncio.Lock()
         # Prompted JSON works on every provider, including those that reject native
         # structured output.
         self.extractor = Agent(
@@ -219,20 +222,29 @@ class AgentMemoryService:
         chat. Does nothing for an owner who switched memory off. `recalled` are the
         memories the turn used: their use is recorded here, off the recall path, and
         the model skips them and may mark one a new fact replaces.
+
+        Exchanges are written one at a time in the order their turns ended. An owner's
+        follow-up is then checked against the facts the turn before it stored, where
+        two writes side by side each missed the other's and kept the same fact twice,
+        and a burst of turns runs one write's model calls beside live chat, not one
+        set per turn.
         """
-        if recalled:
-            await self._mark_used(shop_id, user_id, recalled)
-        try:
-            if not await self.memory_enabled(shop_id, user_id):
+        async with self.writing:
+            if recalled:
+                await self._mark_used(shop_id, user_id, recalled)
+            try:
+                if not await self.memory_enabled(shop_id, user_id):
+                    return
+            except Exception as error:
+                logger.warning(
+                    "memory not stored: shop=%s (%s)", shop_id, type(error).__name__
+                )
+                logger.debug("memory not stored: shop=%s", shop_id, exc_info=True)
                 return
-        except Exception as error:
-            logger.warning(
-                "memory not stored: shop=%s (%s)", shop_id, type(error).__name__
+            await self._store(
+                shop_id, user_id, conversation_id, question, answer, recalled
             )
-            logger.debug("memory not stored: shop=%s", shop_id, exc_info=True)
-            return
-        await self._store(shop_id, user_id, conversation_id, question, answer, recalled)
-        await self._summarize(shop_id, user_id)
+            await self._summarize(shop_id, user_id)
 
     async def _mark_used(
         self, shop_id: int, user_id: int, recalled: list[RecalledMemory]
