@@ -1,4 +1,5 @@
 import json
+from contextlib import suppress
 from datetime import datetime
 
 from sqlalchemy import (
@@ -244,12 +245,11 @@ class AgentConversationRepository:
             model_version,
         )
         # Do not cache replay answers; deletion must make the result unavailable.
-        try:
+        # Cache availability cannot undo committed receipt/answer evidence.
+        with suppress(Exception):
             self.cache.delete(
                 self._history_key(cid, execution.user_id, execution.shop_id)
             )
-        except Exception:
-            pass  # Cache availability cannot undo committed receipt/answer evidence.
         return cid, mid
 
     def rename_conversation(
