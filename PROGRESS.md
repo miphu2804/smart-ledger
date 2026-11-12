@@ -1,3 +1,12 @@
+### 2026-11-13 — Remove the screen buttons from chat answers
+
+| Area | Change |
+|---|---|
+| AI | • The `suggest_screen` tool, its prompt paragraph and the ```` ```actions ```` block are gone, by owner decision; the app guide still tells the owner where each screen is<br>• History replay still strips the block from answers stored before the change, so the model never reads one back<br>• The evaluators no longer allow or look for `suggest_screen` and the block |
+| Docs | • The chat contract, AI README and runtime reference, the walkthrough diagrams, the AgentTurn statechart, `AC-127` and `OQ-004` drop the button |
+
+Check: AI Ruff lint and format passed; pytest passed 622 tests with 13 live-model skips on disposable PostgreSQL and Redis. OpenAPI is unchanged; `prompt_version` changes for all 32 capability combinations, so traces and evaluation runs start a new prompt group. TLC re-checked AgentTurn with 340 distinct states and no invariant errors. On the local stack, two live chat turns asking where a screen is answered without a block, the second after a block was written into the stored first answer. Commit: the commits on `feat/remove-screen-buttons`.
+
 ### 2026-11-13 — Restructure the AI service by responsibility
 
 | Area | Change |
@@ -187,12 +196,3 @@ Check: internal links and anchors in 48 changed Markdown files resolve; `git dif
 | Docs and tooling | • The catalog `BIGINT` test now reads the AI draft reference instead of the API contract, which keeps only implemented endpoints<br>• `scripts/secrets/credential_map.py` writes to `~/.smartledger/credential-map/` outside Git and `.gitignore` blocks HTML snapshots in `docs/development/credential-map/`<br>• Restored original document authors, defined `author` as the writer, added a screenshot capture manifest, embedded the logical architecture Mermaid in the diagram guide and corrected AI logging, session ID, draft result and expense-status statements found by a source check |
 
 Check: AI `uv run pytest` 541 passed, 80 skipped; internal links and anchors in 48 changed Markdown files resolve; `git diff --check` passed. The Mermaid render and the credential-map script run against Dopbase were not verified. Commit: the commit that adds this entry.
-
-### 2026-11-07 — Source-verified documentation and private operations boundary (#555)
-
-| Area | Change |
-|---|---|
-| Docs | • Reconciled three independent fresh-context reviews against staging `a2766ee`; corrected reports, ADMIN contracts, AI authorization/privacy/persistence and current schema boundaries<br>• Removed unimplemented API/schema plans from current references; separated AI architecture from runtime detail<br>• Removed published demo access values, environment credential snapshots and deployment/network diagrams; private infrastructure and access procedures now point to the owner's external knowledge base, while privacy safeguards remain |
-
-Check: 72 Markdown documents and 715 internal links passed path/anchor/index/frontmatter checks; DBML matches 25 Core and 4 AI tables. All 14 walkthrough diagrams and the logical architecture rendered; the three changed walkthrough exports were updated. AI auth/observability tests: 37 passed. TypeScript token comparison confirms all three source-file edits are comment-only. BRD and nine ADR statuses are unchanged; PRD changes only diagram navigation. Live environments, private knowledge-base completeness, full secret scanning and Git-history removal were not verified or performed. Commit: the commit that adds this entry.
-

@@ -30,7 +30,6 @@ RecallEmpty == Go("recall", "writing") /\ memoryOn /\ hasMemory /\ embedded' = T
 RecallSkipped == Go("recall", "writing") /\ ~(memoryOn /\ hasMemory) /\ modelCalled' = TRUE /\ UNCHANGED <<conv, memoryOn, hasMemory, embedded, saved, durable, receipt>>
 CallTools == Go("writing", "tools") /\ UNCHANGED <<conv, memoryOn, hasMemory, embedded, modelCalled, saved, durable, receipt>>
 ToolsReturn == Go("tools", "writing") /\ UNCHANGED <<conv, memoryOn, hasMemory, embedded, modelCalled, saved, durable, receipt>>
-ButtonsOnly == Go("tools", "ready") /\ UNCHANGED <<conv, memoryOn, hasMemory, embedded, modelCalled, saved, durable, receipt>>
 ScreenRejects == Go("writing", "retrying") /\ UNCHANGED <<conv, memoryOn, hasMemory, embedded, modelCalled, saved, durable, receipt>>
 WriteAgain == Go("retrying", "writing") /\ UNCHANGED <<conv, memoryOn, hasMemory, embedded, modelCalled, saved, durable, receipt>>
 ScreenPasses == Go("writing", "ready") /\ UNCHANGED <<conv, memoryOn, hasMemory, embedded, modelCalled, saved, durable, receipt>>
@@ -44,7 +43,7 @@ Done == phase \in Ends /\ UNCHANGED vars
 Next ==
   NoModel \/ HistoryHit \/ HistoryFromDb \/ NotOwner \/ TooLong \/ InputOk
   \/ MemoriesFound \/ RecallEmpty \/ RecallSkipped
-  \/ CallTools \/ ToolsReturn \/ ButtonsOnly \/ ScreenRejects \/ WriteAgain \/ ScreenPasses
+  \/ CallTools \/ ToolsReturn \/ ScreenRejects \/ WriteAgain \/ ScreenPasses
   \/ RunFails \/ SendRest \/ SaveFails \/ Saved \/ Cancel \/ Done
 
 \* A refused turn never reaches the model.

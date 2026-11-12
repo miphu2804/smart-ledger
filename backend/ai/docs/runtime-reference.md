@@ -84,7 +84,7 @@ Deterministic checks run around each turn:
 
 Input redaction masks keys, tokens, private keys, JWTs, IBANs, Luhn-valid cards and emails as `[redacted:<kind>]`; phone numbers are not masked. The answer screen sends an answer back to the model when it shows an `ai_read` view name, the shop scope setting or its functions, an `Error[` tool code, or a `SELECT … FROM` query; it is a text filter on the answer, so other SQL text such as `SELECT 1` or an `UPDATE` statement passes it, and it does not govern what SQL the tools run. Limits are implementation defaults, not approved product requirements. Core maps other AI failures to `503 ai_unavailable`.
 
-The final answer may contain a generated ```` ```actions ```` block only for up to two distinct `suggest_screen` buttons from the closed set `sales`, `voice_order`, `orders`, `products`, `debts`, `expenses`, `reports`. The service strips that block before replaying history.
+The agent adds no screen buttons; the owner removed them on 2026-11-13. Answers stored before then may end with an ```` ```actions ```` block, which the service strips before replaying history.
 
 ## Calculation and sandbox
 

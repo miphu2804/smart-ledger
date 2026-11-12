@@ -119,6 +119,34 @@ async def test_chat_adds_scoped_conversation_history_to_model_context() -> None:
     ]
 
 
+async def test_history_replays_old_answers_without_their_screen_buttons() -> None:
+    # Answers saved while chat had screen buttons still end with this block.
+    stored = 'Còn nợ.\n\n```actions\n["debts"]\n```'
+    model = ScriptedModel("ok")
+    conversations = FakeConversationRepository(
+        [
+            {"message_id": 1, "role": "USER", "content": "ai còn nợ?"},
+            {"message_id": 2, "role": "ASSISTANT", "content": stored},
+        ]
+    )
+    agent = AgentService(model, conversations, guardrail_limits=TEST_GUARDRAIL_LIMITS)
+
+    await agent.chat(user_id=3, shop_id=15, conversation_id=41, message="m")
+
+    assert ("assistant", "Còn nợ.") in transcript(model.requests[0][0])
+
+
+async def test_the_agent_offers_no_screen_button_tool() -> None:
+    model = ScriptedModel("ok")
+    agent = AgentService(
+        model, FakeConversationRepository(), guardrail_limits=TEST_GUARDRAIL_LIMITS
+    )
+
+    await agent.chat(user_id=3, shop_id=15, message="where are my debts?")
+
+    assert "suggest_screen" not in model.tool_names()
+
+
 async def test_chat_does_not_save_exchange_when_model_fails() -> None:
     conversations = FakeConversationRepository()
     agent = AgentService(
@@ -496,7 +524,7 @@ async def test_stream_chat_runs_every_step_on_the_model_of_its_tier() -> None:
     conversations = FakeConversationRepository()
     agent, models = tiered_agent(Tier.MEDIUM, conversations)
     models[Tier.MEDIUM].responses = [
-        tool_call("suggest_screen", {"screen": "orders"}),
+        tool_call("unknown_tool", {}),
         "ok",
     ]
 
