@@ -53,9 +53,8 @@ class AppConfig(BaseSettings):
     SQL_TIMEOUT_MS: int = Field(default=3000, gt=0)
     SQL_ROW_LIMIT: int = Field(default=100, gt=0)
 
-    # qdrant and litellm: kept for planned integrations, no feature reads them yet
+    # qdrant: kept for a planned integration, no feature reads it yet
     QDRANT_URL: str | None = None
-    LITELLM_URL: str | None = None
 
     # honeyhive: Pydantic AI traces with the redacted message content
     # (src/observability.py); an unset key or a source other than production sends
