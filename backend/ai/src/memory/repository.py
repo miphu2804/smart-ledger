@@ -243,37 +243,45 @@ class AgentMemoryRepository:
         Up to `limit` per embedding, nearest first, minus `skipped`, each memory once.
         Unlike `search` this is no recall: it records no use.
         """
+        # One scan of the owner's live memories with a distance per embedding, ranked
+        # here as in `search`. Ordered by distance in SQL, PostgreSQL takes the HNSW
+        # index's 40 nearest of all owners once an owner holds a large share of the
+        # rows and filters afterwards, which found nothing for an owner whose
+        # neighbours' memories were closer; a statement per embedding also cost a
+        # round trip each.
+        distances = [
+            AgentMemory.embedding.cosine_distance(embedding).label(f"distance_{number}")
+            for number, embedding in enumerate(embeddings)
+        ]
+        with self.postgres.read_session() as session:
+            rows = session.execute(
+                select(
+                    AgentMemory.id,
+                    AgentMemory.memory_type,
+                    AgentMemory.content,
+                    AgentMemory.importance,
+                    AgentMemory.created_at,
+                    *distances,
+                ).where(*self._live(shop_id, user_id), AgentMemory.id.not_in(skipped))
+            ).all()
         found: dict[int, StoredMemory] = {}
-        with self.postgres.session() as session:
-            for embedding in embeddings:
-                distance = AgentMemory.embedding.cosine_distance(embedding)
-                rows = session.execute(
-                    select(
-                        AgentMemory.id,
-                        AgentMemory.memory_type,
-                        AgentMemory.content,
-                        AgentMemory.importance,
-                        AgentMemory.created_at,
-                    )
-                    .where(
-                        *self._live(shop_id, user_id),
-                        AgentMemory.id.not_in(skipped),
-                        distance <= 1 - min_relevance,
-                    )
-                    .order_by(distance)
-                    .limit(limit)
-                ).all()
-                for row in rows:
-                    found.setdefault(
+        for distance in distances:
+            nearest = sorted(
+                (getattr(row, distance.name), row.id, row)
+                for row in rows
+                if getattr(row, distance.name) <= 1 - min_relevance
+            )
+            for _, _, row in nearest[:limit]:
+                found.setdefault(
+                    row.id,
+                    StoredMemory(
                         row.id,
-                        StoredMemory(
-                            row.id,
-                            row.memory_type,
-                            row.content,
-                            row.importance,
-                            row.created_at,
-                        ),
-                    )
+                        row.memory_type,
+                        row.content,
+                        row.importance,
+                        row.created_at,
+                    ),
+                )
         return list(found.values())
 
     def add(
