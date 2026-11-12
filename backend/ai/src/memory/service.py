@@ -21,6 +21,7 @@ from pydantic import BaseModel, Field
 from pydantic_ai import Agent, Embedder, PromptedOutput
 from pydantic_ai.models import Model
 
+from src.llm.session_settings import session_settings
 from src.memory.fact_rules import (
     MemoryDecision,
     MemoryFact,
@@ -45,7 +46,6 @@ from src.prompt_templates import (
     MEMORY_SUMMARY_INPUT,
     MEMORY_SUMMARY_PROMPT,
 )
-from src.providers.session_settings import session_settings
 from src.utils import get_time
 
 # A failure here can carry the extractor model's output, which names customers, so

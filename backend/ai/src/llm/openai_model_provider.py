@@ -26,7 +26,7 @@ class OpenAIModelProvider:
         self.model_class = model_class
         # Bifrost reads the key from `x-bf-vk` for every virtual key, but from the
         # Bearer header only for keys prefixed `sk-bf-`. The header sits on the client
-        # because a run's `extra_headers` (src/providers/session_settings.py) replace
+        # because a run's `extra_headers` (src/llm/session_settings.py) replace
         # the model's whole.
         client = AsyncOpenAI(
             api_key=api_key, base_url=base_url, default_headers={"x-bf-vk": api_key}

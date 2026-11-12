@@ -3,8 +3,8 @@ import asyncio
 import pytest
 from pydantic_ai.models.test import TestModel
 
-from src.llm_router.service import LLMRouterService, Mechanism
-from src.llm_router.tier import Tier
+from src.llm.model_router import LLMRouterService, Mechanism
+from src.llm.tier import Tier
 
 pytestmark = pytest.mark.anyio
 

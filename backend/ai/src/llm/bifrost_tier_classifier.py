@@ -1,6 +1,6 @@
 import httpx
 
-from src.llm_router.tier import Tier
+from src.llm.tier import Tier
 from src.observability import Observability
 
 

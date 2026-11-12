@@ -5,8 +5,8 @@ from pydantic import BaseModel, Field
 from pydantic_ai import Agent
 
 from src.app_config import app_config
-from src.providers.llm_factory import LLMFactory
-from src.providers.session_settings import session_settings
+from src.llm.factory import LLMFactory
+from src.llm.session_settings import session_settings
 
 RATING_INSTRUCTIONS = (
     "Please act as an impartial judge. Your evaluation should consider the mentioned "

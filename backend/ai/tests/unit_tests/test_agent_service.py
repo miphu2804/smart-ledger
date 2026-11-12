@@ -20,8 +20,8 @@ from src.agent.service import (
     TextDelta,
 )
 from src.agent.tool_events import ToolFinished, ToolStarted
-from src.llm_router.service import LLMRouterService
-from src.llm_router.tier import Tier
+from src.llm.model_router import LLMRouterService
+from src.llm.tier import Tier
 from src.prompt_templates import APP_GUIDE_PROMPT, SHOP_AGENT_SYSTEM_PROMPT
 from src.utils import get_time
 

@@ -10,7 +10,7 @@ from pydantic_ai.models.openai import (
 )
 
 from src.app_config import AppConfig
-from src.providers.openai_model_provider import OpenAIModelProvider
+from src.llm.openai_model_provider import OpenAIModelProvider
 
 logger = logging.getLogger(__name__)
 

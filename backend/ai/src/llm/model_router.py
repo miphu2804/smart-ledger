@@ -8,7 +8,7 @@ from typing import Protocol
 
 from pydantic_ai.models import Model
 
-from src.llm_router.tier import Tier
+from src.llm.tier import Tier
 
 logger = logging.getLogger(__name__)
 

@@ -43,7 +43,8 @@ from src.agent.tools import (
 )
 from src.agent.turn_context import TurnExecution, current_turn
 from src.calculation.service import CalculationService
-from src.llm_router.service import LLMRouterService, ModelSelection
+from src.llm.model_router import LLMRouterService, ModelSelection
+from src.llm.session_settings import session_settings
 from src.memory.repository import RecalledMemory
 from src.memory.service import AgentMemoryService
 from src.observability import Observability
@@ -57,7 +58,6 @@ from src.prompt_templates import (
     SHOP_AGENT_SYSTEM_PROMPT,
     SQL_AGENT_PROMPT,
 )
-from src.providers.session_settings import session_settings
 from src.restock.service import RestockService
 from src.sandbox.wrapper import Sandbox
 from src.sql.repository import ShopDataRepository

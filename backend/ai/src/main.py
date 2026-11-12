@@ -23,9 +23,10 @@ from src.app_config import app_config
 from src.calculation.service import CalculationLimits, CalculationService
 from src.infra.postgre_db_client import PostgreDBClient
 from src.infra.redis_client import RedisClient
-from src.llm_router.bifrost_tier_classifier import BifrostTierClassifier
-from src.llm_router.service import LLMRouterService
-from src.llm_router.tier import Tier
+from src.llm.bifrost_tier_classifier import BifrostTierClassifier
+from src.llm.factory import LLMFactory
+from src.llm.model_router import LLMRouterService
+from src.llm.tier import Tier
 from src.log_formatter import LevelColorFormatter
 from src.memory.embedder import build_embedder
 from src.memory.repository import AgentMemoryRepository
@@ -33,7 +34,6 @@ from src.memory.router import router as memory_router
 from src.memory.service import AgentMemoryService
 from src.observability import Observability
 from src.prompt_templates import TIER_CLASSIFIER_PROMPT, TIER_DESCRIPTIONS
-from src.providers.llm_factory import LLMFactory
 from src.restock.service import RestockService
 from src.sandbox.wrapper import Sandbox, SandboxLimits
 from src.security import require_internal_token
