@@ -33,6 +33,7 @@ jobs:
   # skips the backend. A skipped job counts as passed for required checks and for the `gate` of
   # mobile-release.yml. Filtering here, not with `on.paths`, keeps every check reporting a result.
   # A change to this workflow, cd.yml, select-runner.yml or scripts/ci/ runs everything; a change to a deploy file runs its area.
+  # The ai_image output is not an area: CD deploys AI only when an input of its image changed, not on docs or tests alone.
   changes:
     needs: [select-runner]
     runs-on: ${{ fromJSON(needs.select-runner.outputs.runs_on) }}
@@ -46,6 +47,7 @@ jobs:
       containers: ${{ steps.filter.outputs.containers }}
       shell: ${{ steps.filter.outputs.shell }}
       docs: ${{ steps.filter.outputs.docs }}
+      ai_image: ${{ steps.filter.outputs.ai_image }}
     steps:
       # The whole history, so changes.sh can diff against the base commit.
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -299,7 +301,7 @@ jobs:
           # A workflow_dispatch from GITHUB_TOKEN starts a new run, unlike most events it triggers.
           GH_TOKEN: ${{ github.token }}
           RERUN: ${{ github.run_attempt > 1 }}
-          CHANGED_AI: ${{ needs.changes.outputs.ai }}
+          CHANGED_AI_IMAGE: ${{ needs.changes.outputs.ai_image }}
           CHANGED_CORE: ${{ needs.changes.outputs.core }}
           CHANGED_MOBILE: ${{ needs.changes.outputs.mobile }}
           CHANGED_LANDING: ${{ needs.changes.outputs.landing }}

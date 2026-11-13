@@ -69,6 +69,7 @@ drawio -x -f svg -e --embed-svg-images --svg-theme light -b ffffff -o docs/archi
 ## Path filtering
 
 Area checks are selected by changed paths in [`scripts/ci/changes.sh`](../../scripts/ci/changes.sh), not by workflow `on.paths`, so every check still reports a result. Read the definitions when changing dependencies or shared files; do not infer coverage from the PR's overall green status. The required-check policy is in [CONTRIBUTING](../../CONTRIBUTING.md#required-checks-and-deployment). The `docs` area (`*.md`, `.okf/`, `scripts/docs/`) runs the `docs` job, which runs `python3 scripts/docs/okf_sync.py --check` to fail when the [`.okf/` metadata bundle](../README.md#conventions) drifts from the documents, a human document starts with frontmatter or a relative link breaks.
+After a push, CD deploys AI only when the extra `ai_image` flag is true: a change to the shared CI files, `deploy-backend.yml`, `supabase/` or an input of the AI image (`backend/ai/src/`, `pyproject.toml`, `uv.lock`, `Dockerfile`, `.dockerignore`), so a change to only AI docs, tests or evaluation runs the `ai` tests without redeploying; a re-run still deploys every passing area.
 
 ## Service variables
 
