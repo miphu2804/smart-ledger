@@ -9,9 +9,9 @@ ENV UV_COMPILE_BYTECODE=1 \
     UV_PYTHON_DOWNLOADS=never
 
 COPY pyproject.toml uv.lock ./
-COPY src ./src
 
-# The runtime copies src directly, so avoid building the local package and its hatchling backend.
+# The runtime copies src directly, so avoid building the local package and its hatchling backend. Without src here,
+# a source change keeps this layer cached.
 RUN uv sync --frozen --no-dev --no-install-project
 
 FROM python:3.11-slim-bookworm AS runtime
@@ -34,7 +34,7 @@ ENV PATH="/app/.venv/bin:$PATH" \
     PYTHONUNBUFFERED=1
 
 COPY --from=builder --chown=app:app /app/.venv /app/.venv
-COPY --from=builder --chown=app:app /app/src /app/src
+COPY --chown=app:app src /app/src
 
 USER app
 
