@@ -38,6 +38,24 @@ class MemoryDecision(BaseModel):
     replaces: int | None = None
 
 
+class MemoryFacts(BaseModel):
+    """Structured output schema the extraction model must return."""
+
+    facts: list[MemoryFact] = Field(max_length=5)
+
+
+class MemorySummary(BaseModel):
+    """Structured output schema of a summary: never empty, so nothing is lost."""
+
+    facts: list[MemoryFact] = Field(min_length=1, max_length=5)
+
+
+class MemoryDecisions(BaseModel):
+    """Structured output schema the reconcile model must return."""
+
+    decisions: list[MemoryDecision] = Field(max_length=5)
+
+
 def without_phone_numbers(facts: list[MemoryFact]) -> list[MemoryFact]:
     """`facts` without those that hold a phone number."""
     return [fact for fact in facts if not PHONE_NUMBER.search(fact.content)]

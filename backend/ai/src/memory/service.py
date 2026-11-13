@@ -17,14 +17,15 @@ import logging
 import uuid
 from collections import OrderedDict
 
-from pydantic import BaseModel, Field
 from pydantic_ai import Agent, Embedder, PromptedOutput
 from pydantic_ai.models import Model
 
 from src.llm.session_settings import session_settings
 from src.memory.fact_rules import (
-    MemoryDecision,
+    MemoryDecisions,
     MemoryFact,
+    MemoryFacts,
+    MemorySummary,
     reconciled,
     screened_extraction,
     without_phone_numbers,
@@ -51,24 +52,6 @@ from src.utils import get_time
 # A failure here can carry the extractor model's output, which names customers, so
 # WARNING keeps the error type and the traceback goes to DEBUG.
 logger = logging.getLogger(__name__)
-
-
-class MemoryFacts(BaseModel):
-    """Structured output schema the extraction model must return."""
-
-    facts: list[MemoryFact] = Field(max_length=5)
-
-
-class MemorySummary(BaseModel):
-    """Structured output schema of a summary: never empty, so nothing is lost."""
-
-    facts: list[MemoryFact] = Field(min_length=1, max_length=5)
-
-
-class MemoryDecisions(BaseModel):
-    """Structured output schema the reconcile model must return."""
-
-    decisions: list[MemoryDecision] = Field(max_length=5)
 
 
 class AgentMemoryService:
