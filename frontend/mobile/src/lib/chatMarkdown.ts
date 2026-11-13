@@ -4,12 +4,11 @@
  * Chỉ nhận tập markdown mà prompt của AI cho phép (backend/ai/src/prompt_templates/shop_agent.py):
  * `**đậm**`, `` `mã` ``, tiêu đề `#`, danh sách `-`/`1.`, bảng `|`, khối ```, khối ```chart (JSON) và
  * khối ```ui (thẻ hiển thị, xem `chatUi.ts`).
- * Khối ```actions do AI service tự gắn cuối câu trả lời (backend/ai/src/agent/service.py), không phải model.
+ * Khối ```actions ở cuối câu đã lưu trước 2026-11-13 (khi chat còn nút mở màn hình) bị bỏ, không hiện.
  * Ký hiệu khác giữ nguyên chữ. Khi `streaming` là true, phần đuôi chưa trọn được tự đóng hoặc giữ lại
  * để bong bóng không nháy ký hiệu thô rồi đổi dạng khi chữ tới đủ.
  */
 
-import { SCREEN_LINKS, type AppScreen } from './chatScreens.ts';
 import { readUi, type UiNode } from './chatUi.ts';
 
 export type Inline = { text: string; bold?: boolean; code?: boolean };
@@ -23,8 +22,6 @@ export type ChartSpec = {
   data: ChartPoint[];
 };
 
-export { SCREEN_LINKS, type AppScreen } from './chatScreens.ts';
-
 export type ChatBlock =
   | { kind: 'paragraph' | 'heading' | 'bullet'; inlines: Inline[] }
   | { kind: 'ordered'; marker: string; inlines: Inline[] }
@@ -33,7 +30,6 @@ export type ChatBlock =
   | { kind: 'table'; header: Inline[][]; rows: Inline[][][] }
   | { kind: 'chart'; spec: ChartSpec }
   | { kind: 'ui'; node: UiNode }
-  | { kind: 'actions'; screens: AppScreen[] }
   // Khối ```chart hoặc ```ui chưa đóng khi đang stream, hoặc JSON không hợp lệ ở câu đã xong.
   | { kind: 'chartPending' | 'chartInvalid' | 'uiPending' | 'uiInvalid' };
 
@@ -97,9 +93,7 @@ function readFence(lines: string[], start: number, lang: string, streaming: bool
   if (!closed && streaming && /^\s*`{1,2}\s*$/.test(body.at(-1) ?? '')) body.pop();
 
   if (lang === 'actions') {
-    // Nút chỉ hiện khi khối đã trọn; màn lạ bị bỏ, nên chữ trong khối không bao giờ thành route.
-    const screens = closed ? readScreens(body.join('\n')) : [];
-    if (screens.length) blocks.push({ kind: 'actions', screens });
+    // Nút mở màn hình đã bỏ; khối của câu cũ không hiện gì.
   } else if (lang === 'chart') {
     if (!closed && streaming) blocks.push({ kind: 'chartPending' });
     else {
@@ -197,8 +191,8 @@ function trimGaps(blocks: ChatBlock[]) {
   return blocks;
 }
 
-// Khối ```actions mà AI service gắn cuối câu đã lưu (SCREEN_BUTTONS trong backend/ai/src/agent/service.py).
-const ACTIONS_TAIL = /\n*```actions\n([\s\S]*?)\n```\s*$/;
+// Khối ```actions mà AI service từng gắn cuối câu đã lưu (STORED_SCREEN_BUTTONS trong backend/ai/src/agent/service.py).
+const ACTIONS_TAIL = /\n*```actions\n[\s\S]*?\n```\s*$/;
 // Khi đang stream: khối ```actions ở đầu dòng cuối, kể cả dấu mở đang gõ dở ("`", "``", "```act"…).
 const ACTIONS_STREAMING = /\n+(?:`{1,3}|```a(?:c(?:t(?:i(?:o(?:n(?:s(?:\n[\s\S]*)?)?)?)?)?)?)?)$/;
 
@@ -215,26 +209,13 @@ function withoutStreamingActions(text: string) {
 }
 
 /**
- * Tách nút mở màn hình khỏi nội dung câu trả lời, để nút nằm ở thẻ riêng dưới bong bóng và không
- * đổi chữ trong bong bóng. Khi `streaming` chỉ bỏ khối ở cuối: nút chỉ hiện khi câu đã xong.
+ * Bỏ khối ```actions ở cuối câu đã lưu khi chat còn nút mở màn hình, để câu cũ không hiện JSON thô.
+ * Khi `streaming` bỏ cả phần đầu khối đang gõ dở.
  */
-export function splitActions(text: string, streaming = false): { text: string; screens: AppScreen[] } {
-  if (streaming) return { text: withoutStreamingActions(text), screens: [] };
+export function withoutActions(text: string, streaming = false): string {
+  if (streaming) return withoutStreamingActions(text);
   const match = ACTIONS_TAIL.exec(text);
-  if (!match) return { text, screens: [] };
-  return { text: text.slice(0, match.index), screens: readScreens(match[1]) };
-}
-
-/** Danh sách màn trong khối ```actions; JSON hỏng hoặc màn lạ thì bỏ qua. */
-export function readScreens(body: string): AppScreen[] {
-  let raw: unknown;
-  try {
-    raw = JSON.parse(body);
-  } catch {
-    return [];
-  }
-  if (!Array.isArray(raw)) return [];
-  return raw.filter((screen): screen is AppScreen => typeof screen === 'string' && Object.hasOwn(SCREEN_LINKS, screen));
+  return match ? text.slice(0, match.index) : text;
 }
 
 /**

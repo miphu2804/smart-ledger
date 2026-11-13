@@ -26,11 +26,6 @@ describe('applyToolEvent', () => {
     assert.equal(steps.length, 2);
   });
 
-  it('labels the screen-button tool so it does not show the generic label', () => {
-    const [step] = applyToolEvent([], { phase: 'start', callId: 'c1', name: 'suggest_screen' });
-    assert.equal(step.label, 'Thêm nút mở màn hình');
-  });
-
   it('labels the agent arithmetic and sandbox tools so they do not show the generic label', () => {
     const [calc] = applyToolEvent([], { phase: 'start', callId: 'c1', name: 'calculate' });
     assert.equal(calc.label, 'Tính toán');
@@ -51,19 +46,15 @@ describe('applyToolEvent', () => {
 
 describe('preambleBefore', () => {
   it('takes the text streamed before a data tool as the lead-in, without markdown', () => {
-    assert.equal(preambleBefore('query_shop_data', 'Để tôi **kiểm tra** lại\nsố liệu. '), 'Để tôi kiểm tra lại số liệu.');
-  });
-
-  it('keeps the text before the screen-button tool as the answer', () => {
-    assert.equal(preambleBefore('suggest_screen', 'Doanh thu hôm nay là 1.200.000đ.'), undefined);
+    assert.equal(preambleBefore('Để tôi **kiểm tra** lại\nsố liệu. '), 'Để tôi kiểm tra lại số liệu.');
   });
 
   it('finds no lead-in when nothing was streamed', () => {
-    assert.equal(preambleBefore('query_shop_data', '  '), undefined);
+    assert.equal(preambleBefore('  '), undefined);
   });
 
   it('shortens a long lead-in to fit the thinking line', () => {
-    const lead = preambleBefore('query_shop_data', 'a'.repeat(300));
+    const lead = preambleBefore('a'.repeat(300));
     assert.equal(lead?.length, 140);
     assert.ok(lead?.endsWith('…'));
   });

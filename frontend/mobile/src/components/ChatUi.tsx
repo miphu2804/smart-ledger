@@ -2,7 +2,7 @@ import { router } from 'expo-router';
 import React, { useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import Svg, { Path, Polyline } from 'react-native-svg';
-import { SCREEN_LINKS } from '../lib/chatMarkdown';
+import { SCREEN_LINKS } from '../lib/chatScreens';
 import type { Point, Series, Tone, UiNode, Unit } from '../lib/chatUi';
 import { compact, vnd } from '../lib/format';
 import { colors } from '../theme';

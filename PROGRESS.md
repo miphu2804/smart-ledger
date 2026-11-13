@@ -1,3 +1,12 @@
+### 2026-11-13 — Remove the screen buttons from Mobile chat
+
+| Area | Change |
+|---|---|
+| Mobile | • Chat no longer draws the screen button card under an answer; `withoutActions` still drops the ```actions block that ends answers saved before 2026-11-13, so old answers show no raw JSON<br>• The `suggest_screen` step label and its answer exemption in `preambleBefore` are gone, and the mock answer no longer carries the block<br>• The `ScreenButton` element inside a ```ui card is unchanged |
+| Docs | • `frontend/mobile/docs/operations.md` describes the hidden block |
+
+Check: `npm test` passed 200 tests, `npm run typecheck` and `npm run export:web` passed, and the rewritten tests failed before the change. Not run on a simulator. Commit: the commit that adds this entry.
+
 ### 2026-11-12 — Make agent memory writes exact and ordered
 
 | Area | Change |
@@ -187,11 +196,3 @@ Check: AI `uv run pytest` 541 passed, 80 skipped; internal links and anchors in 
 | Docs | • Reconciled three independent fresh-context reviews against staging `a2766ee`; corrected reports, ADMIN contracts, AI authorization/privacy/persistence and current schema boundaries<br>• Removed unimplemented API/schema plans from current references; separated AI architecture from runtime detail<br>• Removed published demo access values, environment credential snapshots and deployment/network diagrams; private infrastructure and access procedures now point to the owner's external knowledge base, while privacy safeguards remain |
 
 Check: 72 Markdown documents and 715 internal links passed path/anchor/index/frontmatter checks; DBML matches 25 Core and 4 AI tables. All 14 walkthrough diagrams and the logical architecture rendered; the three changed walkthrough exports were updated. AI auth/observability tests: 37 passed. TypeScript token comparison confirms all three source-file edits are comment-only. BRD and nine ADR statuses are unchanged; PRD changes only diagram navigation. Live environments, private knowledge-base completeness, full secret scanning and Git-history removal were not verified or performed. Commit: the commit that adds this entry.
-
-### 2026-11-07 — Production-first documentation and local ownership (#555)
-
-| Area | Change |
-|---|---|
-| Docs | • Audited the actual tracked tree at staging `a2766ee`; separated production operation from EXE201 delivery scope and implementation/enablement/deployment/acceptance<br>• Made landing pages domain-oriented, kept local indexes, moved service detail into owned Core/AI/Mobile guides, and preserved technical safeguards, dated decisions and rollout evidence<br>• Aligned root/Mobile instructions, English technical prose and lean OKF/plain authors; reconciled source facts and resolved obsolete merge/assignment blockers without claiming live acceptance |
-
-Check: internal paths/anchors, immediate-child index/frontmatter consistency and root navigation reachability passed; BRD/PRD stayed byte-identical, API contract body changed only link targets, all nine ADR decision statuses stayed intact, `config.ts` matched the baseline after removing comments, and `git diff --check` passed. Mobile typecheck passed; `npm test` had 192 pass/2 fail, reproduced with the same failures on baseline `a2766ee`. Source inventory and verification evidence are in the PR. Live deployment, provider/device UAT and acceptance were not verified. Commit: the commit that adds this entry.

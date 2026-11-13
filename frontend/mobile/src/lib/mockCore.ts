@@ -1457,8 +1457,7 @@ function mockAgentAnswer(question: string): string {
   if (/het hang|sap het|ton kho|con bao nhieu|nhap/.test(q)) {
     const low = active.filter((p) => p.tracked && (p.stockQuantity ?? 0) <= 6);
     if (!low.length) return `Chưa có mặt hàng nào dưới ngưỡng 6. ${scope}`;
-    // Khối ```actions như AI service gắn sau lời gọi suggest_screen, để xem thẻ nút mở màn hình.
-    return `Các món sắp hết:\n${low.map((p, i) => `${i + 1}. ${p.name}: còn ${p.stockQuantity} ${p.unit}`).join('\n')}\n${scope}\n\n\`\`\`actions\n["products"]\n\`\`\``;
+    return `Các món sắp hết:\n${low.map((p, i) => `${i + 1}. ${p.name}: còn ${p.stockQuantity} ${p.unit}`).join('\n')}\n${scope}`;
   }
   if (/bao nhieu (mon|mat hang|san pham)|may mon/.test(q)) {
     return `Tiệm đang bán ${active.length} mặt hàng trong ${listCategories().length} nhóm. ${scope}`;
