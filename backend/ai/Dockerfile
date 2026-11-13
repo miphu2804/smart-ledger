@@ -1,4 +1,4 @@
-FROM python:3.11-slim-bookworm AS builder
+FROM python:3.15-slim-bookworm AS builder
 
 COPY --from=ghcr.io/astral-sh/uv:0.9.26 /uv /usr/local/bin/uv
 
@@ -14,7 +14,7 @@ COPY pyproject.toml uv.lock ./
 # a source change keeps this layer cached.
 RUN uv sync --frozen --no-dev --no-install-project
 
-FROM python:3.11-slim-bookworm AS runtime
+FROM python:3.15-slim-bookworm AS runtime
 
 WORKDIR /app
 

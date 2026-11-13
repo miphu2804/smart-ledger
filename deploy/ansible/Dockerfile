@@ -4,7 +4,7 @@
 #   docker run --rm -v "$PWD:/work" -w /work -e SMARTLEDGER_VPS_HOST -e SMARTLEDGER_VPS_USER -e SSH_PRIVATE_KEY -e SSH_KNOWN_HOSTS \
 #     -e DOPBASE_URL -e DOPBASE_TOKEN_CORE -e DOPBASE_TOKEN_AI -e DOPBASE_TOKEN_BIFROST -e DOPBASE_TOKEN_VPS \
 #     -e DOPBASE_TOKEN_MONITOR smartledger-infra scripts/infra/run.sh plan staging --scope app
-FROM python:3.12.8-slim-bookworm
+FROM python:3.15.0-slim-bookworm
 
 ARG ANSIBLE_CORE_VERSION=2.21.5
 # From the release page of github.com/dopbase/dopbase, as in .github/workflows/deploy-backend.yml; the digests
