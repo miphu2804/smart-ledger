@@ -22,7 +22,6 @@ criteria: |
   # A block without its closing fence is caught by comparing openings with blocks.
   BLOCK = re.compile(r"^[ \t]*```(chart|ui)[ \t]*\n(.*?)^[ \t]*```[ \t]*$", re.DOTALL | re.MULTILINE)
   OPENING = re.compile(r"^[ \t]*```(?:chart|ui)[ \t]*$", re.MULTILINE)
-  SCREENS = {"sales", "voice_order", "orders", "products", "debts", "expenses", "reports"}
 
 
   def number(value, allow_negative=False):
@@ -72,6 +71,7 @@ criteria: |
 
 
   def ui_node(elements, node_id, depth, seen):
+      """Raise when the node cannot be drawn; return False for a node the app skips."""
       if depth > 4 or node_id in seen or node_id not in elements:
           raise ValueError
       seen.add(node_id)
@@ -81,10 +81,13 @@ criteria: |
       props = element.get("props") if isinstance(element.get("props"), dict) else {}
       kind = element.get("type")
       if kind in ("Card", "Row"):
+          drawn = False
           for child in items(element.get("children"), 1, 40):
               if not isinstance(child, str):
                   raise ValueError
-              ui_node(elements, child, depth + 1, seen)
+              drawn = ui_node(elements, child, depth + 1, seen) or drawn
+          if not drawn:
+              raise ValueError
       elif kind == "Metric":
           text(props.get("label"))
           number(props.get("value"))
@@ -152,10 +155,11 @@ criteria: |
       elif kind in ("Badge", "Text"):
           text(props.get("text"))
       elif kind == "ScreenButton":
-          if props.get("screen") not in SCREENS:
-              raise ValueError
+          # Removed on 2026-11-13; the app skips it and draws the rest of the card.
+          return False
       else:
           raise ValueError
+      return True
 
 
   def ui_drawable(body):
@@ -166,8 +170,7 @@ criteria: |
           elements = spec.get("elements")
           if not isinstance(elements, dict) or len(elements) > 40:
               return False
-          ui_node(elements, spec["root"], 0, set())
-          return True
+          return ui_node(elements, spec["root"], 0, set())
       except (ValueError, RecursionError):
           return False
 

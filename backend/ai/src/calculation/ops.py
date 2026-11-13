@@ -17,6 +17,7 @@ into `Error[CODE]: reason` text the model can fix and retry. The codes:
 - `TOO_MANY_OPERATIONS`: more steps than the plan allows
 """
 
+import math
 from collections.abc import Callable
 from dataclasses import dataclass
 from decimal import ROUND_HALF_UP, Decimal
@@ -184,7 +185,7 @@ def _operand(
 
 def _bounded(value: float, max_operand: float, *, code: str) -> float:
     """Return the value, or raise when it is not a finite number inside the bound."""
-    if value != value or value in (float("inf"), float("-inf")):
+    if not math.isfinite(value):
         raise ValueError("INVALID_NUMBER: operands and results must be finite numbers")
     if abs(value) > max_operand:
         raise ValueError(f"{code}: |value| stays within {max_operand:g}")

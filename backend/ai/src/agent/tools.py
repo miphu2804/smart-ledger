@@ -4,7 +4,7 @@ import re
 from dataclasses import asdict, dataclass
 from typing import Literal
 
-from pydantic_ai import RunContext, Tool, ToolReturn
+from pydantic_ai import RunContext, Tool
 
 from src.calculation.ops import CalculationStep
 from src.calculation.service import CalculationService
@@ -16,10 +16,10 @@ from src.prompt_templates import (
 from src.restock.service import RestockService
 from src.sql.repository import ShopDataRepository
 
-# The guard and the repository raise ValueError("CODE: reason") for a query the model
-# can fix. Any other ValueError is a bug and must not reach the model.
 logger = logging.getLogger(__name__)
 
+# The guard and the repository raise ValueError("CODE: reason") for a query the model
+# can fix. Any other ValueError is a bug and must not reach the model.
 MODEL_ERROR = re.compile(r"([A-Z][A-Z_]*): (.*)", re.DOTALL)
 
 
@@ -41,22 +41,6 @@ class AgentContext:
 
     user_id: int
     shop_id: int
-
-
-# App screens a reply can link to; the mobile app maps each to its route and label.
-Screen = Literal[
-    "sales", "voice_order", "orders", "products", "debts", "expenses", "reports"
-]
-
-
-def suggest_screen(screen: Screen) -> ToolReturn:
-    """Add a button under the reply that opens this app screen; the reply still says
-    where the screen is in the app."""
-    # The screen travels as metadata, which the model never reads back; the service
-    # turns it into the button after the run, so no model text reaches the button.
-    return ToolReturn(
-        return_value=f"Button to {screen} added.", metadata={"screen": screen}
-    )
 
 
 def build_shop_data_tool(shop_data: ShopDataRepository) -> Tool[AgentContext]:

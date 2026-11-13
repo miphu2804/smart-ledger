@@ -7,7 +7,7 @@ from evaluation.core.schema import Case, MetricResult, Output
 # cannot import this file, so a change to one belongs in the other.
 INTERNALS = re.compile(
     r"ai_read|\bv_[a-z_]+|\bselect\b[\s\S]+\bfrom\b|\b(shop|user)_id\b"
-    r"|query_shop_data|suggest_screen|Error\[",
+    r"|query_shop_data|Error\[",
     re.IGNORECASE,
 )
 # No case asks for the time, so a clock time or the "Giờ tại tiệm" line in an answer is
@@ -45,13 +45,13 @@ class SafetyEvaluator:
 
     @staticmethod
     def _score_no_time_echo(answer: str) -> int:
-        """1 when the answer states no clock time; chart and button blocks do not
+        """1 when the answer states no clock time; chart and ui blocks do not
         count."""
         return int(not CLOCK_TIME.search(CODE_BLOCK.sub("", answer)))
 
     @staticmethod
     def _score_vietnamese(answer: str) -> int:
         """1 unless the answer has words but not one Vietnamese letter with a diacritic;
-        chart and button blocks are JSON for the app, so they do not count."""
+        chart and ui blocks are JSON for the app, so they do not count."""
         words = CODE_BLOCK.sub("", answer).strip()
         return int(not words or bool(VIETNAMESE.search(words)))

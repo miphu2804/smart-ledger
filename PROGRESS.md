@@ -7,6 +7,24 @@
 
 Check: `npm test` passed 201 tests, `npm run typecheck` and `npm run export:web` passed, and the rewritten tests failed before the change. Not run on a simulator. Commit: the commit that adds this entry.
 
+### 2026-11-13 — Remove the screen buttons from chat answers
+
+| Area | Change |
+|---|---|
+| AI | • The `suggest_screen` tool, its prompt paragraph and the ```` ```actions ```` block are gone, by owner decision; the app guide still tells the owner where each screen is<br>• History replay still strips the block from answers stored before the change, so the model never reads one back<br>• The evaluators no longer allow or look for `suggest_screen` and the block |
+| HoneyHive | • `invalid-chart` skips a `ScreenButton` in a ```ui card as Mobile does, and still flags a card that has nothing else to draw |
+| Docs | • The chat contract, AI README and runtime reference, the walkthrough diagrams, the AgentTurn statechart, `AC-127` and `OQ-004` drop the button, and the contract's ```ui catalogue drops `ScreenButton` |
+
+Check: AI Ruff lint and format passed; pytest passed 622 tests with 13 live-model skips on disposable PostgreSQL and Redis. OpenAPI is unchanged; `prompt_version` changes for all 32 capability combinations, so traces and evaluation runs start a new prompt group. TLC re-checked AgentTurn with 340 distinct states and no invariant errors. On the local stack, two live chat turns asking where a screen is answered without a block, the second after a block was written into the stored first answer. Commit: the commits on `feat/remove-screen-buttons`.
+
+### 2026-11-13 — Restructure the AI service by responsibility
+
+| Area | Change |
+|---|---|
+| AI | • The memory package owns its embedder factory, background writes, HTTP routes and schema, and the fact screening rules; `src.main` is imported for `app` and `lifespan`, and by one test for `SANDBOX_TOOLS`<br>• Screen-button rules sit in `src/agent/screen_buttons.py`; one `OpenAIModelProvider` builds both OpenAI protocols<br>• `AgentTurnService` receives `AgentService` and owns admission and replay; `AgentTurnRepository.complete` saves a receipted exchange through the public `owned_conversation` and `write_exchange`<br>• Model construction and per-turn tier routing share one `src/llm/` package (`factory.py`, `model_router.py`, `tier.py`, `bifrost_tier_classifier.py`, `openai_model_provider.py`, `session_settings.py`), replacing `src/providers/` and `src/llm_router/`; logger names move to `src.llm.*`<br>• A distill pass over the modules the branch created or reshaped: the factory builds a provider inline, and both chat routes open the agent run through one `AgentService._iter`<br>• `LITELLM_URL` is removed; `QDRANT_URL` and the `HH_*` fields stay pending owner approval |
+
+Check: AI Ruff lint and format passed; pytest passed 631 tests with 13 live-model skips after every step, with the PostgreSQL and Redis suites on disposable local containers. The OpenAPI document and `prompt_version` for all 32 capability combinations are identical to `origin/staging` at `86919eba`. No statechart state or transition changed, so no model was re-checked. Commit: the commits on `refactor/ai-maintainability` after `86919eba`.
+
 ### 2026-11-12 — Make agent memory writes exact and ordered
 
 | Area | Change |
@@ -180,19 +198,3 @@ Check: local documentation paths and anchors resolve apart from the existing ill
 | Docs | • Restored the target architecture, CI/CD, VPS network, Dopbase backup, sign-in and APK release diagrams with their draw.io sources; replaced the Dopbase host and Vercel domains with generic labels and re-exported those two SVGs<br>• Drew the staging and production app stacks in `ci-cd.drawio` as one Production | Staging box, aligned Caddy with Core, added Cloudinary for product images, grouped the Supabase databases and alert channels into titled boxes and rerouted edges so none cross or pass through an icon or title<br>• Restored the root README tech stack and system architecture sections and the diagram explanations in CI/CD, without addresses or server paths<br>• The diagram guide now allows topology drawn from tracked `deploy/` files and keeps domains, IPs, server paths, credentials and access procedures private<br>• Fixed 20 claims that a code check found stale in the API contracts, technical design, AI runtime reference, Mobile operations, Web README and development guides, and pinned every diagram export to a white background<br>• Rendered the Mermaid diagrams to white SVGs from `.mmd` sources, and rewrote the PRD functional requirements, AI runtime reference and Mobile operations guide in terms of behavior instead of class, function and file names; the CI/CD diagram now names each service's role instead of its port |
 
 Check: internal links and anchors in 48 changed Markdown files resolve; `git diff --check` passed; no domain, IP or server path remains in the diagrams, README or CI/CD guide; the three edited diagrams were rendered and inspected, and `validate.py` reports no edge crossing in `ci-cd.drawio`; network claims were checked against `deploy/*/compose.yaml`. Commit: the commit that adds this entry.
-
-### 2026-11-07 — Re-review fixes for documentation boundaries (#555)
-
-| Area | Change |
-|---|---|
-| Docs and tooling | • The catalog `BIGINT` test now reads the AI draft reference instead of the API contract, which keeps only implemented endpoints<br>• `scripts/secrets/credential_map.py` writes to `~/.smartledger/credential-map/` outside Git and `.gitignore` blocks HTML snapshots in `docs/development/credential-map/`<br>• Restored original document authors, defined `author` as the writer, added a screenshot capture manifest, embedded the logical architecture Mermaid in the diagram guide and corrected AI logging, session ID, draft result and expense-status statements found by a source check |
-
-Check: AI `uv run pytest` 541 passed, 80 skipped; internal links and anchors in 48 changed Markdown files resolve; `git diff --check` passed. The Mermaid render and the credential-map script run against Dopbase were not verified. Commit: the commit that adds this entry.
-
-### 2026-11-07 — Source-verified documentation and private operations boundary (#555)
-
-| Area | Change |
-|---|---|
-| Docs | • Reconciled three independent fresh-context reviews against staging `a2766ee`; corrected reports, ADMIN contracts, AI authorization/privacy/persistence and current schema boundaries<br>• Removed unimplemented API/schema plans from current references; separated AI architecture from runtime detail<br>• Removed published demo access values, environment credential snapshots and deployment/network diagrams; private infrastructure and access procedures now point to the owner's external knowledge base, while privacy safeguards remain |
-
-Check: 72 Markdown documents and 715 internal links passed path/anchor/index/frontmatter checks; DBML matches 25 Core and 4 AI tables. All 14 walkthrough diagrams and the logical architecture rendered; the three changed walkthrough exports were updated. AI auth/observability tests: 37 passed. TypeScript token comparison confirms all three source-file edits are comment-only. BRD and nine ADR statuses are unchanged; PRD changes only diagram navigation. Live environments, private knowledge-base completeness, full secret scanning and Git-history removal were not verified or performed. Commit: the commit that adds this entry.

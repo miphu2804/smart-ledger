@@ -1,4 +1,5 @@
 import json
+from contextlib import suppress
 from datetime import datetime
 
 from sqlalchemy import (
@@ -81,7 +82,7 @@ class AgentConversationRepository:
         self, conversation_id: int, user_id: int, shop_id: int
     ) -> dict:
         with self.postgres.session() as session:
-            conversation = self._owned_conversation(
+            conversation = self.owned_conversation(
                 session, conversation_id, user_id, shop_id
             )
             messages = session.scalars(
@@ -118,7 +119,7 @@ class AgentConversationRepository:
 
         # Two autocommit statements: a delete between them only shortens the history.
         with self.postgres.read_session() as session:
-            self._owned_conversation(session, conversation_id, user_id, shop_id)
+            self.owned_conversation(session, conversation_id, user_id, shop_id)
             messages = session.scalars(
                 select(ChatMessage)
                 .where(ChatMessage.conversation_id == conversation_id)
@@ -142,7 +143,7 @@ class AgentConversationRepository:
         assistant_message: str,
     ) -> tuple[int, int]:
         with self.postgres.session() as session:
-            saved_conversation_id, question_id, reply_id = self._write_exchange(
+            saved_conversation_id, question_id, reply_id = self.write_exchange(
                 session,
                 user_id,
                 shop_id,
@@ -167,15 +168,22 @@ class AgentConversationRepository:
             self._cache_history(key, entry["limit"], messages[-entry["limit"] :])
         return saved_conversation_id, reply_id
 
-    def _write_exchange(
+    def write_exchange(
         self,
-        session,
-        user_id,
-        shop_id,
-        conversation_id,
-        user_message,
-        assistant_message,
-    ):
+        session: Session,
+        user_id: int,
+        shop_id: int,
+        conversation_id: int | None,
+        user_message: str,
+        assistant_message: str,
+    ) -> tuple[int, int, int]:
+        """Write one question and reply inside the caller's transaction.
+
+        Returns the conversation, question and reply ids. The caller owns `session`,
+        so `AgentTurnRepository.complete` can commit the exchange together with its
+        receipt. An existing conversation is always locked here; a caller that already
+        holds the lock takes it again in the same transaction, which does not wait.
+        """
         if conversation_id is None:
             conversation = ChatConversation(
                 user_id=user_id,
@@ -184,7 +192,7 @@ class AgentConversationRepository:
             )
             session.add(conversation)
         else:
-            conversation = self._owned_conversation(
+            conversation = self.owned_conversation(
                 session, conversation_id, user_id, shop_id, lock=True
             )
         conversation.last_message_at = func.now()
@@ -204,39 +212,19 @@ class AgentConversationRepository:
         )
         session.add_all([question, reply])
         session.flush()
-        saved_conversation_id, question_id, reply_id = (
-            conversation.id,
-            question.id,
-            reply.id,
-        )
-        return saved_conversation_id, question_id, reply_id
+        return conversation.id, question.id, reply.id
 
-    def save_receipted_exchange(
-        self,
-        execution,
-        conversation_id,
-        user_message,
-        assistant_message,
-        model,
-        model_version,
-    ):
-        cid, mid = execution.store.complete(
-            execution,
-            self,
-            conversation_id,
-            user_message,
-            assistant_message,
-            model,
-            model_version,
-        )
-        # Do not cache replay answers; deletion must make the result unavailable.
-        try:
-            self.cache.delete(
-                self._history_key(cid, execution.user_id, execution.shop_id)
-            )
-        except Exception:
-            pass  # Cache availability cannot undo committed receipt/answer evidence.
-        return cid, mid
+    def drop_cached_history(
+        self, conversation_id: int, user_id: int, shop_id: int
+    ) -> None:
+        """Drop the conversation's cached history after a receipted save.
+
+        Replay answers are not cached, so a deleted conversation makes the result
+        unavailable. A cache failure is ignored: it cannot undo the committed receipt
+        and answer.
+        """
+        with suppress(Exception):
+            self.cache.delete(self._history_key(conversation_id, user_id, shop_id))
 
     def rename_conversation(
         self, conversation_id: int, user_id: int, shop_id: int, title: str
@@ -269,7 +257,7 @@ class AgentConversationRepository:
         self, conversation_id: int, user_id: int, shop_id: int
     ) -> None:
         with self.postgres.session() as session:
-            conversation = self._owned_conversation(
+            conversation = self.owned_conversation(
                 session, conversation_id, user_id, shop_id, lock=True
             )
             session.execute(
@@ -293,7 +281,7 @@ class AgentConversationRepository:
         )
 
     @staticmethod
-    def _owned_conversation(
+    def owned_conversation(
         session: Session,
         conversation_id: int,
         user_id: int,
