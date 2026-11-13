@@ -1,13 +1,12 @@
-import { router } from 'expo-router';
 import React, { useMemo, useState } from 'react';
-import { Platform, ScrollView, StyleSheet, View, type StyleProp, type ViewStyle } from 'react-native';
+import { Platform, ScrollView, StyleSheet, View } from 'react-native';
 import { vnd } from '../lib/format';
-import { parseChatMarkdown, SCREEN_LINKS, type AppScreen, type ChartSpec, type ChatBlock, type Inline } from '../lib/chatMarkdown';
+import { parseChatMarkdown, type ChartSpec, type ChatBlock, type Inline } from '../lib/chatMarkdown';
 import { useSmoothText } from '../lib/smoothText';
 import { colors, font } from '../theme';
 import { AreaChart, BarChart } from './charts';
 import { UiBlock } from './ChatUi';
-import { Button, T } from './ui';
+import { T } from './ui';
 
 const SIZE = 13.5;
 // Bề ngang tối thiểu cho mỗi điểm biểu đồ, đủ cho nhãn hai chữ như "Giặt tẩy" ở cỡ 12.
@@ -53,59 +52,6 @@ function ChartCard({ spec }: { spec: ChartSpec }) {
           )}
         </View>
       </ScrollView>
-    </View>
-  );
-}
-
-function ScreenButtons({
-  screens,
-  variant = 'outline',
-  style,
-  onOpen,
-}: {
-  screens: AppScreen[];
-  variant?: 'outline' | 'primary';
-  style?: StyleProp<ViewStyle>;
-  onOpen?: () => void;
-}) {
-  return (
-    <View style={[styles.actions, style]}>
-      {screens.map((screen) => (
-        <Button
-          key={screen}
-          title={SCREEN_LINKS[screen].label}
-          variant={variant}
-          small
-          style={variant === 'primary' && [styles.pill, styles.brandShadow]}
-          onPress={() => {
-            onOpen?.();
-            router.navigate(SCREEN_LINKS[screen].route);
-          }}
-        />
-      ))}
-    </View>
-  );
-}
-
-/**
- * Thẻ nút mở màn hình, đặt riêng dưới bong bóng trả lời (`splitActions` tách khối ```actions ra khỏi
- * chữ), để nút không chen vào nội dung câu trả lời. Nút tím như bong bóng câu hỏi, không nhãn, để tách
- * khỏi bong bóng trả lời trắng. `style` cho nơi câu trả lời không nằm trong bong bóng có lề, như bảng hỏi trợ lý.
- */
-export function ScreenActions({
-  screens,
-  style,
-  onOpen,
-}: {
-  screens: AppScreen[];
-  style?: StyleProp<ViewStyle>;
-  /** Gọi ngay trước khi mở màn hình, như bảng hỏi trợ lý ẩn mình để màn mới không nằm dưới nó. */
-  onOpen?: () => void;
-}) {
-  if (!screens.length) return null;
-  return (
-    <View style={[styles.actionsCard, style]}>
-      <ScreenButtons screens={screens} variant="primary" style={styles.actionsInCard} onOpen={onOpen} />
     </View>
   );
 }
@@ -172,8 +118,6 @@ function BlockView({ block, color }: BlockProps) {
       return <ChartCard spec={block.spec} />;
     case 'ui':
       return <UiBlock node={block.node} />;
-    case 'actions':
-      return <ScreenButtons screens={block.screens} />;
     case 'chartPending':
     case 'uiPending':
       return (
@@ -256,18 +200,4 @@ const styles = StyleSheet.create({
   cell: { paddingHorizontal: 8, paddingVertical: 6, lineHeight: 18 },
   card: { borderWidth: 1, borderColor: colors.border, borderRadius: 12, padding: 10, marginVertical: 4 },
   chartNote: { alignItems: 'center', paddingVertical: 16 },
-  actions: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 6 },
-  actionsCard: {
-    // Kéo sát bong bóng phía trên (danh sách tin nhắn cách nhau 12) để thấy thẻ thuộc câu trả lời đó.
-    marginTop: -4,
-    alignSelf: 'flex-start',
-    maxWidth: '100%',
-  },
-  actionsInCard: { marginTop: 0 },
-  pill: { borderRadius: 999 },
-  // Bóng ngả tím theo màu nút, đậm hơn shadow(3) xám để nút nổi khỏi nền kem.
-  brandShadow: Platform.select<ViewStyle>({
-    web: { boxShadow: '0 6px 16px rgba(72,42,172,0.32)' } as ViewStyle,
-    default: { shadowColor: colors.brand, shadowOpacity: 0.32, shadowRadius: 12, shadowOffset: { width: 0, height: 6 }, elevation: 6 },
-  })!,
 });

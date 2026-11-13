@@ -1,3 +1,12 @@
+### 2026-11-13 — Remove the screen buttons from Mobile chat
+
+| Area | Change |
+|---|---|
+| Mobile | • Chat no longer draws the screen button card under an answer; `withoutActions` still drops the ```actions block that ends answers saved before 2026-11-13, so old answers show no raw JSON<br>• The `suggest_screen` step label and its answer exemption in `preambleBefore` are gone, and the mock answer no longer carries the block<br>• `readUi` drops the `ScreenButton` element, so a stored ```ui card draws without its button, and `chatScreens.ts` is deleted |
+| Docs | • `frontend/mobile/docs/operations.md` describes the hidden block |
+
+Check: `npm test` passed 201 tests, `npm run typecheck` and `npm run export:web` passed, and the rewritten tests failed before the change. Not run on a simulator. Commit: the commit that adds this entry.
+
 ### 2026-11-13 — Give embedding its own package
 
 | Area | Change |
@@ -189,11 +198,3 @@ Check: every directory in the layout tree exists on `staging` `a1245a1`; relativ
 | Docs | • Route code changes through service READMEs and owned guides; keep technical-writing manual and model checks distinct from runtime tests<br>• Require owning-document and local-index updates in contributor guidance; use Node 22.18+ in the 22.x line for frontend setup and link the Web guide to that prerequisite |
 
 Check: local documentation paths and anchors resolve apart from the existing illustrative `relative/path` placeholder; `git diff --check` passed. No runtime, native or deployment checks apply to these guidance-only edits. Commit: the commit that adds this entry.
-
-### 2026-11-07 — Restore architecture and delivery diagrams (#555)
-
-| Area | Change |
-|---|---|
-| Docs | • Restored the target architecture, CI/CD, VPS network, Dopbase backup, sign-in and APK release diagrams with their draw.io sources; replaced the Dopbase host and Vercel domains with generic labels and re-exported those two SVGs<br>• Drew the staging and production app stacks in `ci-cd.drawio` as one Production | Staging box, aligned Caddy with Core, added Cloudinary for product images, grouped the Supabase databases and alert channels into titled boxes and rerouted edges so none cross or pass through an icon or title<br>• Restored the root README tech stack and system architecture sections and the diagram explanations in CI/CD, without addresses or server paths<br>• The diagram guide now allows topology drawn from tracked `deploy/` files and keeps domains, IPs, server paths, credentials and access procedures private<br>• Fixed 20 claims that a code check found stale in the API contracts, technical design, AI runtime reference, Mobile operations, Web README and development guides, and pinned every diagram export to a white background<br>• Rendered the Mermaid diagrams to white SVGs from `.mmd` sources, and rewrote the PRD functional requirements, AI runtime reference and Mobile operations guide in terms of behavior instead of class, function and file names; the CI/CD diagram now names each service's role instead of its port |
-
-Check: internal links and anchors in 48 changed Markdown files resolve; `git diff --check` passed; no domain, IP or server path remains in the diagrams, README or CI/CD guide; the three edited diagrams were rendered and inspected, and `validate.py` reports no edge crossing in `ci-cd.drawio`; network claims were checked against `deploy/*/compose.yaml`. Commit: the commit that adds this entry.

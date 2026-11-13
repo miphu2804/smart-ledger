@@ -1,19 +1,18 @@
 import { Feather } from '@expo/vector-icons';
-import { useFocusEffect } from 'expo-router';
-import React, { useCallback, useEffect, useRef, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { Image, KeyboardAvoidingView, Modal, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import type { ChatMessage, ThoughtStep } from '../data/types';
 import { agentApi, agentErrorMessage } from '../lib/agentApi';
 import { followUpSuggestions, revenueSuggestions } from '../lib/aiSuggestions';
 import { ApiError } from '../lib/api';
-import { splitActions } from '../lib/chatMarkdown';
+import { withoutActions } from '../lib/chatMarkdown';
 import { triggerFeedback } from '../lib/feedback';
 import { ddmmyyyy, hhmm } from '../lib/format';
 import { applyToolEvent } from '../lib/toolSteps';
 import { colors } from '../theme';
 import { ChatComposer } from './ChatComposer';
-import { ChatText, ScreenActions, StreamingChatText } from './ChatText';
+import { ChatText, StreamingChatText } from './ChatText';
 import { ThoughtLine } from './ThoughtLine';
 import { IconBtn, KEYBOARD_AVOID_BEHAVIOR, Row, T } from './ui';
 
@@ -56,10 +55,6 @@ export function AiAskSheet({ question, onClose }: { question: string | null; onC
   // Mỗi lần mở là một phiên; câu trả lời của phiên đã đóng về muộn thì bỏ.
   const session = useRef(0);
   const [openedAt, setOpenedAt] = useState(() => new Date());
-  // Mở màn hình từ nút trong câu trả lời thì bảng ẩn đi nhưng giữ hội thoại; quay lại màn này là bảng hiện lại
-  // đúng đoạn chat đó, như màn Trợ lý vẫn còn trong ngăn điều hướng.
-  const [parked, setParked] = useState(false);
-  useFocusEffect(useCallback(() => setParked(false), []));
   const [msgs, setMsgs] = useState<ChatMessage[]>([]);
   const [conversationId, setConversationId] = useState<number | null>(null);
   const [typing, setTyping] = useState(false);
@@ -135,7 +130,7 @@ export function AiAskSheet({ question, onClose }: { question: string | null; onC
 
   // Hiện dần như `Sheet` (cài đặt trợ lý): kiểu "slide" kéo cả nền tối trượt lên theo bảng, chậm và nặng.
   return (
-    <Modal visible={question !== null && !parked} transparent animationType="fade" onRequestClose={onClose}>
+    <Modal visible={question !== null} transparent animationType="fade" onRequestClose={onClose}>
       <KeyboardAvoidingView behavior={KEYBOARD_AVOID_BEHAVIOR} style={styles.backdrop}>
         <Pressable style={StyleSheet.absoluteFill} onPress={onClose} accessibilityLabel="Đóng" />
         <View style={[styles.sheet, { paddingBottom: Math.max(insets.bottom, 12) }]} accessibilityViewIsModal>
@@ -173,16 +168,14 @@ export function AiAskSheet({ question, onClose }: { question: string | null; onC
                     </View>
                   );
                 }
-                const reply = splitActions(m.text);
                 return (
                   <View key={m.id}>
-                    <ChatText text={reply.text} />
-                    {reply.screens.length ? <ScreenActions screens={reply.screens} style={styles.actions} onOpen={() => setParked(true)} /> : null}
+                    <ChatText text={withoutActions(m.text)} />
                   </View>
                 );
               })}
 
-              {typing ? <View>{draft ? <StreamingChatText text={splitActions(draft, true).text} /> : <ThoughtLine steps={steps} />}</View> : null}
+              {typing ? <View>{draft ? <StreamingChatText text={withoutActions(draft, true)} /> : <ThoughtLine steps={steps} />}</View> : null}
 
               {error ? (
                 <Row gap={6} style={styles.error}>
@@ -257,9 +250,8 @@ const styles = StyleSheet.create({
   header: { marginBottom: 6 },
   headerSide: { width: 40 },
   title: { flex: 1, textAlign: 'center' },
-  // Vùng cuộn tràn ra mép bảng rồi thụt lề lại bên trong, để bóng của nút mở màn hình không bị cắt thẳng ở mép trái.
-  body: { flex: 1, marginHorizontal: -16 },
-  bodyContent: { paddingHorizontal: 16, paddingBottom: 20 },
+  body: { flex: 1 },
+  bodyContent: { paddingBottom: 20 },
   center: { textAlign: 'center' },
   disclaimer: { marginTop: 2, marginBottom: 20 },
   messages: { gap: 20 },
@@ -273,8 +265,6 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
   },
   userText: { lineHeight: 20.5 },
-  // Nút mở màn hình cách chữ trả lời một khoảng, vì bóng tím của nút loang lên trên và che dòng cuối.
-  actions: { marginTop: 14 },
   error: { alignItems: 'flex-start' },
   followUps: { alignItems: 'flex-end', gap: 10 },
   followUp: {

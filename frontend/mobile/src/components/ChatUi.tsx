@@ -1,13 +1,11 @@
-import { router } from 'expo-router';
 import React, { useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import Svg, { Path, Polyline } from 'react-native-svg';
-import { SCREEN_LINKS } from '../lib/chatMarkdown';
 import type { Point, Series, Tone, UiNode, Unit } from '../lib/chatUi';
 import { compact, vnd } from '../lib/format';
 import { colors } from '../theme';
 import { AreaChart, BarChart } from './charts';
-import { Button, T } from './ui';
+import { T } from './ui';
 
 // Màu chuỗi theo thứ tự cố định để cùng một chuỗi giữ một màu trong mọi thẻ của câu trả lời.
 const SERIES_COLORS = [
@@ -98,15 +96,6 @@ function UiView({ node }: { node: UiNode }) {
         <T size={13} color={colors.inkSecondary} style={{ lineHeight: 19 }}>
           {node.text}
         </T>
-      );
-    case 'ScreenButton':
-      return (
-        <Button
-          title={SCREEN_LINKS[node.screen].label}
-          variant="outline"
-          small
-          onPress={() => router.navigate(SCREEN_LINKS[node.screen].route)}
-        />
       );
   }
 }

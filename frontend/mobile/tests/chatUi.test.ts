@@ -27,9 +27,20 @@ describe('readUi', () => {
     assert.equal(readUi(spec({ a: grouped })), null);
   });
 
-  it('accepts a negative change but only known screens for buttons', () => {
+  it('accepts a negative change', () => {
     assert.ok(readUi(spec({ a: { type: 'Metric', props: { label: 'Số đơn', value: 10, unit: 'count', change: -3.5 } } })));
-    assert.equal(readUi(spec({ a: { type: 'ScreenButton', props: { screen: 'https://evil' } } })), null);
+  });
+
+  it('drops the screen button of a stored card and still draws the rest', () => {
+    const note = { type: 'Text', props: { text: 'Còn 3 khoản nợ.' } };
+    const button = { type: 'ScreenButton', props: { screen: 'debts' } };
+    assert.deepEqual(readUi(spec({ a: { type: 'Card', children: ['b', 'c'] }, b: note, c: button })), {
+      type: 'Card',
+      title: undefined,
+      children: [{ type: 'Text', text: 'Còn 3 khoản nợ.' }],
+    });
+    assert.equal(readUi(spec({ a: button })), null);
+    assert.equal(readUi(spec({ a: { type: 'Card', children: ['c'] }, c: button })), null);
   });
 
   it('rejects a chart unit outside vnd, count and percent instead of drawing it as money', () => {

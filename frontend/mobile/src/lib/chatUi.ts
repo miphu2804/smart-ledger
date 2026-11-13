@@ -6,7 +6,6 @@
  * chỉ nhận dạng an toàn để vẽ: sai một phần tử, vượt giới hạn, có vòng lặp hay id lạ thì bỏ cả khối.
  * Mọi thẻ chỉ hiển thị; không có phần tử nào ghi dữ liệu hay gọi API.
  */
-import { SCREEN_LINKS, type AppScreen } from './chatScreens.ts';
 
 export type Unit = 'vnd' | 'count' | 'percent';
 export type Tone = 'neutral' | 'good' | 'bad' | 'warn';
@@ -24,8 +23,7 @@ export type UiNode =
   | { type: 'List'; items: { label: string; value?: number; unit?: Unit; word?: string; note?: string }[] }
   | { type: 'OrderCard'; code: string; date?: string; customer?: string; status?: string; items: { name: string; qty: number; price: number }[]; total: number }
   | { type: 'Badge'; text: string; tone: Tone }
-  | { type: 'Text'; text: string }
-  | { type: 'ScreenButton'; screen: AppScreen };
+  | { type: 'Text'; text: string };
 
 const MAX_ELEMENTS = 40;
 const MAX_DEPTH = 4;
@@ -53,13 +51,13 @@ export function readUi(body: string): UiNode | null {
   const elements = raw.elements;
   if (Object.keys(elements).length > MAX_ELEMENTS) return null;
   try {
-    return buildNode(elements, raw.root, 0, new Set());
+    return buildNode(elements, raw.root, 0, new Set()) ?? null;
   } catch {
     return null;
   }
 }
 
-function buildNode(elements: Raw, id: string, depth: number, seen: Set<string>): UiNode {
+function buildNode(elements: Raw, id: string, depth: number, seen: Set<string>): UiNode | undefined {
   // Mỗi id chỉ được dùng một lần, nên spec có vòng lặp hay chia sẻ node đều bị từ chối.
   if (depth > MAX_DEPTH || seen.has(id) || !Object.hasOwn(elements, id)) throw new Error('bad node');
   seen.add(id);
@@ -69,10 +67,12 @@ function buildNode(elements: Raw, id: string, depth: number, seen: Set<string>):
   const children = () => {
     const ids = element.children;
     if (!Array.isArray(ids) || !ids.length) throw new Error('no children');
-    return ids.map((child) => {
+    const nodes = ids.flatMap((child) => {
       if (typeof child !== 'string') throw new Error('bad child');
-      return buildNode(elements, child, depth + 1, seen);
+      return buildNode(elements, child, depth + 1, seen) ?? [];
     });
+    if (!nodes.length) throw new Error('no children');
+    return nodes;
   };
 
   switch (element.type) {
@@ -159,11 +159,9 @@ function buildNode(elements: Raw, id: string, depth: number, seen: Set<string>):
     }
     case 'Text':
       return { type: 'Text', text: text(props.text, MAX_TEXT) };
-    case 'ScreenButton': {
-      const screen = props.screen;
-      if (typeof screen !== 'string' || !Object.hasOwn(SCREEN_LINKS, screen)) throw new Error('unknown screen');
-      return { type: 'ScreenButton', screen: screen as AppScreen };
-    }
+    case 'ScreenButton':
+      // Nút mở màn hình đã bỏ ngày 2026-11-13; thẻ đã lưu kèm nút vẫn vẽ phần còn lại.
+      return undefined;
     default:
       throw new Error('unknown type');
   }

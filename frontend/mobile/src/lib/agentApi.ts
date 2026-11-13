@@ -88,7 +88,7 @@ export const agentApi = {
       else if (event === 'tool_start') {
         const { call_id, name } = data as { call_id: string; name: string };
         // Chữ đã tới trước tool lấy dữ liệu là câu dẫn: rời bong bóng trả lời, vào dòng suy nghĩ.
-        const preamble = preambleBefore(name, text);
+        const preamble = preambleBefore(text);
         if (preamble) onText((text = ''));
         onTool?.({ phase: 'start', callId: call_id, name, preamble });
       } else if (event === 'tool_end') onTool?.({ phase: 'end', callId: (data as { call_id: string }).call_id });

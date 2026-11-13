@@ -1457,8 +1457,7 @@ function mockAgentAnswer(question: string): string {
   if (/het hang|sap het|ton kho|con bao nhieu|nhap/.test(q)) {
     const low = active.filter((p) => p.tracked && (p.stockQuantity ?? 0) <= 6);
     if (!low.length) return `Chưa có mặt hàng nào dưới ngưỡng 6. ${scope}`;
-    // Khối ```actions như AI service gắn sau lời gọi suggest_screen, để xem thẻ nút mở màn hình.
-    return `Các món sắp hết:\n${low.map((p, i) => `${i + 1}. ${p.name}: còn ${p.stockQuantity} ${p.unit}`).join('\n')}\n${scope}\n\n\`\`\`actions\n["products"]\n\`\`\``;
+    return `Các món sắp hết:\n${low.map((p, i) => `${i + 1}. ${p.name}: còn ${p.stockQuantity} ${p.unit}`).join('\n')}\n${scope}`;
   }
   if (/bao nhieu (mon|mat hang|san pham)|may mon/.test(q)) {
     return `Tiệm đang bán ${active.length} mặt hàng trong ${listCategories().length} nhóm. ${scope}`;
@@ -1797,9 +1796,8 @@ function mockUiCardGallery(): string {
       { type: 'OrderCard', props: { code: 'DH-0142', date: '06/11 18:42', customer: 'Chị Lan', status: 'Ghi nợ', total: 128000, items: [{ name: 'Cà phê sữa đá', qty: 2, price: 29000 }, { name: 'Bạc xỉu', qty: 1, price: 32000 }, { name: 'Bánh mì trứng', qty: 2, price: 19000 }] } },
     ]),
     uiBlock([
-      { type: 'Card', props: { title: 'Khách còn nợ' }, children: [1, 2] },
+      { type: 'Card', props: { title: 'Khách còn nợ' }, children: [1] },
       { type: 'List', props: { items: [{ label: 'Chị Lan', note: '3 đơn, lâu nhất 12 ngày', value: 412000, unit: 'vnd' }, { label: 'Anh Tuấn (sửa xe)', note: '1 đơn', value: 96000, unit: 'vnd' }, { label: 'Cô Ba', note: '2 đơn', value: 150000, unit: 'vnd' }] } },
-      { type: 'ScreenButton', props: { screen: 'debts' } },
     ]),
     uiBlock([
       { type: 'Card', props: { title: 'So sánh hai món' }, children: [1, 2] },
