@@ -2,9 +2,9 @@ import io
 from contextlib import asynccontextmanager
 
 import pytest
+from evaluation.agent_chat import target as agent_module
+from evaluation.agent_chat.target import AgentTarget
 from evaluation.core.render import Table, markdown_table, print_table
-from evaluation.targets import agent as agent_module
-from evaluation.targets.agent import AgentTarget
 from rich.console import Console
 
 from src.app_config import ModelAlias

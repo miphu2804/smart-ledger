@@ -1,5 +1,5 @@
+from evaluation.agent_chat.metrics.judge import Judge
 from evaluation.core.schema import Case, MetricResult, Output
-from evaluation.metrics.judge import Judge
 
 
 class ResponseQualityEvaluator:

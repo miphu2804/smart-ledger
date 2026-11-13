@@ -3,8 +3,8 @@ import json
 import time
 from contextlib import AsyncExitStack
 
+from evaluation.agent_chat.without_memory_writes import WithoutMemoryWrites
 from evaluation.core.schema import Case, Output
-from evaluation.targets.without_memory_writes import WithoutMemoryWrites
 from opentelemetry.sdk.trace import TracerProvider
 from opentelemetry.sdk.trace.export import SimpleSpanProcessor
 from opentelemetry.sdk.trace.export.in_memory_span_exporter import (

@@ -22,6 +22,9 @@ The run creates made-up owners and shops in the local database and deletes them 
 | `generate.py` | Writes `cases.jsonl`; run it only when you change the test data |
 | `memory_eval.py` | `MemoryEval`: turns each query into a case and scores it with `RecallEvaluator` |
 | `thresholds.toml` | The bounds of each checked metric |
+| `target.py` | `MemoryTarget`: stores each shop's memories in the local database, asks `AgentMemoryService.with_memories` per query and deletes every row it created |
+| `caching_embedder.py` | `CachingEmbedder`: reads vectors from `cache/` and asks the app's embedder only for texts the file lacks |
+| `recall.py` | `RecallEvaluator`: scores whether the needed memory is among those returned, whether it ranks first, and whether only its outdated version came back |
 | `cache/` | Saved embedding vectors, one file per model; not committed |
 
 ## Metrics

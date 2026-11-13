@@ -5,16 +5,16 @@ from pathlib import Path
 
 import yaml
 from evaluation.agent_chat.honeyhive import print_sync_plan
+from evaluation.agent_chat.metrics.judge import Judge
+from evaluation.agent_chat.metrics.memory import MemoryEvaluator
+from evaluation.agent_chat.metrics.performance import PerformanceEvaluator
+from evaluation.agent_chat.metrics.response_quality import ResponseQualityEvaluator
+from evaluation.agent_chat.metrics.safety import SafetyEvaluator
+from evaluation.agent_chat.metrics.task import TaskEvaluator
+from evaluation.agent_chat.metrics.tool_use import ToolUseEvaluator
+from evaluation.agent_chat.target import AgentTarget
+from evaluation.core.database import require_local_database
 from evaluation.core.schema import Case
-from evaluation.metrics.judge import Judge
-from evaluation.metrics.memory import MemoryEvaluator
-from evaluation.metrics.performance import PerformanceEvaluator
-from evaluation.metrics.response_quality import ResponseQualityEvaluator
-from evaluation.metrics.safety import SafetyEvaluator
-from evaluation.metrics.task import TaskEvaluator
-from evaluation.metrics.tool_use import ToolUseEvaluator
-from evaluation.targets.agent import AgentTarget
-from evaluation.targets.database import require_local_database
 from sqlalchemy import Connection, text
 
 from src.app_config import app_config
