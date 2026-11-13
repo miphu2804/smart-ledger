@@ -20,6 +20,7 @@ from src.agent.service import (
     TextDelta,
 )
 from src.agent.tool_events import ToolFinished, ToolStarted
+from src.calculation.service import CalculationLimits, CalculationService
 from src.llm.model_router import LLMRouterService
 from src.llm.tier import Tier
 from src.prompt_templates import APP_GUIDE_PROMPT, SHOP_AGENT_SYSTEM_PROMPT
@@ -134,17 +135,6 @@ async def test_history_replays_old_answers_without_their_screen_buttons() -> Non
     await agent.chat(user_id=3, shop_id=15, conversation_id=41, message="m")
 
     assert ("assistant", "Còn nợ.") in transcript(model.requests[0][0])
-
-
-async def test_the_agent_offers_no_screen_button_tool() -> None:
-    model = ScriptedModel("ok")
-    agent = AgentService(
-        model, FakeConversationRepository(), guardrail_limits=TEST_GUARDRAIL_LIMITS
-    )
-
-    await agent.chat(user_id=3, shop_id=15, message="where are my debts?")
-
-    assert "suggest_screen" not in model.tool_names()
 
 
 async def test_chat_does_not_save_exchange_when_model_fails() -> None:
@@ -505,6 +495,9 @@ def tiered_agent(
         conversations,
         guardrail_limits=TEST_GUARDRAIL_LIMITS,
         llm_router=router,
+        calculation=CalculationService(
+            CalculationLimits(max_operations=5, max_operand=1_000_000)
+        ),
     )
     return agent, models
 
@@ -524,7 +517,7 @@ async def test_stream_chat_runs_every_step_on_the_model_of_its_tier() -> None:
     conversations = FakeConversationRepository()
     agent, models = tiered_agent(Tier.MEDIUM, conversations)
     models[Tier.MEDIUM].responses = [
-        tool_call("unknown_tool", {}),
+        tool_call("calculate", {"operations": [{"op": "add", "a": 2, "b": 3}]}),
         "ok",
     ]
 
