@@ -21,6 +21,7 @@ from src.agent.service import AgentService
 from src.agent.turns import AgentTurnService
 from src.app_config import app_config
 from src.calculation.service import CalculationLimits, CalculationService
+from src.embedding.factory import build_embedder
 from src.infra.postgre_db_client import PostgreDBClient
 from src.infra.redis_client import RedisClient
 from src.llm.bifrost_tier_classifier import BifrostTierClassifier
@@ -28,8 +29,7 @@ from src.llm.factory import LLMFactory
 from src.llm.model_router import LLMRouterService
 from src.llm.tier import Tier
 from src.log_formatter import LevelColorFormatter
-from src.memory.embedder import build_embedder
-from src.memory.repository import AgentMemoryRepository
+from src.memory.repository import EMBEDDING_DIMENSIONS, AgentMemoryRepository
 from src.memory.router import router as memory_router
 from src.memory.service import AgentMemoryService
 from src.observability import Observability
@@ -161,6 +161,7 @@ def build_memory_service(
     embedder = build_embedder(
         app_config.AGENT_MEMORY_EMBEDDING_PROVIDER,
         app_config.AGENT_MEMORY_EMBEDDING_MODEL,
+        EMBEDDING_DIMENSIONS,
         app_config.CLOUDFLARE_ACCOUNT_ID,
         app_config.CLOUDFLARE_API_TOKEN,
     )

@@ -24,8 +24,8 @@ from pydantic_ai import Embedder
 from sqlalchemy import select, update
 
 from src.app_config import app_config
+from src.embedding.factory import build_embedder
 from src.infra.postgre_db_client import PostgreDBClient
-from src.memory.embedder import build_embedder
 from src.memory.repository import EMBEDDING_DIMENSIONS, AgentMemory
 
 logger = logging.getLogger(__name__)
@@ -45,6 +45,7 @@ def main() -> int:
     embedder = build_embedder(
         app_config.AGENT_MEMORY_EMBEDDING_PROVIDER,
         app_config.AGENT_MEMORY_EMBEDDING_MODEL,
+        EMBEDDING_DIMENSIONS,
         app_config.CLOUDFLARE_ACCOUNT_ID,
         app_config.CLOUDFLARE_API_TOKEN,
     )

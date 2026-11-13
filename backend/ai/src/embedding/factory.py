@@ -3,9 +3,8 @@ from pathlib import Path
 
 from pydantic_ai import Embedder
 
-from src.memory.onnx_embedding import OnnxEmbeddingModel
-from src.memory.repository import EMBEDDING_DIMENSIONS
-from src.memory.workers_ai_embedding import WorkersAIEmbeddingModel
+from src.embedding.onnx_embedding import OnnxEmbeddingModel
+from src.embedding.workers_ai_embedding import WorkersAIEmbeddingModel
 
 logger = logging.getLogger(__name__)
 
@@ -13,6 +12,7 @@ logger = logging.getLogger(__name__)
 def build_embedder(
     provider: str,
     model: str,
+    dimensions: int,
     cloudflare_account_id: str | None = None,
     cloudflare_api_token: str | None = None,
 ) -> Embedder | None:
@@ -29,14 +29,12 @@ def build_embedder(
                 model,
                 account_id=cloudflare_account_id,
                 api_token=cloudflare_api_token,
-                dimensions=EMBEDDING_DIMENSIONS,
+                dimensions=dimensions,
             )
         )
     if provider == "onnx":
         try:
-            return Embedder(
-                OnnxEmbeddingModel(Path(model), dimensions=EMBEDDING_DIMENSIONS)
-            )
+            return Embedder(OnnxEmbeddingModel(Path(model), dimensions=dimensions))
         except Exception as error:
             # Missing or unreadable model files turn memory off; chat still works.
             logger.error("onnx embedding model at %r failed to load: %s", model, error)
@@ -51,7 +49,7 @@ def build_embedder(
             f"sentence-transformers:{model}",
             settings={
                 "sentence_transformers_normalize_embeddings": True,
-                "dimensions": EMBEDDING_DIMENSIONS,
+                "dimensions": dimensions,
             },
             defer_model_check=False,
         )
