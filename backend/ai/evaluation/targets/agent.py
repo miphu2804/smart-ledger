@@ -19,8 +19,8 @@ from src.agent.service import (
     MemoryRecalled,
     Reset,
     TextDelta,
-    ToolStarted,
 )
+from src.agent.tool_events import ToolStarted
 from src.app_config import app_config
 
 # `run.py` switches the app config before it imports this module, so `src.main` below
