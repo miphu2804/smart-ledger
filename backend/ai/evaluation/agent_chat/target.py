@@ -23,8 +23,8 @@ from src.agent.service import (
 )
 from src.app_config import app_config
 
-# `run.py` switches the app config before it imports this module, so `src.main` below
-# is imported with tracing off and memory on.
+# `src.main` reads the tracing key and the memory switch only when `lifespan` starts in
+# `_start_app`, so a run gets the app config as `run.py` switched it.
 from src.main import app, lifespan
 from src.memory.repository import NewMemory
 from src.memory.service import AgentMemoryService

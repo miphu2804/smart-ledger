@@ -15,7 +15,7 @@ import os
 import sys
 from pathlib import Path
 
-# Running this file puts `evaluation/` first on the path, where its `core` or `metrics`
+# Running this file puts `evaluation/` first on the path, where its `core` or `memory`
 # folders would shadow other modules; the project root takes its place.
 ROOT = Path(__file__).resolve().parents[1]
 sys.path[0] = str(ROOT)
@@ -39,7 +39,7 @@ app_config.AGENT_MEMORY_ENABLED = True
 from evaluation.agent_chat.agent_chat_eval import AgentChatEval  # noqa: E402
 from evaluation.agent_chat.honeyhive import sync_scores  # noqa: E402
 from evaluation.core.gate import find_gate_failures, load_thresholds  # noqa: E402
-from evaluation.core.pipeline import EvaluationPipeline  # noqa: E402
+from evaluation.core.pipeline import run_evaluation  # noqa: E402
 from evaluation.core.report import (  # noqa: E402
     build_markdown_report,
     compute_averages,
@@ -73,7 +73,7 @@ def main() -> None:
         raise SystemExit("--sync needs HH_API_KEY")
     # Read before the run, so a bad gate file fails before any model is asked.
     thresholds = load_thresholds(arguments.gate or evaluation.thresholds)
-    results = asyncio.run(EvaluationPipeline().run(evaluation))
+    results = asyncio.run(run_evaluation(evaluation))
     if not results:
         raise SystemExit("no answers were recorded")
     run_name = f"{evaluation.name}-{arguments.name}"
