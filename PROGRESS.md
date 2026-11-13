@@ -2,10 +2,10 @@
 
 | Area | Change |
 |---|---|
-| Mobile | • Chat no longer draws the screen button card under an answer; `withoutActions` still drops the ```actions block that ends answers saved before 2026-11-13, so old answers show no raw JSON<br>• The `suggest_screen` step label and its answer exemption in `preambleBefore` are gone, and the mock answer no longer carries the block<br>• The `ScreenButton` element inside a ```ui card is unchanged |
+| Mobile | • Chat no longer draws the screen button card under an answer; `withoutActions` still drops the ```actions block that ends answers saved before 2026-11-13, so old answers show no raw JSON<br>• The `suggest_screen` step label and its answer exemption in `preambleBefore` are gone, and the mock answer no longer carries the block<br>• `readUi` drops the `ScreenButton` element, so a stored ```ui card draws without its button, and `chatScreens.ts` is deleted |
 | Docs | • `frontend/mobile/docs/operations.md` describes the hidden block |
 
-Check: `npm test` passed 200 tests, `npm run typecheck` and `npm run export:web` passed, and the rewritten tests failed before the change. Not run on a simulator. Commit: the commit that adds this entry.
+Check: `npm test` passed 201 tests, `npm run typecheck` and `npm run export:web` passed, and the rewritten tests failed before the change. Not run on a simulator. Commit: the commit that adds this entry.
 
 ### 2026-11-12 — Make agent memory writes exact and ordered
 

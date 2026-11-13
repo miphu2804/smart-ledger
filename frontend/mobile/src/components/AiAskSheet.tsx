@@ -250,9 +250,8 @@ const styles = StyleSheet.create({
   header: { marginBottom: 6 },
   headerSide: { width: 40 },
   title: { flex: 1, textAlign: 'center' },
-  // Vùng cuộn tràn ra mép bảng rồi thụt lề lại bên trong, để bóng của nút mở màn hình không bị cắt thẳng ở mép trái.
-  body: { flex: 1, marginHorizontal: -16 },
-  bodyContent: { paddingHorizontal: 16, paddingBottom: 20 },
+  body: { flex: 1 },
+  bodyContent: { paddingBottom: 20 },
   center: { textAlign: 'center' },
   disclaimer: { marginTop: 2, marginBottom: 20 },
   messages: { gap: 20 },
