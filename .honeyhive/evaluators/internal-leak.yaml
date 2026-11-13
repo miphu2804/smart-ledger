@@ -19,7 +19,7 @@ criteria: |
 
   INTERNALS = re.compile(
       r"ai_read|\bv_[a-z_]+|\bselect\b[\s\S]+\bfrom\b|\b(shop|user)_id\b"
-      r"|query_shop_data|suggest_screen|Error\[",
+      r"|query_shop_data|Error\[",
       re.IGNORECASE,
   )
 

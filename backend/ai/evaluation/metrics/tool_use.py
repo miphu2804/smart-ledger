@@ -54,8 +54,7 @@ class ToolUseEvaluator:
     def _score_choice(case: Case, output: Output) -> int:
         """A shop question reads the shop's data; any other question reads none.
 
-        `suggest_screen` and `calculate` read nothing, so only `query_shop_data`
-        counts.
+        `calculate` reads nothing, so only `query_shop_data` counts.
         """
         used = "query_shop_data" in output.values["tools"]
         return int(used == case.truth["needs_tool"])

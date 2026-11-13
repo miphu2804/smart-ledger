@@ -31,6 +31,11 @@
 - The agent forgets anything said more than 30 exchanges earlier in the same conversation, unless long-term memory holds it. Owners chat little, so this is expected to be rare; raise `AGENT_HISTORY_TURNS` if it is not.
 - `chat_conversations.summary` and `summary_through_message_id` are no longer read or written. They are kept so the previous release can roll back, and a later migration should drop them.
 
+## Update 2026-11-13: screen buttons removed
+
+- **What changed:** the product owner removed the chat screen buttons, so AI no longer writes the ```` ```actions ```` block and the `suggest_screen` tool is gone; see the [chat answer stream contract](../../contracts/api-contracts.md#chat-answer-stream).
+- **Effect on this decision:** none. Answers stored before the removal can still end with the block, so history replay still drops it (`STORED_SCREEN_BUTTONS` in `backend/ai/src/agent/service.py`), and the window itself is unchanged.
+
 ## Open questions
 
 - Why was the rolling summary removed in #145? The owner of that change should add the reason here.

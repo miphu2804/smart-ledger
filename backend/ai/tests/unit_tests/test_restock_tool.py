@@ -110,7 +110,7 @@ async def test_tools_sent_to_the_model_expose_only_period() -> None:
         user_id=3, shop_id=15, message="m"
     )
 
-    spec, _ = model.requests[0][1].function_tools
+    (spec,) = model.requests[0][1].function_tools
     assert spec.name == "suggest_restock"
     assert list(spec.parameters_json_schema["properties"]) == ["period"]
     assert spec.parameters_json_schema["required"] == ["period"]
@@ -234,7 +234,7 @@ async def test_agent_without_restock_has_no_suggest_restock_tool() -> None:
         user_id=3, shop_id=15, message="m"
     )
 
-    assert model.tool_names() == ["query_shop_data", "suggest_screen"]
+    assert model.tool_names() == ["query_shop_data"]
 
 
 async def test_instructions_are_static_and_carry_the_restock_rules() -> None:

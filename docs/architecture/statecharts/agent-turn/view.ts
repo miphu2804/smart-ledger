@@ -39,7 +39,6 @@ const steps: Record<string, string | null> = {
   RecallSkipped: "memories added, or none [off, empty, or failed]",
   CallTools: "the model calls tools",
   ToolsReturn: "the tools return",
-  ButtonsOnly: "only screen buttons are called",
   ScreenRejects: "the screen rejects the answer",
   WriteAgain: "the model writes again",
   ScreenPasses: "the answer passes the screen",

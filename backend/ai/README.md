@@ -41,7 +41,6 @@ The agent uses Pydantic AI. Prompts are static English instructions that tell th
 | `suggest_restock` | `AI_SQL_READER_URL` configured | Read-only stock suggestion |
 | `calculate` | `CALC_ENABLED=true` | Closed arithmetic operation set, no I/O |
 | `run_code` | `SANDBOX_ENABLED=true` and the Code Mode extra installed | Model-written Python in Monty; no tools are folded in by default |
-| `suggest_screen` | Always | Closed set of mobile screen buttons |
 
 AI returns answers and proposals only; it does not create sales, payments, debts or expenses.
 

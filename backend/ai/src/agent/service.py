@@ -2,20 +2,20 @@ import asyncio
 import hashlib
 import json
 import logging
+import re
 import time
 import uuid
 from collections.abc import AsyncGenerator, AsyncIterator
 from contextlib import asynccontextmanager, suppress
 from dataclasses import asdict, dataclass
 
-from pydantic_ai import Agent, AgentRun, Tool
+from pydantic_ai import Agent, AgentRun
 from pydantic_ai.messages import (
     CachePoint,
     ModelMessage,
     ModelRequest,
     ModelResponse,
     TextPart,
-    ToolCallPart,
     UserPromptPart,
 )
 from pydantic_ai.models import Model
@@ -23,12 +23,6 @@ from pydantic_ai.models import Model
 from src.agent.errors import GuardrailError
 from src.agent.guardrails import GuardrailLimits, GuardrailService
 from src.agent.repository import AgentConversationRepository
-from src.agent.screen_buttons import (
-    SCREEN_BUTTONS,
-    accepted_screens,
-    suggest_screen,
-    with_screen_buttons,
-)
 from src.agent.tool_events import (
     ToolFinished,
     ToolStarted,
@@ -64,6 +58,10 @@ from src.sql.repository import ShopDataRepository
 from src.utils import get_time
 
 logger = logging.getLogger(__name__)
+
+# Answers saved while chat had screen buttons end with this block; history replay
+# drops it, so the model never reads one back and learns to write it.
+STORED_SCREEN_BUTTONS = re.compile(r"\n*```actions\n.*?\n```\s*$", re.DOTALL)
 
 
 @dataclass(frozen=True)
@@ -143,7 +141,6 @@ class AgentService:
             prompt_parts.append(CALC_PROMPT)
         if memory is not None:
             prompt_parts.append(MEMORY_PROMPT)
-        tools.append(Tool(suggest_screen))
         # The sandbox option runs model-written code from one run_code tool; every
         # registered tool stays native, so a read-only data question or a plain
         # calculation never starts Monty. Its prompt section is appended only here,
@@ -375,17 +372,10 @@ class AgentService:
             self.guardrails.run_limits(),
             self._iter(prompt, history, context, session_id, selection) as run,
         ):
-            answer = ""
-            returns = None
             async for node in run:
-                if answer:
-                    # The button calls have returned; see _stream_run.
-                    returns = node.request
-                    break
                 if Agent.is_call_tools_node(node):
                     await self._queue_tool_events(node, run, None)
-                    answer = self._kept_text(node.model_response)
-            return self._read_result(run, answer, returns)
+            return self._read_result(run)
 
     async def _stream_events(
         self,
@@ -483,8 +473,7 @@ class AgentService:
         events: asyncio.Queue[AgentStreamEvent | Exception],
     ) -> tuple[str, str, str]:
         """Queue the text each model response releases; return the text the owner
-        was sent since the last Reset, the answer with its buttons, and the model
-        version."""
+        was sent since the last Reset, the answer and the model version."""
         delivered = ""
         # How long the owner waited for the first words since the turn arrived, memory
         # recall included: the latency they feel, even when a preamble is later reset.
@@ -493,19 +482,10 @@ class AgentService:
             self.guardrails.run_limits(),
             self._iter(prompt, history, context, session_id, selection) as run,
         ):
-            # The answer a response wrote alongside screen-button calls only.
-            answer = ""
-            returns = None
             async for node in run:
                 if Agent.is_call_tools_node(node):
                     await self._queue_tool_events(node, run, events)
                     continue
-                if answer:
-                    # The button calls have returned, so the answer is complete. The
-                    # model is not asked again: it would write the answer a second
-                    # time, often reworded, and no text check tells the copy apart.
-                    returns = node.request
-                    break
                 if not Agent.is_model_request_node(node):
                     continue
                 response_text = ""
@@ -529,15 +509,11 @@ class AgentService:
                         delivered += fresh
                         events.put_nowait(TextDelta(fresh))
                         released = safe
-                    answer = self._kept_text(stream.response)
             if first_text_ms is None:
                 # Nothing passed the screen while streaming; the caller sends the answer
                 # as soon as this returns.
                 first_text_ms = round(1000 * (time.monotonic() - started))
-            return (
-                delivered,
-                *self._read_result(run, answer, returns, first_text_ms),
-            )
+            return (delivered, *self._read_result(run, first_text_ms))
 
     def _iter(
         self,
@@ -573,19 +549,9 @@ class AgentService:
                     events.put_nowait(progress)
 
     def _read_result(
-        self,
-        run: AgentRun,
-        answer: str,
-        returns: ModelRequest | None,
-        first_text_ms: int | None = None,
+        self, run: AgentRun, first_text_ms: int | None = None
     ) -> tuple[str, str]:
-        """Log the turn's token use; return the answer, with its screen buttons, and
-        the model version.
-
-        `answer` is the text a response wrote alongside screen-button calls only, which
-        ended the run early; empty when the run ended on its final output. `returns`
-        is the request the early end never sent, which holds those calls' returns.
-        """
+        """Log the turn's token use; return the answer and the model version."""
         # Token counts per turn, to size AGENT_TURN_TOKEN_LIMIT from real traffic and
         # to see how much of the prompt the provider served from its cache.
         usage = run.usage
@@ -596,42 +562,14 @@ class AgentService:
             usage.cache_write_tokens,
             100 * usage.cache_hit_ratio,
         )
-        messages = run.new_messages()
-        if not answer:
-            answer = run.result.output
+        answer = run.result.output
         model_name = next(
             message.model_name
-            for message in reversed(messages)
+            for message in reversed(run.new_messages())
             if isinstance(message, ModelResponse)
         )
-        if returns is not None:
-            messages = [*messages, returns]
-        answer = with_screen_buttons(answer, accepted_screens(messages))
         self.observability.finish_turn(answer, usage, first_text_ms)
         return answer, model_name or self.model_name
-
-    @staticmethod
-    def _calls(response: ModelResponse) -> set[str]:
-        """The names of the tools a model response calls."""
-        return {
-            part.tool_name for part in response.parts if isinstance(part, ToolCallPart)
-        }
-
-    def _kept_text(self, response: ModelResponse) -> str:
-        """The answer text of a response that only adds screen buttons, if the screen
-        passes it; otherwise empty.
-
-        A model often writes the whole answer and calls suggest_screen in one response.
-        That text is the answer, and the run ends once the calls return. Text before a
-        data tool call is a preamble and is dropped. The Harness screens only the final
-        output, so this text is screened here.
-        """
-        if self._calls(response) != {suggest_screen.__name__}:
-            return ""
-        text = "".join(
-            part.content for part in response.parts if isinstance(part, TextPart)
-        ).rstrip()
-        return text if self.guardrails.allows_answer(text) else ""
 
     async def _save_turn(
         self,
@@ -735,12 +673,11 @@ class AgentService:
     @staticmethod
     def _model_messages(history: list[dict]) -> list[ModelMessage]:
         # History follows verbatim; the agent adds the instructions to the new request.
-        # Stored buttons are dropped, so the model does not learn to write them itself.
         return [
             ModelRequest(parts=[UserPromptPart(entry["content"])])
             if entry["role"] == "USER"
             else ModelResponse(
-                parts=[TextPart(SCREEN_BUTTONS.sub("", entry["content"]))]
+                parts=[TextPart(STORED_SCREEN_BUTTONS.sub("", entry["content"]))]
             )
             for entry in history
         ]

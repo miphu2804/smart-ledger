@@ -89,7 +89,7 @@ async def test_tools_sent_to_the_model_expose_only_sql() -> None:
 
     await build_agent(model, FakeShopData()).chat(user_id=3, shop_id=15, message="m")
 
-    spec, _ = model.requests[0][1].function_tools
+    (spec,) = model.requests[0][1].function_tools
     assert spec.name == "query_shop_data"
     assert list(spec.parameters_json_schema["properties"]) == ["sql"]
     assert spec.parameters_json_schema["required"] == ["sql"]
@@ -249,7 +249,7 @@ async def test_no_repository_means_no_shop_data_tool() -> None:
 
     await build_agent(model).chat(user_id=3, shop_id=15, message="m")
 
-    assert model.tool_names() == ["suggest_screen"]
+    assert model.tool_names() == []
 
 
 def test_result_payload_marks_truncation() -> None:
