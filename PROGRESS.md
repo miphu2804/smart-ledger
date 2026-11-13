@@ -1,3 +1,11 @@
+### 2026-11-13 — Give embedding its own package
+
+| Area | Change |
+|---|---|
+| AI | • The ONNX and Workers AI embedding models and `build_embedder` move from `src/memory/` to `src/embedding/` (`factory.py`, `onnx_embedding.py`, `workers_ai_embedding.py`), which imports nothing from `src.memory` or `src.agent`<br>• `build_embedder` takes `dimensions`; its callers pass `EMBEDDING_DIMENSIONS`, which stays in `src/memory/repository.py` as the pgvector column width; the factory's logger name becomes `src.embedding.factory` |
+
+Check: AI Ruff lint and format passed; unit pytest passed 487 with 1 skipped. The OpenAPI document is byte-identical to `origin/staging` at `6ddf862d`. Integration suites were not run. Commit: the commit that adds this entry.
+
 ### 2026-11-13 — Remove the screen buttons from chat answers
 
 | Area | Change |
@@ -189,11 +197,3 @@ Check: local documentation paths and anchors resolve apart from the existing ill
 | Docs | • Restored the target architecture, CI/CD, VPS network, Dopbase backup, sign-in and APK release diagrams with their draw.io sources; replaced the Dopbase host and Vercel domains with generic labels and re-exported those two SVGs<br>• Drew the staging and production app stacks in `ci-cd.drawio` as one Production | Staging box, aligned Caddy with Core, added Cloudinary for product images, grouped the Supabase databases and alert channels into titled boxes and rerouted edges so none cross or pass through an icon or title<br>• Restored the root README tech stack and system architecture sections and the diagram explanations in CI/CD, without addresses or server paths<br>• The diagram guide now allows topology drawn from tracked `deploy/` files and keeps domains, IPs, server paths, credentials and access procedures private<br>• Fixed 20 claims that a code check found stale in the API contracts, technical design, AI runtime reference, Mobile operations, Web README and development guides, and pinned every diagram export to a white background<br>• Rendered the Mermaid diagrams to white SVGs from `.mmd` sources, and rewrote the PRD functional requirements, AI runtime reference and Mobile operations guide in terms of behavior instead of class, function and file names; the CI/CD diagram now names each service's role instead of its port |
 
 Check: internal links and anchors in 48 changed Markdown files resolve; `git diff --check` passed; no domain, IP or server path remains in the diagrams, README or CI/CD guide; the three edited diagrams were rendered and inspected, and `validate.py` reports no edge crossing in `ci-cd.drawio`; network claims were checked against `deploy/*/compose.yaml`. Commit: the commit that adds this entry.
-
-### 2026-11-07 — Re-review fixes for documentation boundaries (#555)
-
-| Area | Change |
-|---|---|
-| Docs and tooling | • The catalog `BIGINT` test now reads the AI draft reference instead of the API contract, which keeps only implemented endpoints<br>• `scripts/secrets/credential_map.py` writes to `~/.smartledger/credential-map/` outside Git and `.gitignore` blocks HTML snapshots in `docs/development/credential-map/`<br>• Restored original document authors, defined `author` as the writer, added a screenshot capture manifest, embedded the logical architecture Mermaid in the diagram guide and corrected AI logging, session ID, draft result and expense-status statements found by a source check |
-
-Check: AI `uv run pytest` 541 passed, 80 skipped; internal links and anchors in 48 changed Markdown files resolve; `git diff --check` passed. The Mermaid render and the credential-map script run against Dopbase were not verified. Commit: the commit that adds this entry.

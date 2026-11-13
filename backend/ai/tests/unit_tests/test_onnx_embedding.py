@@ -8,8 +8,9 @@ from tokenizers import Tokenizer
 from tokenizers.models import WordLevel
 from tokenizers.pre_tokenizers import Whitespace
 
-from src.memory.embedder import build_embedder
-from src.memory.onnx_embedding import OnnxEmbeddingModel
+from src.embedding.factory import build_embedder
+from src.embedding.onnx_embedding import OnnxEmbeddingModel
+from src.memory.repository import EMBEDDING_DIMENSIONS
 
 VOCAB = {"[UNK]": 0, "gas": 1, "giao": 2, "tận": 3, "nơi": 4}
 
@@ -78,4 +79,4 @@ def test_a_text_without_tokens_is_refused():
 
 
 def test_a_missing_model_directory_turns_memory_off(tmp_path):
-    assert build_embedder("onnx", str(tmp_path)) is None
+    assert build_embedder("onnx", str(tmp_path), EMBEDDING_DIMENSIONS) is None

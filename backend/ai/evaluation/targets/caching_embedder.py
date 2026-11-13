@@ -6,7 +6,8 @@ from pathlib import Path
 from pydantic_ai.embeddings import EmbeddingResult
 
 from src.app_config import app_config
-from src.memory.embedder import build_embedder
+from src.embedding.factory import build_embedder
+from src.memory.repository import EMBEDDING_DIMENSIONS
 
 BATCH = 50
 
@@ -56,6 +57,7 @@ class CachingEmbedder:
         embedder = build_embedder(
             app_config.AGENT_MEMORY_EMBEDDING_PROVIDER,
             app_config.AGENT_MEMORY_EMBEDDING_MODEL,
+            EMBEDDING_DIMENSIONS,
             app_config.CLOUDFLARE_ACCOUNT_ID,
             app_config.CLOUDFLARE_API_TOKEN,
         )
