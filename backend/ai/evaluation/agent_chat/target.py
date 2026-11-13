@@ -19,8 +19,8 @@ from src.agent.service import (
     MemoryRecalled,
     Reset,
     TextDelta,
-    ToolStarted,
 )
+from src.agent.tool_events import ToolStarted
 from src.app_config import app_config
 
 # `src.main` reads the tracing key and the memory switch only when `lifespan` starts in

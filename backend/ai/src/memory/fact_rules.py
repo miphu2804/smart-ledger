@@ -5,18 +5,13 @@ below, and these rules screen what the models return, because a prompt alone doe
 bind a model.
 """
 
-import re
 from dataclasses import replace
 from typing import Literal
 
 from pydantic import BaseModel, Field
 
+from src.agent.guardrails.phone_number import PHONE_NUMBER
 from src.memory.repository import NewMemory
-
-# A Vietnamese phone number: 0, 84 or +84, then nine digits that spaces, dots or
-# dashes may split. The lookbehind keeps a digit run inside a longer number, such as
-# the money amount "120.000.000đ", from matching.
-PHONE_NUMBER = re.compile(r"(?<![\d.,])(?:\+84|84|0)(?:[\s.\-]?\d){9}(?!\d)")
 
 
 class MemoryFact(BaseModel):
@@ -36,6 +31,24 @@ class MemoryDecision(BaseModel):
     fact: int
     action: Literal["new", "replaces", "known"]
     replaces: int | None = None
+
+
+class MemoryFacts(BaseModel):
+    """Structured output schema the extraction model must return."""
+
+    facts: list[MemoryFact] = Field(max_length=5)
+
+
+class MemorySummary(BaseModel):
+    """Structured output schema of a summary: never empty, so nothing is lost."""
+
+    facts: list[MemoryFact] = Field(min_length=1, max_length=5)
+
+
+class MemoryDecisions(BaseModel):
+    """Structured output schema the reconcile model must return."""
+
+    decisions: list[MemoryDecision] = Field(max_length=5)
 
 
 def without_phone_numbers(facts: list[MemoryFact]) -> list[MemoryFact]:

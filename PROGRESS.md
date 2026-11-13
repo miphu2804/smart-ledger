@@ -1,3 +1,11 @@
+### 2026-11-13 — Give the memory output shapes and diacritic folding one owner
+
+| Area | Change |
+|---|---|
+| AI | • `MemoryFacts`, `MemorySummary` and `MemoryDecisions` move from `src/memory/service.py` to `src/memory/fact_rules.py`, beside the item shapes they wrap<br>• `src/memory/ranking.py` exposes `unaccented`, and the memory evaluation generator uses it instead of its own copy<br>• The agent evaluation target imports `ToolStarted` from `src/agent/tool_events.py`<br>• The Vietnamese phone number pattern `PHONE_NUMBER` moves from `src/memory/fact_rules.py` to `src/agent/guardrails/phone_number.py`, and its tests move to `test_agent_guardrails.py`; the memory rules import it and still drop every fact that holds a phone number |
+
+Check: AI Ruff lint and format passed; pytest passed 534 tests with 100 skipped, because the PostgreSQL and Redis suites were not run. The three structured-output JSON schemas, the `terms` output and the regenerated `evaluation/memory/cases.jsonl` are identical to `staging` at `6ddf862d`.
+
 ### 2026-11-13 — Package the AI evaluation by evaluation
 
 | Area | Change |
@@ -183,11 +191,3 @@ Check: a fake `dopbase` printing quoted values loads the exact bytes, a multi-li
 | CI | • New `docs` area in `scripts/ci/changes.sh` and a `docs` job in `ci.yml` that runs `okf_sync.py --check`, listed in the result summary |
 
 Check: `okf_sync.py --check` passes and a second write run changes nothing; frontmatter, a missing concept and a wrong title are each reported; `bash -n`, `shellcheck` and `actionlint` pass.
-
-### 2026-11-07 — Move HoneyHive sync scripts and trim redundant script branches
-
-| Area | Change |
-|---|---|
-| CI | • `sync-evaluators.sh` and `sync-dashboards.sh` move from the repository root to `scripts/honeyhive/`, beside the other script groups; workflows, CODEOWNERS and docs point at the new paths<br>• The Vercel build and deploy scripts build one argument list instead of repeating the command per target, and `apply.sh` drops its undocumented no-op `--keep-all` and `--backup` flags |
-
-Check: `actionlint`, `shellcheck --severity=warning` on every tracked script, `check-evaluator-ids.sh`, `check-provider-coupling.sh` and Ruff passed; the Vercel scripts ran against a stub CLI on bash 3.2 for both targets and still fail when the deploy fails. The HoneyHive and Vercel scripts were not run against the real services. Commit: the commit that adds this entry.
