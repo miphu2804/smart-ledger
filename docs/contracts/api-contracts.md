@@ -621,7 +621,6 @@ The AI Assistant screen on mobile calls the stream route and shows text graduall
 | `OrderCard` | `code`, `date?`, `customer?`, `status?`, `items`, `total` | One order |
 | `Badge` | `text`, `tone` | A status label; `tone` is `neutral`, `good`, `bad` or `warn` |
 | `Text` | `text` | A short note, at most 200 characters |
-| `ScreenButton` | `screen` | Opens an app screen from the allowlist `sales`, `voice_order`, `orders`, `products`, `debts`, `expenses`, `reports`; the prompt does not ask the model for it |
 
 `unit` is `vnd`, `count` or `percent`; a `List` item may instead carry the product's own unit word of at most 10 characters, such as `túi`, and shows as a count with that word. The block holds at most 40 elements and 4 levels, and each id is used once. Labels are cut to 24 characters. Every number except `change` and table cells is finite and at least 0.
 
@@ -629,7 +628,7 @@ The `ui` block is inside `answer`, so it is stored with the answer and shown aga
 
 Answers stored before the `ui` block may hold a ```chart block (`{"type": "bar" | "line", "title", "unit", "data"}`); mobile still draws it, but the prompt no longer asks for it.
 
-AI no longer adds screen buttons to `answer`; the owner removed them on 2026-11-13 and the `suggest_screen` tool is gone. Answers stored before then may end with an ```` ```actions ```` block that lists screen names: AI drops it from old answers when it reads history for a later turn, and mobile hides it from the displayed text. The app usage guide in the agent's prompt (`backend/ai/src/prompt_templates/app_guide.py`) copies screen and button names from the current app, so the answer tells the owner where a screen is; the PRD and AC do not yet specify this guidance behavior.
+AI no longer adds screen buttons to `answer`; the owner removed them on 2026-11-13 and the `suggest_screen` tool is gone. Answers stored before then may end with an ```` ```actions ```` block that lists screen names: AI drops it from old answers when it reads history for a later turn, and mobile hides it from the displayed text. The app usage guide in the agent's prompt (`backend/ai/src/prompt_templates/app_guide.py`) copies screen and button names from the current app, so the answer tells the owner where a screen is; the PRD and AC do not yet specify this guidance behavior. A stored `ui` card may also hold a `ScreenButton` element; mobile draws the card without it.
 
 ## 7. Admin dashboard — implemented in Core
 

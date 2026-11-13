@@ -3,7 +3,8 @@
 | Area | Change |
 |---|---|
 | AI | • The `suggest_screen` tool, its prompt paragraph and the ```` ```actions ```` block are gone, by owner decision; the app guide still tells the owner where each screen is<br>• History replay still strips the block from answers stored before the change, so the model never reads one back<br>• The evaluators no longer allow or look for `suggest_screen` and the block |
-| Docs | • The chat contract, AI README and runtime reference, the walkthrough diagrams, the AgentTurn statechart, `AC-127` and `OQ-004` drop the button |
+| HoneyHive | • `invalid-chart` skips a `ScreenButton` in a ```ui card as Mobile does, and still flags a card that has nothing else to draw |
+| Docs | • The chat contract, AI README and runtime reference, the walkthrough diagrams, the AgentTurn statechart, `AC-127` and `OQ-004` drop the button, and the contract's ```ui catalogue drops `ScreenButton` |
 
 Check: AI Ruff lint and format passed; pytest passed 622 tests with 13 live-model skips on disposable PostgreSQL and Redis. OpenAPI is unchanged; `prompt_version` changes for all 32 capability combinations, so traces and evaluation runs start a new prompt group. TLC re-checked AgentTurn with 340 distinct states and no invariant errors. On the local stack, two live chat turns asking where a screen is answered without a block, the second after a block was written into the stored first answer. Commit: the commits on `feat/remove-screen-buttons`.
 
