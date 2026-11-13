@@ -6,7 +6,7 @@ from pathlib import Path
 from pydantic_ai.embeddings import EmbeddingResult
 
 from src.app_config import app_config
-from src.main import build_memory_embedder
+from src.memory.embedder import build_embedder
 
 BATCH = 50
 
@@ -53,7 +53,12 @@ class CachingEmbedder:
 
     async def _fetch(self, kind: str, missing: list[str]) -> None:
         """Embeds the texts the file lacks with the app's embedder, in batches."""
-        embedder = build_memory_embedder()
+        embedder = build_embedder(
+            app_config.AGENT_MEMORY_EMBEDDING_PROVIDER,
+            app_config.AGENT_MEMORY_EMBEDDING_MODEL,
+            app_config.CLOUDFLARE_ACCOUNT_ID,
+            app_config.CLOUDFLARE_API_TOKEN,
+        )
         if embedder is None:
             raise SystemExit(
                 "no memory embedder: check AGENT_MEMORY_EMBEDDING_* in .env"

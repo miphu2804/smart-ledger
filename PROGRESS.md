@@ -1,3 +1,11 @@
+### 2026-11-13 — Restructure the AI service by responsibility
+
+| Area | Change |
+|---|---|
+| AI | • The memory package owns its embedder factory, background writes, HTTP routes and schema, and the fact screening rules; `src.main` is imported for `app` and `lifespan`, and by one test for `SANDBOX_TOOLS`<br>• Screen-button rules sit in `src/agent/screen_buttons.py`; one `OpenAIModelProvider` builds both OpenAI protocols<br>• `AgentTurnService` receives `AgentService` and owns admission and replay; `AgentTurnRepository.complete` saves a receipted exchange through the public `owned_conversation` and `write_exchange`<br>• Model construction and per-turn tier routing share one `src/llm/` package (`factory.py`, `model_router.py`, `tier.py`, `bifrost_tier_classifier.py`, `openai_model_provider.py`, `session_settings.py`), replacing `src/providers/` and `src/llm_router/`; logger names move to `src.llm.*`<br>• A distill pass over the modules the branch created or reshaped: the factory builds a provider inline, and both chat routes open the agent run through one `AgentService._iter`<br>• `LITELLM_URL` is removed; `QDRANT_URL` and the `HH_*` fields stay pending owner approval |
+
+Check: AI Ruff lint and format passed; pytest passed 631 tests with 13 live-model skips after every step, with the PostgreSQL and Redis suites on disposable local containers. The OpenAPI document and `prompt_version` for all 32 capability combinations are identical to `origin/staging` at `86919eba`. No statechart state or transition changed, so no model was re-checked. Commit: the commits on `refactor/ai-maintainability` after `86919eba`.
+
 ### 2026-11-12 — Make agent memory writes exact and ordered
 
 | Area | Change |
@@ -188,10 +196,3 @@ Check: AI `uv run pytest` 541 passed, 80 skipped; internal links and anchors in 
 
 Check: 72 Markdown documents and 715 internal links passed path/anchor/index/frontmatter checks; DBML matches 25 Core and 4 AI tables. All 14 walkthrough diagrams and the logical architecture rendered; the three changed walkthrough exports were updated. AI auth/observability tests: 37 passed. TypeScript token comparison confirms all three source-file edits are comment-only. BRD and nine ADR statuses are unchanged; PRD changes only diagram navigation. Live environments, private knowledge-base completeness, full secret scanning and Git-history removal were not verified or performed. Commit: the commit that adds this entry.
 
-### 2026-11-07 — Production-first documentation and local ownership (#555)
-
-| Area | Change |
-|---|---|
-| Docs | • Audited the actual tracked tree at staging `a2766ee`; separated production operation from EXE201 delivery scope and implementation/enablement/deployment/acceptance<br>• Made landing pages domain-oriented, kept local indexes, moved service detail into owned Core/AI/Mobile guides, and preserved technical safeguards, dated decisions and rollout evidence<br>• Aligned root/Mobile instructions, English technical prose and lean OKF/plain authors; reconciled source facts and resolved obsolete merge/assignment blockers without claiming live acceptance |
-
-Check: internal paths/anchors, immediate-child index/frontmatter consistency and root navigation reachability passed; BRD/PRD stayed byte-identical, API contract body changed only link targets, all nine ADR decision statuses stayed intact, `config.ts` matched the baseline after removing comments, and `git diff --check` passed. Mobile typecheck passed; `npm test` had 192 pass/2 fail, reproduced with the same failures on baseline `a2766ee`. Source inventory and verification evidence are in the PR. Live deployment, provider/device UAT and acceptance were not verified. Commit: the commit that adds this entry.

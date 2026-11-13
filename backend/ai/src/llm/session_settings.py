@@ -6,7 +6,7 @@ def session_settings(session_id: str, shop_id: int) -> ModelSettings:
 
     Bifrost groups its logs by `x-bf-session-id` and stores `x-bf-lh-*` as log
     metadata. A run's settings replace the model's `extra_headers` whole, so the
-    virtual key header lives on the client instead (src/providers/).
+    virtual key header lives on the client instead (src/llm/).
     """
     return ModelSettings(
         extra_headers={

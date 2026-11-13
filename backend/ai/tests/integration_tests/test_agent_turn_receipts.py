@@ -68,9 +68,9 @@ def receipt_env(monkeypatch, internal_headers):
         postgres = PostgreDBClient(schema_url(database, name), pool_size=4)
         conversations = AgentConversationRepository(postgres, FakeRedis())
         store = AgentTurnRepository(postgres)
-        turns = AgentTurnService(store, True)
         model = ScriptedModel("Saved test answer")
         agent = AgentService(model, conversations, TEST_GUARDRAIL_LIMITS)
+        turns = AgentTurnService(store, agent, True)
         monkeypatch.setattr(app.state, "agent", agent, raising=False)
         monkeypatch.setattr(app.state, "conversations", conversations, raising=False)
         monkeypatch.setattr(app.state, "turns", turns, raising=False)
@@ -142,15 +142,12 @@ def test_json_replay_restart_and_stream_keep_exact_answer_and_model_metadata(
     assert second.json() == first.json()
     assert first.json()["request_id"] == body["turn_id"]
     assert first.headers["cache-control"] == "no-store"
-    fresh = AgentTurnService(AgentTurnRepository(env.postgres), True)
-    monkeypatch.setattr(app.state, "turns", fresh)
-    monkeypatch.setattr(
-        app.state,
-        "agent",
-        AgentService(
-            ScriptedModel("Must never run"), env.conversations, TEST_GUARDRAIL_LIMITS
-        ),
+    unused = AgentService(
+        ScriptedModel("Must never run"), env.conversations, TEST_GUARDRAIL_LIMITS
     )
+    fresh = AgentTurnService(AgentTurnRepository(env.postgres), unused, True)
+    monkeypatch.setattr(app.state, "turns", fresh)
+    monkeypatch.setattr(app.state, "agent", unused)
     stream = env.client.post("/internal/v1/agent/chat/stream", json=body)
     done = [
         json.loads(line[6:])
@@ -181,7 +178,7 @@ def test_stream_save_precedes_done_and_json_retry_does_not_run_again(receipt_env
         request = AgentChatRequest(**body)
         created, _, execution = await env.turns.admit(request)
         assert created
-        events = await env.turns.stream(env.agent, request, execution)
+        events = await env.turns.stream(request, execution)
         seen = []
         async for event in events:
             if isinstance(event, Done):
@@ -251,7 +248,7 @@ def test_parallel_posts_and_existing_in_progress_receipt_start_only_one_model(
         return ModelResponse(parts=[TextPart("One answer")])
 
     monkeypatch.setattr(
-        app.state,
+        env.turns,
         "agent",
         AgentService(FunctionModel(blocked), env.conversations, TEST_GUARDRAIL_LIMITS),
     )
@@ -413,7 +410,7 @@ async def test_disconnect_during_threaded_save_is_fenced_or_recovers_committed_a
     monkeypatch.setattr(env.store, "complete", delayed)
     request = AgentChatRequest(**payload(env))
     _, _, execution = await env.turns.admit(request)
-    task = asyncio.create_task(env.turns.chat(env.agent, request, execution))
+    task = asyncio.create_task(env.turns.chat(request, execution))
     try:
         assert await asyncio.to_thread(entered.wait, 5)
         task.cancel()
@@ -454,7 +451,9 @@ def test_disabled_gate_and_missing_store_never_fall_back_to_legacy_chat(
 ):
     env = receipt_env
     body = payload(env)
-    monkeypatch.setattr(app.state, "turns", AgentTurnService(env.store, False))
+    monkeypatch.setattr(
+        app.state, "turns", AgentTurnService(env.store, env.agent, False)
+    )
     assert env.client.post("/internal/v1/agent/chat", json=body).status_code == 503
     assert cancel(env, body).status_code == 503
     assert rows(env, "agent_turn_receipts") == 0 and not env.model.requests

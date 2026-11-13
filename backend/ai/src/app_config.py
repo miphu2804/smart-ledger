@@ -53,9 +53,8 @@ class AppConfig(BaseSettings):
     SQL_TIMEOUT_MS: int = Field(default=3000, gt=0)
     SQL_ROW_LIMIT: int = Field(default=100, gt=0)
 
-    # qdrant and litellm: kept for planned integrations, no feature reads them yet
+    # qdrant: kept for a planned integration, no feature reads it yet
     QDRANT_URL: str | None = None
-    LITELLM_URL: str | None = None
 
     # honeyhive: Pydantic AI traces with the redacted message content
     # (src/observability.py); an unset key or a source other than production sends
@@ -94,7 +93,7 @@ class AppConfig(BaseSettings):
     MODEL_TIMEOUT_SECONDS: float = 20.0
     # reasoning effort of an alias that sets no `effort` of its own
     MODEL_REASONING_EFFORT: str = "low"
-    # per-turn model tiers (src/llm_router/): a decision model rates
+    # per-turn model tiers (src/llm/): a decision model rates
     # each request SIMPLE, MEDIUM or COMPLEX through Bifrost and the turn runs on the
     # chat-simple, chat-medium or chat-complex alias of MODEL_ALIASES. Off, or with
     # any of those aliases or the URL missing, every turn runs on `chat`.

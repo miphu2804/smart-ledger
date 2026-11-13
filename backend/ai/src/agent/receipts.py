@@ -95,7 +95,7 @@ class AgentTurnRepository:
                 raise TurnProtocolError("ai_turn_conflict", 409)
             if inserted is not None and conversation is not None:
                 try:
-                    AgentConversationRepository._owned_conversation(
+                    AgentConversationRepository.owned_conversation(
                         session, conversation, user, shop
                     )
                 except ConversationNotFoundError:
@@ -217,12 +217,24 @@ class AgentTurnRepository:
                 self._one(changed.rowcount)
 
     def complete(
-        self, execution, conversations, conversation, question, answer, model, version
-    ):
+        self,
+        execution: TurnExecution,
+        conversations: AgentConversationRepository,
+        conversation: int | None,
+        question: str,
+        answer: str,
+        model: str,
+        version: str,
+    ) -> tuple[int, int]:
+        """Write the exchange and mark the receipt SUCCEEDED in one transaction.
+
+        Raises `ai_turn_cancelled` (409) when the receipt was cancelled, re-fenced or
+        admitted for another request, so a stale execution saves nothing.
+        """
         with self.transaction() as session:
             # Lock existing conversation before receipt, as deletion/FK nulling does.
             if conversation is not None:
-                conversations._owned_conversation(
+                conversations.owned_conversation(
                     session,
                     conversation,
                     execution.user_id,
@@ -243,7 +255,7 @@ class AgentTurnRepository:
                 or row["input_conversation_id"] != conversation
             ):
                 raise TurnProtocolError("ai_turn_cancelled", 409)
-            cid, _, mid = conversations._write_exchange(
+            cid, _, mid = conversations.write_exchange(
                 session,
                 execution.user_id,
                 execution.shop_id,

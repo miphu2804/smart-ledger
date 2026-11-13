@@ -1,3 +1,4 @@
+import asyncio
 import json
 import tomllib
 from types import SimpleNamespace
@@ -212,7 +213,8 @@ async def test_blocked_memory_writes_store_nothing() -> None:
     service = memory_service(extractor, repository)
     memory = WithoutMemoryWrites(service)
 
-    await memory.remember(15, 3, 9, "gạo nhập của cô Ba", "Dạ.", [])
+    memory.remember_in_background(15, 3, 9, "gạo nhập của cô Ba", "Dạ.", [])
+    await asyncio.gather(*service.writes)
 
     assert repository.added == []
     assert extractor.requests == []

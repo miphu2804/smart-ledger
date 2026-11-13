@@ -2,7 +2,6 @@ import asyncio
 import hashlib
 import json
 import logging
-import re
 import time
 import uuid
 from collections.abc import AsyncGenerator, AsyncIterator
@@ -17,7 +16,6 @@ from pydantic_ai.messages import (
     ModelResponse,
     TextPart,
     ToolCallPart,
-    ToolReturnPart,
     UserPromptPart,
 )
 from pydantic_ai.models import Model
@@ -25,6 +23,12 @@ from pydantic_ai.models import Model
 from src.agent.errors import GuardrailError
 from src.agent.guardrails import GuardrailLimits, GuardrailService
 from src.agent.repository import AgentConversationRepository
+from src.agent.screen_buttons import (
+    SCREEN_BUTTONS,
+    accepted_screens,
+    suggest_screen,
+    with_screen_buttons,
+)
 from src.agent.tool_events import (
     ToolFinished,
     ToolStarted,
@@ -36,11 +40,11 @@ from src.agent.tools import (
     build_calculation_tool,
     build_restock_tool,
     build_shop_data_tool,
-    suggest_screen,
 )
-from src.agent.turn_context import current_turn
+from src.agent.turn_context import TurnExecution, current_turn
 from src.calculation.service import CalculationService
-from src.llm_router.service import LLMRouterService, ModelSelection
+from src.llm.model_router import LLMRouterService, ModelSelection
+from src.llm.session_settings import session_settings
 from src.memory.repository import RecalledMemory
 from src.memory.service import AgentMemoryService
 from src.observability import Observability
@@ -54,18 +58,12 @@ from src.prompt_templates import (
     SHOP_AGENT_SYSTEM_PROMPT,
     SQL_AGENT_PROMPT,
 )
-from src.providers.session_settings import session_settings
 from src.restock.service import RestockService
 from src.sandbox.wrapper import Sandbox
 from src.sql.repository import ShopDataRepository
 from src.utils import get_time
 
 logger = logging.getLogger(__name__)
-
-# A reply links to at most this many screens, so the buttons fit under it on a phone.
-MAX_SCREEN_BUTTONS = 2
-# The screen-button block _with_screen_buttons appends to a stored answer.
-SCREEN_BUTTONS = re.compile(r"\n*```actions\n.*?\n```\s*$", re.DOTALL)
 
 
 @dataclass(frozen=True)
@@ -161,9 +159,6 @@ class AgentService:
         self.memory = memory
         # None runs every turn on `model`; otherwise each turn picks a tier model.
         self.llm_router = llm_router
-        # Memory writes run after the reply; held here so they are not garbage
-        # collected mid-run.
-        self.memory_writes: set[asyncio.Task] = set()
         instructions = "\n\n".join(prompt_parts)
         # Short and stable, so traces and evaluation runs can be grouped by prompt. The
         # tool definitions count too: the model reads their descriptions and schemas.
@@ -378,15 +373,7 @@ class AgentService:
         """Run the agent; return the screened answer and the model version."""
         async with (
             self.guardrails.run_limits(),
-            self.agent.iter(
-                self._with_current_time(prompt),
-                message_history=self._model_messages(history),
-                deps=context,
-                usage_limits=self.guardrails.usage_limits,
-                model_settings=session_settings(session_id, context.shop_id),
-                # One model for every step of the turn, tool calls included.
-                model=selection.model if selection is not None else None,
-            ) as run,
+            self._iter(prompt, history, context, session_id, selection) as run,
         ):
             answer = ""
             returns = None
@@ -504,15 +491,7 @@ class AgentService:
         first_text_ms = None
         async with (
             self.guardrails.run_limits(),
-            self.agent.iter(
-                self._with_current_time(prompt),
-                message_history=self._model_messages(history),
-                deps=context,
-                usage_limits=self.guardrails.usage_limits,
-                model_settings=session_settings(session_id, context.shop_id),
-                # One model for every step of the turn, tool calls included.
-                model=selection.model if selection is not None else None,
-            ) as run,
+            self._iter(prompt, history, context, session_id, selection) as run,
         ):
             # The answer a response wrote alongside screen-button calls only.
             answer = ""
@@ -559,6 +538,25 @@ class AgentService:
                 delivered,
                 *self._read_result(run, answer, returns, first_text_ms),
             )
+
+    def _iter(
+        self,
+        prompt: str,
+        history: list[dict],
+        context: AgentContext,
+        session_id: str,
+        selection: ModelSelection | None,
+    ):
+        """Open the turn's agent run; the JSON and streaming routes share it."""
+        return self.agent.iter(
+            self._with_current_time(prompt),
+            message_history=self._model_messages(history),
+            deps=context,
+            usage_limits=self.guardrails.usage_limits,
+            model_settings=session_settings(session_id, context.shop_id),
+            # One model for every step of the turn, tool calls included.
+            model=selection.model if selection is not None else None,
+        )
 
     @staticmethod
     async def _queue_tool_events(
@@ -608,7 +606,7 @@ class AgentService:
         )
         if returns is not None:
             messages = [*messages, returns]
-        answer = self._with_screen_buttons(answer, self._screens(messages))
+        answer = with_screen_buttons(answer, accepted_screens(messages))
         self.observability.finish_turn(answer, usage, first_text_ms)
         return answer, model_name or self.model_name
 
@@ -635,28 +633,6 @@ class AgentService:
         ).rstrip()
         return text if self.guardrails.allows_answer(text) else ""
 
-    @staticmethod
-    def _screens(messages: list[ModelMessage]) -> list[str]:
-        """The screens suggest_screen accepted this run, in order, without repeats."""
-        screens = []
-        for message in messages:
-            for part in message.parts:
-                if (
-                    isinstance(part, ToolReturnPart)
-                    and part.tool_name == suggest_screen.__name__
-                    and part.metadata["screen"] not in screens
-                ):
-                    screens.append(part.metadata["screen"])
-        return screens[:MAX_SCREEN_BUTTONS]
-
-    @staticmethod
-    def _with_screen_buttons(answer: str, screens: list[str]) -> str:
-        # Stored with the answer, so the buttons come back with the conversation;
-        # the app renders the block as buttons, like a ```ui block as charts and cards.
-        if not screens:
-            return answer
-        return f"{answer}\n\n```actions\n{json.dumps(screens)}\n```"
-
     async def _save_turn(
         self,
         context: AgentContext,
@@ -667,6 +643,7 @@ class AgentService:
         recalled: list[RecalledMemory],
         selection: ModelSelection | None,
     ) -> AgentChatResult:
+        model = selection.model.model_name if selection is not None else self.model_name
         with self.observability.span("save turn"):
             execution = current_turn.get()
             if execution is None:
@@ -680,20 +657,25 @@ class AgentService:
                 )
             else:
                 saved_conversation_id, message_id = await asyncio.to_thread(
-                    self.conversations.save_receipted_exchange,
+                    self._save_receipted_exchange,
                     execution,
                     conversation_id,
                     question,
                     answer,
-                    selection.model.model_name
-                    if selection is not None
-                    else self.model_name,
+                    model,
                     version,
                 )
         if conversation_id is None:
             self.observability.link_conversation(saved_conversation_id)
         if self.memory is not None:
-            self._remember(context, saved_conversation_id, question, answer, recalled)
+            self.memory.remember_in_background(
+                context.shop_id,
+                context.user_id,
+                saved_conversation_id,
+                question,
+                answer,
+                recalled,
+            )
         if selection is not None:
             # After the save, so a new conversation keeps its tier under its new id.
             self.llm_router.remember(saved_conversation_id, selection)
@@ -701,33 +683,39 @@ class AgentService:
             conversation_id=saved_conversation_id,
             message_id=message_id,
             answer=answer,
-            model=(
-                selection.model.model_name if selection is not None else self.model_name
-            ),
+            model=model,
             model_version=version,
         )
 
-    def _remember(
+    def _save_receipted_exchange(
         self,
-        context: AgentContext,
-        conversation_id: int,
+        execution: TurnExecution,
+        conversation_id: int | None,
         question: str,
         answer: str,
-        recalled: list[RecalledMemory],
-    ) -> None:
-        """Store what the turn taught without making the owner wait for it."""
-        task = asyncio.create_task(
-            self.memory.remember(
-                context.shop_id,
-                context.user_id,
-                conversation_id,
-                question,
-                answer,
-                recalled,
-            )
+        model: str,
+        version: str,
+    ) -> tuple[int, int]:
+        """Save the exchange atomically with the turn's receipt, then drop the cached
+        history.
+
+        One worker-thread call, so a disconnect after the commit still drops the cache.
+        `AgentTurnRepository.complete` owns the transaction and its lock order
+        (conversation row, then receipt row).
+        """
+        saved_conversation_id, message_id = execution.store.complete(
+            execution,
+            self.conversations,
+            conversation_id,
+            question,
+            answer,
+            model,
+            version,
         )
-        self.memory_writes.add(task)
-        task.add_done_callback(self.memory_writes.discard)
+        self.conversations.drop_cached_history(
+            saved_conversation_id, execution.user_id, execution.shop_id
+        )
+        return saved_conversation_id, message_id
 
     @staticmethod
     def _current_time() -> str:

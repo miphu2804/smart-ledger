@@ -12,7 +12,7 @@ import pytest
 from src.app_config import app_config
 from src.drafts.catalog import CatalogProduct
 from src.drafts.service import DraftService
-from src.providers.llm_factory import LLMFactory
+from src.llm.factory import LLMFactory
 
 pytestmark = [
     pytest.mark.skipif(

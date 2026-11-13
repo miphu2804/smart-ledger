@@ -1,15 +1,12 @@
-import asyncio
 import logging
 import sys
 from contextlib import asynccontextmanager
-from pathlib import Path
 
 import httpx
 import pydantic_ai
 from fastapi import APIRouter, Depends, FastAPI, Request
 from fastapi.responses import JSONResponse
 from prometheus_fastapi_instrumentator import Instrumentator
-from pydantic_ai import Embedder
 
 from src.agent.errors import (
     ConversationNotFoundError,
@@ -26,17 +23,17 @@ from src.app_config import app_config
 from src.calculation.service import CalculationLimits, CalculationService
 from src.infra.postgre_db_client import PostgreDBClient
 from src.infra.redis_client import RedisClient
-from src.llm_router.bifrost_tier_classifier import BifrostTierClassifier
-from src.llm_router.service import LLMRouterService
-from src.llm_router.tier import Tier
+from src.llm.bifrost_tier_classifier import BifrostTierClassifier
+from src.llm.factory import LLMFactory
+from src.llm.model_router import LLMRouterService
+from src.llm.tier import Tier
 from src.log_formatter import LevelColorFormatter
-from src.memory.onnx_embedding import OnnxEmbeddingModel
-from src.memory.repository import EMBEDDING_DIMENSIONS, AgentMemoryRepository
+from src.memory.embedder import build_embedder
+from src.memory.repository import AgentMemoryRepository
+from src.memory.router import router as memory_router
 from src.memory.service import AgentMemoryService
-from src.memory.workers_ai_embedding import WorkersAIEmbeddingModel
 from src.observability import Observability
 from src.prompt_templates import TIER_CLASSIFIER_PROMPT, TIER_DESCRIPTIONS
-from src.providers.llm_factory import LLMFactory
 from src.restock.service import RestockService
 from src.sandbox.wrapper import Sandbox, SandboxLimits
 from src.security import require_internal_token
@@ -161,7 +158,12 @@ def build_memory_service(
     if chat_model is None or postgres.sessions is None:
         logger.warning("memory enabled without a chat model or postgres; memory off")
         return None
-    embedder = build_memory_embedder()
+    embedder = build_embedder(
+        app_config.AGENT_MEMORY_EMBEDDING_PROVIDER,
+        app_config.AGENT_MEMORY_EMBEDDING_MODEL,
+        app_config.CLOUDFLARE_ACCOUNT_ID,
+        app_config.CLOUDFLARE_API_TOKEN,
+    )
     if embedder is None:
         return None
     return AgentMemoryService(
@@ -175,51 +177,6 @@ def build_memory_service(
         ),
         observability=observability,
     )
-
-
-def build_memory_embedder() -> Embedder | None:
-    provider = app_config.AGENT_MEMORY_EMBEDDING_PROVIDER
-    model = app_config.AGENT_MEMORY_EMBEDDING_MODEL
-    if provider == "cloudflare":
-        account_id = app_config.CLOUDFLARE_ACCOUNT_ID
-        api_token = app_config.CLOUDFLARE_API_TOKEN
-        if not account_id or not api_token:
-            logger.error("cloudflare embeddings need an account id and token")
-            return None
-        return Embedder(
-            WorkersAIEmbeddingModel(
-                model,
-                account_id=account_id,
-                api_token=api_token,
-                dimensions=EMBEDDING_DIMENSIONS,
-            )
-        )
-    if provider == "onnx":
-        try:
-            return Embedder(
-                OnnxEmbeddingModel(Path(model), dimensions=EMBEDDING_DIMENSIONS)
-            )
-        except Exception as error:
-            # Missing or unreadable model files turn memory off; chat still works.
-            logger.error("onnx embedding model at %r failed to load: %s", model, error)
-            return None
-    if provider != "sentence-transformers":
-        logger.error("unknown memory embedding provider %r; memory off", provider)
-        return None
-    try:
-        # Resolved now, so a missing `memory` dependency group shows at startup rather
-        # than on the first chat; the weights still load on first use.
-        return Embedder(
-            f"sentence-transformers:{model}",
-            settings={
-                "sentence_transformers_normalize_embeddings": True,
-                "dimensions": EMBEDDING_DIMENSIONS,
-            },
-            defer_model_check=False,
-        )
-    except ImportError:
-        logger.error("memory enabled but the memory dependency group is missing")
-        return None
 
 
 @asynccontextmanager
@@ -254,13 +211,10 @@ async def lifespan(app: FastAPI):
     )
     conversations = AgentConversationRepository(postgres, cache)
     app.state.conversations = conversations
-    app.state.turns = AgentTurnService(
-        AgentTurnRepository(postgres), app_config.AGENT_TURN_RECEIPTS_ENABLED
-    )
     shop_data = build_shop_data(reader)
     memory = build_memory_service(chat_model, postgres, observability)
     app.state.memory = memory
-    app.state.agent = AgentService(
+    agent = AgentService(
         chat_model,
         conversations,
         observability=observability,
@@ -282,22 +236,17 @@ async def lifespan(app: FastAPI):
         history_turns=app_config.AGENT_HISTORY_TURNS,
         llm_router=llm_router,
     )
+    app.state.agent = agent
+    app.state.turns = AgentTurnService(
+        AgentTurnRepository(postgres), agent, app_config.AGENT_TURN_RECEIPTS_ENABLED
+    )
     try:
         yield
     finally:
         # Memory writes still running would be lost on restart, and their spans
         # belong to the turn's session, so they finish before the flush.
-        memory_writes = app.state.agent.memory_writes
-        if memory_writes:
-            _, unfinished = await asyncio.wait(memory_writes, timeout=10)
-            # Cancelled and awaited, so none is still writing when the pool closes.
-            for task in unfinished:
-                task.cancel()
-            if unfinished:
-                logger.warning(
-                    "memory writes cancelled at shutdown: %d", len(unfinished)
-                )
-                await asyncio.gather(*unfinished, return_exceptions=True)
+        if memory is not None:
+            await memory.finish_writes(timeout=10)
         if decisions is not None:
             await decisions.aclose()
         await observability.flush()
@@ -338,6 +287,7 @@ internal_router = APIRouter(
     prefix="/internal/v1", dependencies=[Depends(require_internal_token)]
 )
 internal_router.include_router(agent_router)
+internal_router.include_router(memory_router)
 
 app = FastAPI(title=app_config.APP_TITLE, version="0.1.0", lifespan=lifespan)
 app.include_router(internal_router)

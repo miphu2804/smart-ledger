@@ -67,7 +67,6 @@ def main():
 
     postgres = PostgreDBClient(schema_url(database, args.schema), pool_size=4)
     conversations = AgentConversationRepository(postgres, FakeRedis())
-    turns = AgentTurnService(AgentTurnRepository(postgres), True)
     mode = "SUCCESS"
     calls = 0
     waiting = 0
@@ -96,6 +95,7 @@ def main():
 
     model = FunctionModel(answer, stream_function=stream, model_name="quota-it-model")
     app.state.agent = AgentService(model, conversations, TEST_GUARDRAIL_LIMITS)
+    turns = AgentTurnService(AgentTurnRepository(postgres), app.state.agent, True)
     app.state.conversations = conversations
     app.state.turns = turns
     app.state.memory = None
