@@ -45,7 +45,7 @@ Everything stays on your machine unless you pass `--sync`, which needs `HH_API_K
 | `agent_chat/`, `memory/` | One evaluation each: its class, its cases, its `thresholds.toml` and its README |
 | `targets/` | Wrappers that run the real service for one case: `agent.py` (the chat agent), `memory.py` (memory recall) |
 | `metrics/` | One evaluator class per group of metrics, plus `judge.py`, which asks a model to grade an answer |
-| `core/` | Shared parts: data classes (`schema.py`), the loop over cases (`pipeline.py`), bounds (`gate.py`), tables (`render.py`), the report (`report.py`), HoneyHive sync (`honeyhive.py`) |
+| `core/` | Shared parts: data classes (`schema.py`), the loop over cases (`pipeline.py`), bounds (`gate.py`), tables (`render.py`), the report (`report.py`) |
 | `results/` | One JSON per run; not committed |
 
 ## How a run works

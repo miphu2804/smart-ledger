@@ -3,9 +3,9 @@ import json
 from datetime import date
 from pathlib import Path
 
-from evaluation.core.honeyhive import print_sync_plan
+import yaml
+from evaluation.agent_chat.honeyhive import print_sync_plan
 from evaluation.core.schema import Case
-from evaluation.core.utils import load_yaml
 from evaluation.metrics.judge import Judge
 from evaluation.metrics.memory import MemoryEvaluator
 from evaluation.metrics.performance import PerformanceEvaluator
@@ -46,7 +46,7 @@ class AgentChatEval:
         limit: int | None = None,
     ) -> None:
         require_local_database(app_config.POSTGRES_URL, app_config.AI_SQL_READER_URL)
-        self.definition = load_yaml(DIRECTORY / "cases.yaml")
+        self.definition = yaml.safe_load((DIRECTORY / "cases.yaml").read_text())
         self.shop_id = self.definition["shop_id"]
         self.started_on = self._get_shop_today()
         self.cases = self._load_cases(repeats, limit)

@@ -5,9 +5,9 @@ from types import SimpleNamespace
 
 import pytest
 from evaluation.agent_chat.agent_chat_eval import AgentChatEval
+from evaluation.agent_chat.honeyhive import build_session_payload, sync_scores
 from evaluation.core import report as reporting
 from evaluation.core.gate import find_gate_failures
-from evaluation.core.honeyhive import build_session_payload, sync_scores
 from evaluation.core.report import (
     LAYERS,
     build_markdown_report,

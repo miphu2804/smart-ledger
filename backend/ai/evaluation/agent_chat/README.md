@@ -24,6 +24,7 @@ The output shows one row per question (passes out of the repeats, slowest run), 
 | `cases.yaml` | The questions, the SQL that gives each expected answer, and two made-up memories |
 | `agent_chat_eval.py` | `AgentChatEval`: loads the cases, computes the expected answers from the database and lists the evaluators |
 | `thresholds.toml` | The minimum score of each checked metric |
+| `honeyhive.py` | With `--sync`, logs each case to HoneyHive as one session of an experiment run; with `--dry-run`, prints the run and the first session it would send |
 
 ## Metrics
 

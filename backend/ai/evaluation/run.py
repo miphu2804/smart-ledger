@@ -2,7 +2,7 @@
 
 An evaluation is a class in its own folder (`agent_chat/`, `memory/`) that holds its
 cases, its target and the evaluators that score what the target returned; `core/`
-gates, reports and syncs the scores. For `agent_chat` the agent runs here with tracing
+gates and reports the scores. For `agent_chat` the agent runs here with tracing
 off and every answer is scored here, with metrics built on HoneyHive's evaluator
 templates. Nothing leaves the machine unless `--sync` asks for it: then each case is
 logged to HoneyHive as one session of an experiment run, with its inputs, outputs and
@@ -37,8 +37,8 @@ app_config.HH_API_KEY = None
 app_config.AGENT_MEMORY_ENABLED = True
 
 from evaluation.agent_chat.agent_chat_eval import AgentChatEval  # noqa: E402
+from evaluation.agent_chat.honeyhive import sync_scores  # noqa: E402
 from evaluation.core.gate import find_gate_failures, load_thresholds  # noqa: E402
-from evaluation.core.honeyhive import sync_scores  # noqa: E402
 from evaluation.core.pipeline import EvaluationPipeline  # noqa: E402
 from evaluation.core.report import (  # noqa: E402
     build_markdown_report,
