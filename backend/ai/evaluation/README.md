@@ -42,10 +42,8 @@ Everything stays on your machine unless you pass `--sync`, which needs `HH_API_K
 | Path | What is in it |
 |---|---|
 | `run.py` | The command line. `EVALS` maps each evaluation name to the class that runs it |
-| `agent_chat/`, `memory/` | One evaluation each: its class, its cases, its `thresholds.toml` and its README |
-| `targets/` | Wrappers that run the real service for one case: `agent.py` (the chat agent), `memory.py` (memory recall) |
-| `metrics/` | One evaluator class per group of metrics, plus `judge.py`, which asks a model to grade an answer |
-| `core/` | Shared parts: data classes (`schema.py`), the loop over cases (`pipeline.py`), bounds (`gate.py`), tables (`render.py`), the report (`report.py`), HoneyHive sync (`honeyhive.py`) |
+| `agent_chat/`, `memory/` | One evaluation each: its class, its cases, its target (`target.py`, which runs the real service for one case), its evaluators, its `thresholds.toml` and its README |
+| `core/` | Shared parts: data classes (`schema.py`), the loop over cases (`pipeline.py`), bounds (`gate.py`), tables (`render.py`), the report (`report.py`), the local database guard (`database.py`) |
 | `results/` | One JSON per run; not committed |
 
 ## How a run works
@@ -62,10 +60,10 @@ The top band is this folder; the bottom band is the online side in [`.honeyhive/
 ## Common changes
 
 - **Change a bound:** edit the evaluation's `thresholds.toml` and say why in the commit.
-- **Add a metric:** add it to the evaluator of its group in `metrics/`, add its name to `LAYERS` in `core/report.py` so the table shows it, and add a unit test.
+- **Add a metric:** add it to the evaluator of its group in the evaluation's folder (`agent_chat/metrics/` or `memory/recall.py`), add its name to `LAYERS` in `core/report.py` so the table shows it, and add a unit test.
 - **Add an evaluation:**
   1. Create a folder like `agent_chat/` with the cases, a `thresholds.toml` and a README.
-  2. Add a target in `targets/` with `ask(case)` that returns an `Output`.
+  2. Add a `target.py` in that folder with `ask(case)` that returns an `Output`.
   3. Write the class (`<name>_eval.py`) with the same attributes as `MemoryEval`: `name`, `cases`, `target`, `evaluators`, `thresholds`, `summary`, `check()` and `show_plan()`.
   4. Add one line to `EVALS` in `run.py`.
   5. Add unit tests for any new evaluator; they need no database or network.

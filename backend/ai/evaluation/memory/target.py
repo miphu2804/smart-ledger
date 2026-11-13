@@ -1,9 +1,9 @@
 import asyncio
 from pathlib import Path
 
+from evaluation.core.database import require_local_database
 from evaluation.core.schema import Case, Output
-from evaluation.targets.caching_embedder import CachingEmbedder
-from evaluation.targets.database import require_local_database
+from evaluation.memory.caching_embedder import CachingEmbedder
 from pydantic_ai.models.test import TestModel
 from sqlalchemy import text
 

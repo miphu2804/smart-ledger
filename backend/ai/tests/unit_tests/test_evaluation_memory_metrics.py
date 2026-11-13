@@ -1,7 +1,7 @@
 import pytest
 from evaluation.core.report import compute_averages
 from evaluation.core.schema import Case, Output
-from evaluation.metrics.recall import RecallEvaluator
+from evaluation.memory.recall import RecallEvaluator
 
 pytestmark = pytest.mark.anyio
 

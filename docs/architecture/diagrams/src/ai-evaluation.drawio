@@ -23,7 +23,7 @@
         <mxCell id="i_run" value="" style="shape=image;aspect=fixed;imageAspect=0;image=data:image/svg+xml,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIyNCIgaGVpZ2h0PSIyNCIgdmlld0JveD0iMCAwIDI0IDI0IiBmaWxsPSJub25lIiBzdHJva2U9IiMxZTViNDUiIHN0cm9rZS13aWR0aD0iMS42IiBzdHJva2UtbGluZWNhcD0icm91bmQiIHN0cm9rZS1saW5lam9pbj0icm91bmQiPjxwYXRoIGQ9Im0xMi44MyAyLjE4YTIgMiAwIDAgMC0xLjY2IDBMMi42IDYuMDhhMSAxIDAgMCAwIDAgMS44M2w4LjU4IDMuOTFhMiAyIDAgMCAwIDEuNjYgMGw4LjU4LTMuOWExIDEgMCAwIDAgMC0xLjgzWiIvPjxwYXRoIGQ9Im0yMiAxNy42NS05LjE3IDQuMTZhMiAyIDAgMCAxLTEuNjYgMEwyIDE3LjY1Ii8+PHBhdGggZD0ibTIyIDEyLjY1LTkuMTcgNC4xNmEyIDIgMCAwIDEtMS42NiAwTDIgMTIuNjUiLz48L3N2Zz4;" vertex="1" parent="1">
           <mxGeometry x="498" y="129.0" width="32" height="32" as="geometry" />
         </mxCell>
-        <mxCell id="target" value="&lt;b&gt;Target&lt;/b&gt;&lt;br&gt;targets/agent.py, memory.py&lt;br&gt;run the real service" style="rounded=1;arcSize=12;html=1;whiteSpace=wrap;align=left;spacingLeft=56;spacingRight=10;fillColor=#e3f5ee;strokeColor=#3c9d74;fontColor=#1e5b45;fontSize=16;" vertex="1" parent="1">
+        <mxCell id="target" value="&lt;b&gt;Target&lt;/b&gt;&lt;br&gt;target.py per evaluation&lt;br&gt;run the real service" style="rounded=1;arcSize=12;html=1;whiteSpace=wrap;align=left;spacingLeft=56;spacingRight=10;fillColor=#e3f5ee;strokeColor=#3c9d74;fontColor=#1e5b45;fontSize=16;" vertex="1" parent="1">
           <mxGeometry x="880" y="100" width="300" height="90" as="geometry" />
         </mxCell>
         <mxCell id="i_target" value="" style="shape=image;aspect=fixed;imageAspect=0;image=data:image/svg+xml,PHN2ZyBmaWxsPSIjMDA5Njg4IiByb2xlPSJpbWciIHZpZXdCb3g9IjAgMCAyNCAyNCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48dGl0bGU+RmFzdEFQSTwvdGl0bGU+PHBhdGggZD0iTTEyIC4wMzg3QzUuMzcyOS4wMzg0LjAwMDMgNS4zOTMxIDAgMTEuOTk4OGMtLjAwMSA2LjYwNjYgNS4zNzIgMTEuOTYyOCAxMiAxMS45NjI1IDYuNjI4LjAwMDMgMTIuMDAxLTUuMzU1OSAxMi0xMS45NjI1LS4wMDAzLTYuNjA1Ny01LjM3MjktMTEuOTYwNC0xMi0xMS45Nm0tLjgyOSA1LjQxNTNoNy41NWwtNy41ODA1IDUuMzI4NGg1LjE4MjhMNS4yNzkgMTguNTQzNnEyLjk0NjYtNi41NDQ0IDUuODkyLTEzLjA4OTYiLz48L3N2Zz4=;" vertex="1" parent="1">
@@ -234,7 +234,7 @@
         <mxCell id="lg4t" value="Model call or opt-in sync" style="text;html=1;align=left;verticalAlign=middle;whiteSpace=wrap;fontColor=#1f2d3d;fontSize=14;" vertex="1" parent="1">
           <mxGeometry x="888" y="995" width="200" height="30" as="geometry" />
         </mxCell>
-        <mxCell id="note" value="Online evaluators make no model call, so owner content never reaches a judge; the model-graded templates run offline on a made-up shop.&lt;br&gt;The two safety patterns in metrics/safety.py copy .honeyhive/evaluators, so change both together." style="text;html=1;align=left;verticalAlign=middle;whiteSpace=wrap;fontColor=#5f6b7a;fontSize=14;" vertex="1" parent="1">
+        <mxCell id="note" value="Online evaluators make no model call, so owner content never reaches a judge; the model-graded templates run offline on a made-up shop.&lt;br&gt;The two safety patterns in agent_chat/metrics/safety.py copy .honeyhive/evaluators, so change both together." style="text;html=1;align=left;verticalAlign=middle;whiteSpace=wrap;fontColor=#5f6b7a;fontSize=14;" vertex="1" parent="1">
           <mxGeometry x="80" y="1035" width="1600" height="54" as="geometry" />
         </mxCell>
       </root>
