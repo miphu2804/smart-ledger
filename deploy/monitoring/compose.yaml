@@ -44,7 +44,7 @@ services:
         max-file: "3"
 
   prometheus:
-    image: prom/prometheus:v3.15.1
+    image: prom/prometheus:v3.16.0
     # Alloy pushes every sample; the config only loads the recording rules that dashboards read.
     command:
       - --config.file=/etc/prometheus/prometheus.yml
@@ -100,7 +100,7 @@ services:
   # Live container logs for the operator. Dozzle has no sign-in here and reads the Docker socket, so it listens on the
   # VPS loopback only: reach it through an SSH tunnel, never through Caddy. Actions and shell stay off by default.
   dozzle:
-    image: amir20/dozzle:v11.4.0
+    image: amir20/dozzle:v11.4.1
     environment:
       DOZZLE_NO_ANALYTICS: "true"
     ports:
