@@ -1,8 +1,8 @@
 import json
 
+from evaluation.agent_chat.metrics.judge import Judge
+from evaluation.agent_chat.metrics.utils import get_question
 from evaluation.core.schema import Case, MetricResult, Output
-from evaluation.metrics.judge import Judge
-from evaluation.metrics.utils import get_question
 
 
 class MemoryEvaluator:

@@ -6,6 +6,15 @@
 
 Check: AI Ruff lint and format passed; pytest passed 534 tests with 100 skipped, because the PostgreSQL and Redis suites were not run. The three structured-output JSON schemas, the `terms` output and the regenerated `evaluation/memory/cases.jsonl` are identical to `staging` at `6ddf862d`.
 
+### 2026-11-13 — Package the AI evaluation by evaluation
+
+| Area | Change |
+|---|---|
+| AI | • `evaluation/core/` holds only what both evaluations share: the HoneyHive sync moves to `agent_chat/`, the one-caller `core/utils.py` is gone and the local database guard joins `core/`<br>• Each evaluation folder owns its `target.py` and evaluators, so `evaluation/targets/` and `evaluation/metrics/` are gone; the moves change only import lines<br>• A distill pass turns the stateless `EvaluationPipeline` into `run_evaluation` and corrects two comments about when the app config is read |
+| Docs | • The evaluation READMEs and the AI evaluation diagram name the new paths |
+
+Check: AI Ruff lint and format passed; pytest passed 534 with 100 skipped (the PostgreSQL suites did not run) after every step, with no assertion changed. The `run.py --help` hash, the memory dry-run plan, `src/`, the case files and `.honeyhive`, `scripts` and `.github` are identical to `staging` `866c49c6`. The `agent_chat` dry-run and real runs were not run, because the local seed is from another day. Commit: the commits on `refactor/ai-evaluation-layout` after `866c49c6`.
+
 ### 2026-11-13 — Remove the screen buttons from Mobile chat
 
 | Area | Change |
@@ -182,19 +191,3 @@ Check: a fake `dopbase` printing quoted values loads the exact bytes, a multi-li
 | CI | • New `docs` area in `scripts/ci/changes.sh` and a `docs` job in `ci.yml` that runs `okf_sync.py --check`, listed in the result summary |
 
 Check: `okf_sync.py --check` passes and a second write run changes nothing; frontmatter, a missing concept and a wrong title are each reported; `bash -n`, `shellcheck` and `actionlint` pass.
-
-### 2026-11-07 — Move HoneyHive sync scripts and trim redundant script branches
-
-| Area | Change |
-|---|---|
-| CI | • `sync-evaluators.sh` and `sync-dashboards.sh` move from the repository root to `scripts/honeyhive/`, beside the other script groups; workflows, CODEOWNERS and docs point at the new paths<br>• The Vercel build and deploy scripts build one argument list instead of repeating the command per target, and `apply.sh` drops its undocumented no-op `--keep-all` and `--backup` flags |
-
-Check: `actionlint`, `shellcheck --severity=warning` on every tracked script, `check-evaluator-ids.sh`, `check-provider-coupling.sh` and Ruff passed; the Vercel scripts ran against a stub CLI on bash 3.2 for both targets and still fail when the deploy fails. The HoneyHive and Vercel scripts were not run against the real services. Commit: the commit that adds this entry.
-
-### 2026-11-07 — Clean README front pages and old document metadata
-
-| Area | Change |
-|---|---|
-| Docs | • READMEs outside `docs/` no longer carry frontmatter, so GitHub opens them on the title instead of a metadata table; `AGENTS.md` and the docs conventions record the rule<br>• The root README reads as a production overview again: the course-scope paragraph is gone, the boundaries table regains a Runs on column, and the repository layout is a directory tree checked against `staging`<br>• Seven documents (the product set, technical design, API contracts and marketing) fold their metadata table under the title into one intro sentence; BRD, PRD and the product overview no longer label themselves as the EXE201 MVP |
-
-Check: every directory in the layout tree exists on `staging` `a1245a1`; relative links in the edited front pages resolve; `git diff --check` passed. Rendering on GitHub was not checked.

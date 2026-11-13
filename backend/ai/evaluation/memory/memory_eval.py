@@ -2,8 +2,8 @@ import json
 from pathlib import Path
 
 from evaluation.core.schema import Case
-from evaluation.metrics.recall import RecallEvaluator
-from evaluation.targets.memory import MemoryTarget
+from evaluation.memory.recall import RecallEvaluator
+from evaluation.memory.target import MemoryTarget
 
 DIRECTORY = Path(__file__).parent
 
