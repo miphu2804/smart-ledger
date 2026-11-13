@@ -64,6 +64,7 @@ drawio -x -f svg -e --embed-svg-images --svg-theme light -b ffffff -o docs/archi
 
 - While GitHub-hosted runners cannot start, set `CI_RUNNER=self-hosted` and clear `CD_RUNNER`. `auto` cannot help, because its own pick runs on GitHub-hosted.
 - Pull requests from forks always run on `ubuntu-24.04`, so a fork never runs code on a self-hosted machine.
+- A newer push to a pull request cancels the older CI run of that pull request; push runs on `staging` and `main` are never cancelled.
 - Tests start PostgreSQL with `docker run` on a free port, so jobs on one machine do not collide.
 
 ## Path filtering

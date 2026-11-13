@@ -13,6 +13,11 @@ on:
         default: github-hosted
         options: [github-hosted, self-hosted, auto]
 
+# A newer push to a pull request cancels its older run so the self-hosted runner is not queued behind stale work; push runs on staging and main are never cancelled because they hand off to CD.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.sha }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 jobs:
   ### Runner: every job below runs where this job picks ###
 
@@ -243,7 +248,7 @@ jobs:
 
   summary:
     name: CI result summary
-    if: always()
+    if: ${{ !cancelled() }}
     needs: [select-runner, docs, ai, core, mobile-web, landing, container-images]
     runs-on: ${{ fromJSON(needs.select-runner.outputs.runs_on) }}
     steps:
