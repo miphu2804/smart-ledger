@@ -9,6 +9,7 @@ from src.agent.errors import GuardrailError
 from src.agent.guardrails import GuardrailLimits
 from src.agent.guardrails.answer_screen import AnswerScreen
 from src.agent.guardrails.input_redaction import InputRedaction
+from src.agent.guardrails.phone_number import PHONE_NUMBER
 from src.agent.guardrails.tool_call_limit import ToolCallLimit
 from src.agent.service import AgentService
 from src.calculation.service import CalculationLimits, CalculationService
@@ -158,6 +159,33 @@ def test_a_secret_is_removed_whole_before_personal_data() -> None:
     key = "sk-ab-4111111111111111-cdefghijklmnopqrstu"
 
     assert InputRedaction.redact(key) == "[redacted:openai_key]"
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "Số của chú Tư là 0901234567.",
+        "Gọi 090 123 4567 nhé.",
+        "Liên hệ +84 901 234 567.",
+        "SĐT 0901.234.567",
+        "Zalo 84-901-234-567",
+    ],
+)
+def test_vietnamese_phone_numbers_are_detected(text: str) -> None:
+    assert PHONE_NUMBER.search(text)
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "Mỗi ngày bán khoảng 120.000đ tiền đá.",
+        "Nhập gạo 1.200.000đ một bao.",
+        "Vốn 150.000.000 đồng.",
+        "Chốt sổ lúc 22h30.",
+    ],
+)
+def test_money_and_times_are_not_phone_numbers(text: str) -> None:
+    assert PHONE_NUMBER.search(text) is None
 
 
 async def test_shop_phone_in_tool_results_is_not_redacted() -> None:

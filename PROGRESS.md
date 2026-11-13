@@ -2,7 +2,7 @@
 
 | Area | Change |
 |---|---|
-| AI | • `MemoryFacts`, `MemorySummary` and `MemoryDecisions` move from `src/memory/service.py` to `src/memory/fact_rules.py`, beside the item shapes they wrap<br>• `src/memory/ranking.py` exposes `unaccented`, and the memory evaluation generator uses it instead of its own copy<br>• The agent evaluation target imports `ToolStarted` from `src/agent/tool_events.py` |
+| AI | • `MemoryFacts`, `MemorySummary` and `MemoryDecisions` move from `src/memory/service.py` to `src/memory/fact_rules.py`, beside the item shapes they wrap<br>• `src/memory/ranking.py` exposes `unaccented`, and the memory evaluation generator uses it instead of its own copy<br>• The agent evaluation target imports `ToolStarted` from `src/agent/tool_events.py`<br>• The Vietnamese phone number pattern `PHONE_NUMBER` moves from `src/memory/fact_rules.py` to `src/agent/guardrails/phone_number.py`, and its tests move to `test_agent_guardrails.py`; the memory rules import it and still drop every fact that holds a phone number |
 
 Check: AI Ruff lint and format passed; pytest passed 534 tests with 100 skipped, because the PostgreSQL and Redis suites were not run. The three structured-output JSON schemas, the `terms` output and the regenerated `evaluation/memory/cases.jsonl` are identical to `staging` at `6ddf862d`.
 

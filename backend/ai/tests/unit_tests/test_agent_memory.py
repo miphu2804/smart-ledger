@@ -12,7 +12,6 @@ from tests.support import TEST_GUARDRAIL_LIMITS, ScriptedModel, transcript
 
 from src.agent.service import AgentService, Done, MemoryRecalled, TextDelta
 from src.main import app
-from src.memory.fact_rules import PHONE_NUMBER
 from src.memory.repository import MemoryGroup, RecalledMemory, StoredMemory
 from src.memory.service import AgentMemoryService
 from src.prompt_templates import MEMORY_PROMPT
@@ -371,33 +370,6 @@ async def test_only_the_allowed_memory_types_are_written() -> None:
 
     ((_, _, _, memories),) = repository.added
     assert [memory.memory_type for memory in memories] == ["preference"]
-
-
-@pytest.mark.parametrize(
-    "text",
-    [
-        "Số của chú Tư là 0901234567.",
-        "Gọi 090 123 4567 nhé.",
-        "Liên hệ +84 901 234 567.",
-        "SĐT 0901.234.567",
-        "Zalo 84-901-234-567",
-    ],
-)
-def test_vietnamese_phone_numbers_are_detected(text: str) -> None:
-    assert PHONE_NUMBER.search(text)
-
-
-@pytest.mark.parametrize(
-    "text",
-    [
-        "Mỗi ngày bán khoảng 120.000đ tiền đá.",
-        "Nhập gạo 1.200.000đ một bao.",
-        "Vốn 150.000.000 đồng.",
-        "Chốt sổ lúc 22h30.",
-    ],
-)
-def test_money_and_times_are_not_phone_numbers(text: str) -> None:
-    assert PHONE_NUMBER.search(text) is None
 
 
 async def test_facts_with_a_phone_number_are_dropped_from_extraction_and_summary():
