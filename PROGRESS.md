@@ -1,3 +1,11 @@
+### 2026-11-13 — Give the memory output shapes and diacritic folding one owner
+
+| Area | Change |
+|---|---|
+| AI | • `MemoryFacts`, `MemorySummary` and `MemoryDecisions` move from `src/memory/service.py` to `src/memory/fact_rules.py`, beside the item shapes they wrap<br>• `src/memory/ranking.py` exposes `unaccented`, and the memory evaluation generator uses it instead of its own copy<br>• The agent evaluation target imports `ToolStarted` from `src/agent/tool_events.py` |
+
+Check: AI Ruff lint and format passed; pytest passed 534 tests with 100 skipped, because the PostgreSQL and Redis suites were not run. The three structured-output JSON schemas, the `terms` output and the regenerated `evaluation/memory/cases.jsonl` are identical to `staging` at `6ddf862d`.
+
 ### 2026-11-13 — Remove the screen buttons from Mobile chat
 
 | Area | Change |
@@ -190,11 +198,3 @@ Check: `actionlint`, `shellcheck --severity=warning` on every tracked script, `c
 | Docs | • READMEs outside `docs/` no longer carry frontmatter, so GitHub opens them on the title instead of a metadata table; `AGENTS.md` and the docs conventions record the rule<br>• The root README reads as a production overview again: the course-scope paragraph is gone, the boundaries table regains a Runs on column, and the repository layout is a directory tree checked against `staging`<br>• Seven documents (the product set, technical design, API contracts and marketing) fold their metadata table under the title into one intro sentence; BRD, PRD and the product overview no longer label themselves as the EXE201 MVP |
 
 Check: every directory in the layout tree exists on `staging` `a1245a1`; relative links in the edited front pages resolve; `git diff --check` passed. Rendering on GitHub was not checked.
-
-### 2026-11-07 — Link onboarding to owned guides and local checks
-
-| Area | Change |
-|---|---|
-| Docs | • Route code changes through service READMEs and owned guides; keep technical-writing manual and model checks distinct from runtime tests<br>• Require owning-document and local-index updates in contributor guidance; use Node 22.18+ in the 22.x line for frontend setup and link the Web guide to that prerequisite |
-
-Check: local documentation paths and anchors resolve apart from the existing illustrative `relative/path` placeholder; `git diff --check` passed. No runtime, native or deployment checks apply to these guidance-only edits. Commit: the commit that adds this entry.
