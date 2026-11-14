@@ -1,3 +1,11 @@
+### 2026-11-15 — Give the turn failure table one owner
+
+| Area | Change |
+|---|---|
+| AI | • `src/agent/errors.py` holds the one table from an error to its failure code (`failure_code`) and from a stored code to its replay status (`failure_status`), with the 404 and 422 statuses and the guardrail codes declared once<br>• `AgentTurnService` and the stream error helper in the agent router call that table instead of their own copies, and the conversation and guardrail handlers in `main.py` read their status from it; no status, code or log line changes |
+
+Check: AI Ruff lint and format passed; pytest passed 545 with 100 skipped, because the PostgreSQL and Redis suites were not run, so the receipt suite is unverified; the turn pins in `test_agent_turns.py` passed with no assertion changed. The OpenAPI document, `prompt_version`, the SQL text and the 17 log messages are identical to `staging` at `e0811c3e`. Commit: the commit that adds this entry.
+
 ### 2026-11-13 — Give the memory output shapes and diacritic folding one owner
 
 | Area | Change |
@@ -182,12 +190,3 @@ Check: Web lint, typecheck and build passed; Mobile typecheck passed and `npm te
 | CI | • `load-dopbase.sh` strips the double quotes and escapes that `dopbase export --format dotenv` puts around every value, so `VPS_SSH_KEY` decodes and `VPS_KNOWN_HOSTS` is a valid known-hosts line again; staging backend deploys had failed since #553<br>• A multi-line value now fails with a clear error |
 
 Check: a fake `dopbase` printing quoted values loads the exact bytes, a multi-line value is refused, `shellcheck --severity=warning` passed; the stored staging key decodes to an OpenSSH private key once unquoted. CD rerun pending.
-
-### 2026-11-07 — Move document metadata into the .okf bundle
-
-| Area | Change |
-|---|---|
-| Docs | • Human documents carry no frontmatter; their OKF metadata (46 concepts and generated indexes) lives in `.okf/` at mirrored paths and each concept's `resource` points to its document<br>• `scripts/docs/okf_sync.py` sets titles from the first heading, adds stub concepts, regenerates the indexes and, with `--check`, reports drift, frontmatter in a human document and broken relative links<br>• Links to the removed `index.md` files now point to `backend/core/README.md` or the `.okf/` indexes; `AGENTS.md` and the docs conventions describe the new model |
-| CI | • New `docs` area in `scripts/ci/changes.sh` and a `docs` job in `ci.yml` that runs `okf_sync.py --check`, listed in the result summary |
-
-Check: `okf_sync.py --check` passes and a second write run changes nothing; frontmatter, a missing concept and a wrong title are each reported; `bash -n`, `shellcheck` and `actionlint` pass.

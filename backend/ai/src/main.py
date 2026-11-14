@@ -9,6 +9,8 @@ from fastapi.responses import JSONResponse
 from prometheus_fastapi_instrumentator import Instrumentator
 
 from src.agent.errors import (
+    CONVERSATION_NOT_FOUND_STATUS,
+    GUARDRAIL_STATUS,
     ConversationNotFoundError,
     GuardrailError,
     TurnProtocolError,
@@ -260,12 +262,15 @@ async def lifespan(app: FastAPI):
 async def conversation_not_found(
     request: Request, exc: ConversationNotFoundError
 ) -> JSONResponse:
-    return JSONResponse(status_code=404, content={"detail": "conversation_not_found"})
+    return JSONResponse(
+        status_code=CONVERSATION_NOT_FOUND_STATUS,
+        content={"detail": "conversation_not_found"},
+    )
 
 
 async def guardrail_blocked(request: Request, exc: GuardrailError) -> JSONResponse:
     # The code is the whole message: the app maps it to the owner's language.
-    return JSONResponse(status_code=422, content={"detail": exc.code})
+    return JSONResponse(status_code=GUARDRAIL_STATUS, content={"detail": exc.code})
 
 
 async def ai_unavailable(request: Request, exc: Exception) -> JSONResponse:

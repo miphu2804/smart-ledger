@@ -4,9 +4,10 @@ import asyncio
 from collections.abc import AsyncIterator
 
 from src.agent.errors import (
-    ConversationNotFoundError,
-    GuardrailError,
+    SAFE_ERRORS,
     TurnProtocolError,
+    failure_code,
+    failure_status,
 )
 from src.agent.receipts import AgentTurnRepository
 from src.agent.service import AgentChatResult, AgentService, Done
@@ -96,30 +97,15 @@ class AgentTurnService:
                 }
             )
         code = row["failure_code"]
-        if row["state"] == "CANCELLED":
-            status = 409
-        elif code == "conversation_not_found":
-            status = 404
-        elif code in {"input_too_long", "answer_unavailable", "answer_timeout"}:
-            status = 422
-        else:
-            status = 503
+        status = 409 if row["state"] == "CANCELLED" else failure_status(code)
         raise TurnProtocolError(code, status)
 
     async def _failed(self, execution, error):
-        if isinstance(error, (GuardrailError, TurnProtocolError)):
-            code = error.code
-        elif isinstance(error, ConversationNotFoundError):
-            code = "conversation_not_found"
-        else:
-            code = "ai_unavailable"
-        await asyncio.to_thread(self.repository.fail, execution, code)
+        await asyncio.to_thread(self.repository.fail, execution, failure_code(error))
 
     @staticmethod
     def _raise_safe(error):
-        if isinstance(
-            error, (GuardrailError, ConversationNotFoundError, TurnProtocolError)
-        ):
+        if isinstance(error, SAFE_ERRORS):
             raise error
         raise TurnProtocolError("ai_unavailable", 503) from None
 

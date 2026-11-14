@@ -15,11 +15,7 @@ from fastapi import APIRouter, Depends, Query, Request, Response
 from fastapi.responses import JSONResponse
 from fastapi.sse import EventSourceResponse, format_sse_event
 
-from src.agent.errors import (
-    ConversationNotFoundError,
-    GuardrailError,
-    TurnProtocolError,
-)
+from src.agent.errors import SAFE_ERRORS, TurnProtocolError, failure_code
 from src.agent.repository import AgentConversationRepository
 from src.agent.schema import (
     AgentChatRequest,
@@ -194,13 +190,10 @@ def _sse_frame(event: AgentStreamEvent, request_id: str | None = None) -> bytes:
 
 
 def _stream_error_code(error: Exception) -> str:
-    if isinstance(error, (TurnProtocolError, GuardrailError)):
-        return error.code
-    if isinstance(error, ConversationNotFoundError):
-        return "conversation_not_found"
-    # The caller only sees the code, so the cause has to reach the server log.
-    logger.warning("agent stream failed", exc_info=error)
-    return "ai_unavailable"
+    if not isinstance(error, SAFE_ERRORS):
+        # The caller only sees the code, so the cause has to reach the server log.
+        logger.warning("agent stream failed", exc_info=error)
+    return failure_code(error)
 
 
 def _pending(payload):
