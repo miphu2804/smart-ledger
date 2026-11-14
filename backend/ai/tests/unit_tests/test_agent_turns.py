@@ -76,7 +76,7 @@ async def test_replay_of_an_ended_turn_raises_its_code_with_a_fixed_status(
     state, code, status
 ):
     repository = StubRepository({"state": state, "failure_code": code})
-    service = AgentTurnService(repository, agent=None, enabled=True)
+    service = AgentTurnService(repository, None, agent=None, enabled=True)
 
     with pytest.raises(TurnProtocolError) as raised:
         await service.replay(await admitted(service, payload()))
@@ -96,7 +96,7 @@ async def test_failed_chat_records_the_code_and_reraises_a_safe_error_unchanged(
     error, code
 ):
     repository = StubRepository()
-    service = AgentTurnService(repository, FailingAgent(error), enabled=True)
+    service = AgentTurnService(repository, None, FailingAgent(error), enabled=True)
     request = payload()
 
     with pytest.raises(type(error)) as raised:
@@ -109,7 +109,7 @@ async def test_failed_chat_records_the_code_and_reraises_a_safe_error_unchanged(
 async def test_failed_chat_hides_any_other_error_as_ai_unavailable():
     repository = StubRepository()
     agent = FailingAgent(RuntimeError("connection to 10.0.0.5 refused"))
-    service = AgentTurnService(repository, agent, enabled=True)
+    service = AgentTurnService(repository, None, agent, enabled=True)
     request = payload()
 
     with pytest.raises(TurnProtocolError) as raised:

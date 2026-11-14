@@ -241,7 +241,10 @@ async def lifespan(app: FastAPI):
     )
     app.state.agent = agent
     app.state.turns = AgentTurnService(
-        AgentTurnRepository(postgres), agent, app_config.AGENT_TURN_RECEIPTS_ENABLED
+        AgentTurnRepository(postgres),
+        conversations,
+        agent,
+        app_config.AGENT_TURN_RECEIPTS_ENABLED,
     )
     try:
         yield

@@ -70,7 +70,7 @@ def receipt_env(monkeypatch, internal_headers):
         store = AgentTurnRepository(postgres)
         model = ScriptedModel("Saved test answer")
         agent = AgentService(model, conversations, TEST_GUARDRAIL_LIMITS)
-        turns = AgentTurnService(store, agent, True)
+        turns = AgentTurnService(store, conversations, agent, True)
         monkeypatch.setattr(app.state, "agent", agent, raising=False)
         monkeypatch.setattr(app.state, "conversations", conversations, raising=False)
         monkeypatch.setattr(app.state, "turns", turns, raising=False)
@@ -145,7 +145,9 @@ def test_json_replay_restart_and_stream_keep_exact_answer_and_model_metadata(
     unused = AgentService(
         ScriptedModel("Must never run"), env.conversations, TEST_GUARDRAIL_LIMITS
     )
-    fresh = AgentTurnService(AgentTurnRepository(env.postgres), unused, True)
+    fresh = AgentTurnService(
+        AgentTurnRepository(env.postgres), env.conversations, unused, True
+    )
     monkeypatch.setattr(app.state, "turns", fresh)
     monkeypatch.setattr(app.state, "agent", unused)
     stream = env.client.post("/internal/v1/agent/chat/stream", json=body)
@@ -452,7 +454,9 @@ def test_disabled_gate_and_missing_store_never_fall_back_to_legacy_chat(
     env = receipt_env
     body = payload(env)
     monkeypatch.setattr(
-        app.state, "turns", AgentTurnService(env.store, env.agent, False)
+        app.state,
+        "turns",
+        AgentTurnService(env.store, env.conversations, env.agent, False),
     )
     assert env.client.post("/internal/v1/agent/chat", json=body).status_code == 503
     assert cancel(env, body).status_code == 503

@@ -1,3 +1,11 @@
+### 2026-11-15 — Pass the receipted save to the agent service explicitly
+
+| Area | Change |
+|---|---|
+| AI | • `AgentService.chat` and `stream_chat` take an optional `save` function, which `_save_turn` runs in a worker thread instead of `save_exchange`; a turn without a receipt saves exactly as before<br>• `AgentTurnService` owns the receipted save (complete the receipt, then drop the cached history, in one worker-thread call) and receives the conversation repository from `main.py`<br>• `TurnExecution` moves into `src/agent/receipts.py` without its repository, and `src/agent/turn_context.py` with the `current_turn` context variable is deleted |
+
+Check: AI Ruff lint and format passed; pytest passed 545 with 100 skipped without a database, and 631 with 14 skipped against a disposable pgvector PostgreSQL, the same counts as before the change; `test_agent_turn_receipts.py` passed 18 before and after with only constructor calls changed. The OpenAPI document, `prompt_version`, the SQL text and the 17 log messages are identical to `staging` at `e0811c3e`. Commit: the commit that adds this entry.
+
 ### 2026-11-15 — Give the turn failure table one owner
 
 | Area | Change |
@@ -182,11 +190,3 @@ Check: the script exits 1 for android-production without a keystore, 0 for andro
 | Mobile and Web | • Renamed the Vietnamese-named overview icons in `assets/tab1-overview` and `public/brand/icons` to English and updated their references |
 
 Check: Web lint, typecheck and build passed; Mobile typecheck passed and `npm test` 196 passed; every renamed image reference resolves to a file; the recaptured images were inspected. The landing page and the app were not opened after the icon rename. Commit: the commit that adds this entry.
-
-### 2026-11-07 — Unquote Dopbase values in CI
-
-| Area | Change |
-|---|---|
-| CI | • `load-dopbase.sh` strips the double quotes and escapes that `dopbase export --format dotenv` puts around every value, so `VPS_SSH_KEY` decodes and `VPS_KNOWN_HOSTS` is a valid known-hosts line again; staging backend deploys had failed since #553<br>• A multi-line value now fails with a clear error |
-
-Check: a fake `dopbase` printing quoted values loads the exact bytes, a multi-line value is refused, `shellcheck --severity=warning` passed; the stored staging key decodes to an OpenSSH private key once unquoted. CD rerun pending.
