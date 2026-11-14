@@ -1,3 +1,11 @@
+### 2026-11-15 — Drop the router's second turn gate check
+
+| Area | Change |
+|---|---|
+| AI | • The agent router no longer checks the turn flag itself before calling `AgentTurnService`, whose `admit`, `read` and `cancel` check it first; the four turn routes still answer 503 `ai_turn_unavailable` before any repository or model call |
+
+Check: AI Ruff lint and format passed; pytest passed 545 with 100 skipped without a database, and 631 with 14 skipped against a disposable pgvector PostgreSQL, where `test_agent_turn_receipts.py` passed 18. The four turn routes with the flag off answer the same status, body and headers as before. The OpenAPI document, `prompt_version`, the SQL text and the 17 log messages are identical to `staging` at `e0811c3e`. Commit: the commit that adds this entry.
+
 ### 2026-11-15 — Pass the receipted save to the agent service explicitly
 
 | Area | Change |

@@ -63,7 +63,7 @@ TurnsDep = Annotated[AgentTurnService | None, Depends(get_turns)]
 def _require_turns(turns):
     if turns is None:
         raise TurnProtocolError("ai_turn_unavailable", 503)
-    turns.require_enabled()
+    # The service gates itself: `admit`, `read` and `cancel` check the flag first.
     return turns
 
 
