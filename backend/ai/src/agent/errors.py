@@ -1,4 +1,15 @@
-"""Errors the agent feature raises; `main.py` and the router map each to a response."""
+"""Errors the agent feature raises, and the one table from an error to its failure code.
+
+A conversation-not-found or guardrail error answers with the same status live and
+when its failed turn is replayed, so the statuses `main.py` gives those errors and
+the ones `failure_status` gives a stored code are declared here once. Any other
+stored code replays as 503, whatever status it answered with live.
+"""
+
+CONVERSATION_NOT_FOUND_STATUS = 404
+GUARDRAIL_STATUS = 422
+# The codes `GuardrailService` raises; a stored code outside this set replays as 503.
+GUARDRAIL_CODES = frozenset({"input_too_long", "answer_unavailable", "answer_timeout"})
 
 
 class ConversationNotFoundError(Exception):
@@ -20,3 +31,25 @@ class GuardrailError(Exception):
     def __init__(self, code: str) -> None:
         super().__init__(code)
         self.code = code
+
+
+# Errors whose code may reach the caller; any other error is hidden as ai_unavailable.
+SAFE_ERRORS = (GuardrailError, ConversationNotFoundError, TurnProtocolError)
+
+
+def failure_code(error: Exception) -> str:
+    """Return the code a failed turn records and a failed stream sends."""
+    if isinstance(error, (GuardrailError, TurnProtocolError)):
+        return error.code
+    if isinstance(error, ConversationNotFoundError):
+        return "conversation_not_found"
+    return "ai_unavailable"
+
+
+def failure_status(code: str) -> int:
+    """Return the status a replay of a turn that FAILED with `code` answers with."""
+    if code == "conversation_not_found":
+        return CONVERSATION_NOT_FOUND_STATUS
+    if code in GUARDRAIL_CODES:
+        return GUARDRAIL_STATUS
+    return 503

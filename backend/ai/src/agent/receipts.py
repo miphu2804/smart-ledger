@@ -3,6 +3,7 @@
 import hashlib
 import json
 from contextlib import contextmanager
+from dataclasses import dataclass
 from uuid import UUID
 
 from sqlalchemy import text
@@ -10,8 +11,18 @@ from sqlalchemy.exc import SQLAlchemyError
 
 from src.agent.errors import ConversationNotFoundError, TurnProtocolError
 from src.agent.repository import AgentConversationRepository
-from src.agent.turn_context import TurnExecution
 from src.infra.postgre_db_client import PostgreDBClient
+
+
+@dataclass(frozen=True)
+class TurnExecution:
+    """One admitted execution of a turn; `fail` and `complete` check its fence."""
+
+    turn_id: UUID
+    user_id: int
+    shop_id: int
+    fence: int
+    fingerprint: str
 
 
 class AgentTurnRepository:
