@@ -1,8 +1,9 @@
 """Errors the agent feature raises, and the one table from an error to its failure code.
 
-A live error and a replayed failed turn must answer with the same status, so the
-statuses `main.py` gives these errors and the ones `failure_status` gives a stored
-code are declared here once.
+A conversation-not-found or guardrail error answers with the same status live and
+when its failed turn is replayed, so the statuses `main.py` gives those errors and
+the ones `failure_status` gives a stored code are declared here once. Any other
+stored code replays as 503, whatever status it answered with live.
 """
 
 CONVERSATION_NOT_FOUND_STATUS = 404
