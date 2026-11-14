@@ -20,27 +20,40 @@ pytestmark = pytest.mark.anyio
 
 
 class StubRepository:
-    """Answers `get` with a fixed row and records each `fail` code."""
+    """Answers `get` with a fixed row; records each call and each `fail` code."""
 
     def __init__(self, row: dict | None = None):
         self.row = row
+        self.calls: list[str] = []
         self.failed: list[str] = []
 
     def admit(self, turn_id, user_id, shop_id, conversation_id, message, fence):
+        self.calls.append("admit")
         return True, None, "fingerprint"
 
     def get(self, turn_id, user_id, shop_id):
+        self.calls.append("get")
         return self.row
 
+    def cancel(self, turn_id, user_id, shop_id, fence):
+        self.calls.append("cancel")
+
     def fail(self, execution, code):
+        self.calls.append("fail")
         self.failed.append(code)
 
 
 class FailingAgent:
     def __init__(self, error: Exception):
         self.error = error
+        self.calls: list[str] = []
 
     async def chat(self, **kwargs):
+        self.calls.append("chat")
+        raise self.error
+
+    async def stream_chat(self, **kwargs):
+        self.calls.append("stream_chat")
         raise self.error
 
 
@@ -119,3 +132,25 @@ async def test_failed_chat_hides_any_other_error_as_ai_unavailable():
     assert raised.value.__cause__ is None
     assert raised.value.__suppress_context__
     assert repository.failed == ["ai_unavailable"]
+
+
+# The router relies on this gate: it no longer checks the flag before these calls.
+@pytest.mark.parametrize(
+    "enter",
+    [
+        pytest.param(lambda service: service.chat_turn(payload()), id="chat_turn"),
+        pytest.param(lambda service: service.stream_turn(payload()), id="stream_turn"),
+        pytest.param(lambda service: service.read(uuid4(), 7, 3), id="read"),
+        pytest.param(lambda service: service.cancel(uuid4(), 7, 3, 1), id="cancel"),
+    ],
+)
+async def test_disabled_turns_answer_unavailable_before_any_other_effect(enter):
+    repository = StubRepository()
+    agent = FailingAgent(RuntimeError("must not run"))
+    service = AgentTurnService(repository, None, agent, enabled=False)
+
+    with pytest.raises(TurnProtocolError) as raised:
+        await enter(service)
+
+    assert (raised.value.code, raised.value.status) == ("ai_turn_unavailable", 503)
+    assert repository.calls == [] and agent.calls == []
