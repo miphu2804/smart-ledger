@@ -1,3 +1,11 @@
+### 2026-11-16 — Tighten the turn service and the composition root
+
+| Area | Change |
+|---|---|
+| AI | • `AgentTurnService.admit` returns `(created, execution)`, without the receipt row that every caller discarded, and `_raise_safe` is annotated `NoReturn`<br>• `build_llm_router` in `main.py` is `build_tier_router`, after the `TierRouter` it builds<br>• The pass over `src/agent/service.py` found nothing worth cutting |
+
+Check: AI Ruff lint and format passed; pytest passed 635 with 14 skipped against a disposable pgvector PostgreSQL; tests changed only call sites. The OpenAPI document, `prompt_version` with the tool names, the env var names, the log messages and the SQL text are identical to `staging` at `aa394ec2`. Commit: the commit that adds this entry.
+
 ### 2026-11-16 — Name the AI modules after what they hold
 
 | Area | Change |
@@ -186,13 +194,3 @@ Check: Linux AI Ruff lint/format and pytest passed (625 passed, 14 skipped: 13 o
 | Safety/docs | • Disabled/unsupported payers and backward clocks retain pending money; skipped writes roll back; bounded cursor batches avoid failed-row starvation<br>• Reuse approved V21 without a new migration; sync contracts, FR status, runbook and default-off variable/templates |
 
 Check: final Maven verify passed (1,564 tests, 0 failures/errors/skips), including 11 required SubscriptionPostgresTest cases; the full PostgreSQL report gate and 13 gate self-tests passed. Compose validation used dummy values; local links/traceability, OKF (50 concepts) and diff checks passed. Initial sandbox Mockito attach was interrupted and rerun outside the sandbox with its agent preloaded. Dopbase CLI is missing, so credential-map generation remains blocked. No shared migration/configuration, SePay delivery, real transfer, FE acceptance or AI quota enforcement was executed. Commit: not created.
-
-### 2026-11-08 — Implement default-off SePay payment APIs
-
-| Area | Change |
-|---|---|
-| Core | • Add active-OWNER catalog/create/status without shop scope; immutable price/recipient snapshots, original-response replay and 30-minute expiry projection<br>• HMAC raw JSON ingress is the sole exact POST Firebase exception; provider/request locks and durable dedupe commit bank outcome plus PAID/PENDING once |
-| Safety | • Preserve missing/wrong/late/extra transfers for review; main-account matching only, no subscription/quota/ledger/role mutation<br>• Separate default-off creation/receipt gates; bounded input/SQL waits, safe failures and no raw provider data in records/logs |
-| Docs and Config | • Update contract/requirements/ERD and add Core setup/Test mode/reconciliation guide; document remaining shared-pool acquisition wait<br>• Keep seven env keys aligned in application, example, template and Compose; update Core→SePay credential-map source; generation blocked by missing Dopbase CLI |
-
-Check: final full Maven verify passed (1,543 tests, 0 failures/errors/skips), required PostgreSQL suites including 13 SePay transaction tests and 13 gate self-tests passed. Coverage includes HMAC/raw JSON, Swagger headers/body, same/different-ID concurrency, expiry races, rollback and silently skipped writes. Compose validation used dummy values only; 75 added local links/anchors, requirement uniqueness, OKF (50 concepts) and diff checks passed. Credential-map generation was blocked by missing Dopbase CLI. No shared configuration/migration, provider delivery, FE checkout or Live transfer was executed; subscription/AI quota execution remains pending. Commit: not created.
