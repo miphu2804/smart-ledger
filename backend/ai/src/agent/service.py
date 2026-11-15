@@ -29,13 +29,7 @@ from src.agent.tool_events import (
     log_tool_event,
     tool_progress,
 )
-from src.agent.tools import (
-    AgentContext,
-    build_calculation_tool,
-    build_restock_tool,
-    build_shop_data_tool,
-)
-from src.calculation.service import CalculationService
+from src.agent.tools import AgentCapability, AgentContext
 from src.llm.model_router import LLMRouterService, ModelSelection
 from src.llm.session_settings import session_settings
 from src.memory.repository import RecalledMemory
@@ -43,17 +37,9 @@ from src.memory.service import AgentMemoryService
 from src.observability import Observability
 from src.prompt_templates import (
     APP_GUIDE_PROMPT,
-    CALC_PROMPT,
     CURRENT_TIME,
-    MEMORY_PROMPT,
-    RESTOCK_PROMPT,
-    RUN_CODE_PROMPT,
     SHOP_AGENT_SYSTEM_PROMPT,
-    SQL_AGENT_PROMPT,
 )
-from src.restock.service import RestockService
-from src.sandbox.wrapper import Sandbox
-from src.sql.repository import ShopDataRepository
 from src.utils import get_time
 
 logger = logging.getLogger(__name__)
@@ -112,11 +98,8 @@ class AgentService:
         model: Model | None,
         conversations: AgentConversationRepository,
         guardrail_limits: GuardrailLimits,
-        shop_data: ShopDataRepository | None = None,
-        restock: RestockService | None = None,
+        capabilities: list[AgentCapability] | None = None,
         memory: AgentMemoryService | None = None,
-        calculation: CalculationService | None = None,
-        sandbox: Sandbox | None = None,
         history_turns: int = 100,
         observability: Observability | None = None,
         llm_router: LLMRouterService | None = None,
@@ -131,31 +114,18 @@ class AgentService:
         # arrives per request through AgentContext and never appears in the prompt.
         # The current time travels with the new message instead (_with_current_time),
         # so the instructions and the history both stay a cacheable prefix.
-        # Each optional capability adds its own tool and prompt section.
-        tools = []
-        prompt_parts = [SHOP_AGENT_SYSTEM_PROMPT, APP_GUIDE_PROMPT]
-        if shop_data is not None:
-            tools.append(build_shop_data_tool(shop_data))
-            prompt_parts.append(SQL_AGENT_PROMPT)
-        if restock is not None:
-            tools.append(build_restock_tool(restock))
-            prompt_parts.append(RESTOCK_PROMPT)
-        if calculation is not None:
-            tools.append(build_calculation_tool(calculation))
-            prompt_parts.append(CALC_PROMPT)
-        if memory is not None:
-            prompt_parts.append(MEMORY_PROMPT)
-        # The sandbox option runs model-written code from one run_code tool; every
-        # registered tool stays native, so a read-only data question or a plain
-        # calculation never starts Monty. Its prompt section is appended only here,
-        # so a model never reads run_code guidance when the tool is not registered:
-        # an unusable sandbox (no codemode extra) or SANDBOX_ENABLED=false arrives
-        # as None, so it turns off without failing the service.
-        if sandbox is not None:
-            prompt_parts.append(RUN_CODE_PROMPT)
-        capabilities = [
+        # Each optional capability adds its prompt section, in list order, and its tool
+        # or Pydantic AI capability; one that is off is not in the list.
+        capabilities = capabilities or []
+        tools = [part.tool for part in capabilities if part.tool is not None]
+        prompt_parts = [
+            SHOP_AGENT_SYSTEM_PROMPT,
+            APP_GUIDE_PROMPT,
+            *(part.prompt for part in capabilities),
+        ]
+        agent_capabilities = [
             *self.guardrails.capabilities,
-            *([sandbox.capability] if sandbox is not None else []),
+            *(part.capability for part in capabilities if part.capability is not None),
         ]
         self.memory = memory
         # None runs every turn on `model`; otherwise each turn picks a tier model.
@@ -181,7 +151,7 @@ class AgentService:
                 # The limits arrive from the composition root, so this module reads no
                 # global settings and guardrails cannot be switched off by a caller.
                 retries=self.guardrails.retries,
-                capabilities=capabilities,
+                capabilities=agent_capabilities,
                 # Tags the run's trace, so one shop's turns can be filtered (NFR-007).
                 metadata=lambda ctx: {"shop_id": ctx.deps.shop_id},
             )

@@ -14,6 +14,7 @@ from src.agent.errors import ConversationNotFoundError
 from src.agent.guardrails import GuardrailLimits
 from src.agent.repository import AgentConversationRepository
 from src.agent.service import AgentService
+from src.agent.tools import shop_data_capability
 from src.main import app
 
 
@@ -357,7 +358,7 @@ def test_stream_sends_tool_start_and_end_before_the_answer(client: TestClient) -
         ),
         app.state.conversations,
         guardrail_limits=TEST_GUARDRAIL_LIMITS,
-        shop_data=ShopData(),
+        capabilities=[shop_data_capability(ShopData())],
     )
 
     events = sse_events(stream_chat(client))

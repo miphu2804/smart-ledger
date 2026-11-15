@@ -14,7 +14,11 @@ from tests.support import (
 )
 
 from src.agent.service import AgentService
-from src.agent.tools import AgentContext, build_shop_data_tool
+from src.agent.tools import (
+    AgentContext,
+    build_shop_data_tool,
+    shop_data_capability,
+)
 from src.infra.postgre_db_client import PostgreDBClient
 from src.prompt_templates import (
     APP_GUIDE_PROMPT,
@@ -66,7 +70,7 @@ def build_agent(model, shop_data=None, conversations=None) -> AgentService:
     return AgentService(
         model,
         conversations or FakeConversationRepository(),
-        shop_data=shop_data,
+        capabilities=[shop_data_capability(shop_data)] if shop_data is not None else [],
         guardrail_limits=TEST_GUARDRAIL_LIMITS,
     )
 

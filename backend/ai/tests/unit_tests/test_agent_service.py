@@ -20,6 +20,7 @@ from src.agent.service import (
     TextDelta,
 )
 from src.agent.tool_events import ToolFinished, ToolStarted
+from src.agent.tools import calculation_capability, shop_data_capability
 from src.calculation.service import CalculationLimits, CalculationService
 from src.llm.model_router import LLMRouterService
 from src.llm.tier import Tier
@@ -281,7 +282,7 @@ async def test_stream_chat_resets_text_written_before_a_tool_call() -> None:
         model,
         FakeConversationRepository(),
         guardrail_limits=TEST_GUARDRAIL_LIMITS,
-        shop_data=FakeShopData(),
+        capabilities=[shop_data_capability(FakeShopData())],
     )
 
     events = await collect(await agent.stream_chat(user_id=3, shop_id=15, message="m"))
@@ -305,7 +306,7 @@ async def test_stream_chat_reports_each_tool_call_without_its_arguments() -> Non
         model,
         FakeConversationRepository(),
         guardrail_limits=TEST_GUARDRAIL_LIMITS,
-        shop_data=FakeShopData(),
+        capabilities=[shop_data_capability(FakeShopData())],
     )
 
     events = await collect(await agent.stream_chat(user_id=3, shop_id=15, message="m"))
@@ -495,9 +496,13 @@ def tiered_agent(
         conversations,
         guardrail_limits=TEST_GUARDRAIL_LIMITS,
         llm_router=router,
-        calculation=CalculationService(
-            CalculationLimits(max_operations=5, max_operand=1_000_000)
-        ),
+        capabilities=[
+            calculation_capability(
+                CalculationService(
+                    CalculationLimits(max_operations=5, max_operand=1_000_000)
+                )
+            )
+        ],
     )
     return agent, models
 

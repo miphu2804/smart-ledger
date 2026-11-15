@@ -1,3 +1,11 @@
+### 2026-11-15 — Pass the agent capabilities as one list
+
+| Area | Change |
+|---|---|
+| AI | • `AgentCapability` in `src/agent/tools.py` pairs one optional prompt section with its tool or Pydantic AI capability; shop data, restock, calculation, memory and run-code each have one<br>• `main.py` builds the ordered list of the capabilities that are on, and `AgentService` takes `capabilities` instead of `shop_data`, `restock`, `calculation` and `sandbox`; `memory` stays a collaborator because it recalls and remembers during the turn |
+
+Check: AI Ruff lint and format passed; pytest passed 549 with 100 skipped, because the PostgreSQL and Redis suites were not run, so those suites are unverified; tests changed only imports and constructor calls. The OpenAPI document, `prompt_version` with the tool names, the env var names and the log messages are identical to `staging` at `aa394ec2`. Commit: the commit that adds this entry.
+
 ### 2026-11-15 — Drop the router's second turn gate check
 
 | Area | Change |
@@ -189,12 +197,3 @@ Check: Mobile typecheck, 197 unit tests and web export passed on an isolated bra
 | CI | • `write-release-keystore.sh` fails an `android-production` build when `ANDROID_KEYSTORE_BASE64` is empty instead of signing with the public debug keystore; `mobile-release.yml` passes it the environment<br>• Found when the release AAB from run 42350017899 built green but was signed `CN=Android Debug`, because the Dopbase `release/production` value was empty |
 
 Check: the script exits 1 for android-production without a keystore, 0 for android-staging and with a keystore; `shellcheck --severity=warning` and `actionlint` passed.
-
-### 2026-11-07 — English file names for product images and icons
-
-| Area | Change |
-|---|---|
-| Docs | • Recaptured the 21 marketing screenshots from the mock web build at staging `a1245a1c` under English file names; renamed 14 user flow screenshots without recapture, since they come from staging and not the mock<br>• Translated the Vietnamese comments in the marketing capture scripts |
-| Mobile and Web | • Renamed the Vietnamese-named overview icons in `assets/tab1-overview` and `public/brand/icons` to English and updated their references |
-
-Check: Web lint, typecheck and build passed; Mobile typecheck passed and `npm test` 196 passed; every renamed image reference resolves to a file; the recaptured images were inspected. The landing page and the app were not opened after the icon rename. Commit: the commit that adds this entry.

@@ -11,6 +11,7 @@ from pydantic_ai.messages import ModelResponse, TextPart
 from tests.support import TEST_GUARDRAIL_LIMITS, ScriptedModel, transcript
 
 from src.agent.service import AgentService, Done, MemoryRecalled, TextDelta
+from src.agent.tools import MEMORY_CAPABILITY
 from src.main import app
 from src.memory.repository import MemoryGroup, RecalledMemory, StoredMemory
 from src.memory.service import AgentMemoryService
@@ -121,6 +122,7 @@ def agent_with(chat_model, memory, conversations=None) -> AgentService:
         chat_model,
         conversations or FakeConversationRepository(),
         TEST_GUARDRAIL_LIMITS,
+        capabilities=[MEMORY_CAPABILITY] if memory is not None else [],
         memory=memory,
     )
 
