@@ -5,7 +5,7 @@ import logging
 import re
 import time
 import uuid
-from collections.abc import AsyncGenerator, AsyncIterator
+from collections.abc import AsyncGenerator, AsyncIterator, Callable
 from contextlib import asynccontextmanager, suppress
 from dataclasses import asdict, dataclass
 
@@ -35,7 +35,6 @@ from src.agent.tools import (
     build_restock_tool,
     build_shop_data_tool,
 )
-from src.agent.turn_context import TurnExecution, current_turn
 from src.calculation.service import CalculationService
 from src.llm.model_router import LLMRouterService, ModelSelection
 from src.llm.session_settings import session_settings
@@ -98,6 +97,11 @@ class Done:
 AgentStreamEvent = (
     MemoryRecalled | ToolStarted | ToolFinished | TextDelta | Reset | Done
 )
+
+# Saves a turn in place of `AgentConversationRepository.save_exchange`: called with
+# (conversation_id, question, answer, model, version) in a worker thread, it returns
+# the saved conversation id and the answer's message id.
+SaveExchange = Callable[[int | None, str, str, str, str], tuple[int, int]]
 
 
 class AgentService:
@@ -191,7 +195,9 @@ class AgentService:
         shop_id: int,
         message: str,
         conversation_id: int | None = None,
+        save: SaveExchange | None = None,
     ) -> AgentChatResult:
+        """Run one turn and save it; `save` replaces the plain save of the exchange."""
         context = AgentContext(user_id=user_id, shop_id=shop_id)
         question, history = await self._prepare_turn(context, message, conversation_id)
         async with self._marks_failure():
@@ -202,7 +208,14 @@ class AgentService:
                 prompt, history, context, self._session_id(conversation_id), selection
             )
             return await self._save_turn(
-                context, conversation_id, question, answer, version, recalled, selection
+                context,
+                conversation_id,
+                question,
+                answer,
+                version,
+                recalled,
+                selection,
+                save,
             )
 
     async def stream_chat(
@@ -211,9 +224,10 @@ class AgentService:
         shop_id: int,
         message: str,
         conversation_id: int | None = None,
+        save: SaveExchange | None = None,
     ) -> AsyncGenerator[AgentStreamEvent]:
         """Refuse a turn now, so the caller can answer with a status code; the returned
-        iterator runs the model and yields the events."""
+        iterator runs the model and yields the events. `save` is as in `chat`."""
         started = time.monotonic()
         context = AgentContext(user_id=user_id, shop_id=shop_id)
         question, history = await self._prepare_turn(context, message, conversation_id)
@@ -230,6 +244,7 @@ class AgentService:
             conversation_id,
             selection,
             started,
+            save,
         )
 
     async def _prepare_turn(
@@ -387,6 +402,7 @@ class AgentService:
         conversation_id: int | None,
         selection: ModelSelection | None,
         started: float,
+        save: SaveExchange | None,
     ) -> AsyncGenerator[AgentStreamEvent]:
         events: asyncio.Queue[AgentStreamEvent | Exception] = asyncio.Queue()
         producer = asyncio.create_task(
@@ -400,6 +416,7 @@ class AgentService:
                 selection,
                 started,
                 events,
+                save,
             )
         )
         try:
@@ -427,6 +444,7 @@ class AgentService:
         selection: ModelSelection | None,
         started: float,
         events: asyncio.Queue[AgentStreamEvent | Exception],
+        save: SaveExchange | None,
     ) -> None:
         # The run gets its own task: pydantic-ai binds its run state to the task that
         # opened it, so a generator suspended mid-run cannot be closed from outside.
@@ -456,6 +474,7 @@ class AgentService:
                     version,
                     recalled,
                     selection,
+                    save,
                 )
                 events.put_nowait(Done(saved))
         except Exception as error:
@@ -580,11 +599,11 @@ class AgentService:
         version: str,
         recalled: list[RecalledMemory],
         selection: ModelSelection | None,
+        save: SaveExchange | None,
     ) -> AgentChatResult:
         model = selection.model.model_name if selection is not None else self.model_name
         with self.observability.span("save turn"):
-            execution = current_turn.get()
-            if execution is None:
+            if save is None:
                 saved_conversation_id, message_id = await asyncio.to_thread(
                     self.conversations.save_exchange,
                     user_id=context.user_id,
@@ -595,13 +614,7 @@ class AgentService:
                 )
             else:
                 saved_conversation_id, message_id = await asyncio.to_thread(
-                    self._save_receipted_exchange,
-                    execution,
-                    conversation_id,
-                    question,
-                    answer,
-                    model,
-                    version,
+                    save, conversation_id, question, answer, model, version
                 )
         if conversation_id is None:
             self.observability.link_conversation(saved_conversation_id)
@@ -624,36 +637,6 @@ class AgentService:
             model=model,
             model_version=version,
         )
-
-    def _save_receipted_exchange(
-        self,
-        execution: TurnExecution,
-        conversation_id: int | None,
-        question: str,
-        answer: str,
-        model: str,
-        version: str,
-    ) -> tuple[int, int]:
-        """Save the exchange atomically with the turn's receipt, then drop the cached
-        history.
-
-        One worker-thread call, so a disconnect after the commit still drops the cache.
-        `AgentTurnRepository.complete` owns the transaction and its lock order
-        (conversation row, then receipt row).
-        """
-        saved_conversation_id, message_id = execution.store.complete(
-            execution,
-            self.conversations,
-            conversation_id,
-            question,
-            answer,
-            model,
-            version,
-        )
-        self.conversations.drop_cached_history(
-            saved_conversation_id, execution.user_id, execution.shop_id
-        )
-        return saved_conversation_id, message_id
 
     @staticmethod
     def _current_time() -> str:

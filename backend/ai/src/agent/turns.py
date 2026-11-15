@@ -2,25 +2,29 @@
 
 import asyncio
 from collections.abc import AsyncIterator
+from functools import partial
 
 from src.agent.errors import (
-    ConversationNotFoundError,
-    GuardrailError,
+    SAFE_ERRORS,
     TurnProtocolError,
+    failure_code,
+    failure_status,
 )
-from src.agent.receipts import AgentTurnRepository
+from src.agent.receipts import AgentTurnRepository, TurnExecution
+from src.agent.repository import AgentConversationRepository
 from src.agent.service import AgentChatResult, AgentService, Done
-from src.agent.turn_context import TurnExecution, current_turn
 
 
 class AgentTurnService:
     def __init__(
         self,
         repository: AgentTurnRepository,
+        conversations: AgentConversationRepository,
         agent: AgentService,
         enabled: bool = False,
     ):
         self.repository = repository
+        self.conversations = conversations
         self.agent = agent
         self.enabled = enabled
 
@@ -40,7 +44,6 @@ class AgentTurnService:
             payload.execution_fence,
         )
         execution = TurnExecution(
-            self.repository,
             payload.turn_id,
             payload.user_id,
             payload.shop_id,
@@ -96,41 +99,26 @@ class AgentTurnService:
                 }
             )
         code = row["failure_code"]
-        if row["state"] == "CANCELLED":
-            status = 409
-        elif code == "conversation_not_found":
-            status = 404
-        elif code in {"input_too_long", "answer_unavailable", "answer_timeout"}:
-            status = 422
-        else:
-            status = 503
+        status = 409 if row["state"] == "CANCELLED" else failure_status(code)
         raise TurnProtocolError(code, status)
 
     async def _failed(self, execution, error):
-        if isinstance(error, (GuardrailError, TurnProtocolError)):
-            code = error.code
-        elif isinstance(error, ConversationNotFoundError):
-            code = "conversation_not_found"
-        else:
-            code = "ai_unavailable"
-        await asyncio.to_thread(self.repository.fail, execution, code)
+        await asyncio.to_thread(self.repository.fail, execution, failure_code(error))
 
     @staticmethod
     def _raise_safe(error):
-        if isinstance(
-            error, (GuardrailError, ConversationNotFoundError, TurnProtocolError)
-        ):
+        if isinstance(error, SAFE_ERRORS):
             raise error
         raise TurnProtocolError("ai_unavailable", 503) from None
 
     async def chat(self, payload, execution):
-        token = current_turn.set(execution)
         try:
             return await self.agent.chat(
                 user_id=payload.user_id,
                 shop_id=payload.shop_id,
                 message=payload.message,
                 conversation_id=payload.conversation_id,
+                save=partial(self._save_exchange, execution),
             )
         except asyncio.CancelledError:
             # A running DB write races cancellation under the receipt lock.
@@ -141,17 +129,15 @@ class AgentTurnService:
         except Exception as error:
             await self._failed(execution, error)
             self._raise_safe(error)
-        finally:
-            current_turn.reset(token)
 
     async def stream(self, payload, execution):
-        token = current_turn.set(execution)
         try:
             events = await self.agent.stream_chat(
                 user_id=payload.user_id,
                 shop_id=payload.shop_id,
                 message=payload.message,
                 conversation_id=payload.conversation_id,
+                save=partial(self._save_exchange, execution),
             )
         except asyncio.CancelledError:
             await self.cancel(
@@ -161,11 +147,8 @@ class AgentTurnService:
         except Exception as error:
             await self._failed(execution, error)
             self._raise_safe(error)
-        finally:
-            current_turn.reset(token)
 
         async def iterate() -> AsyncIterator:
-            token = current_turn.set(execution)
             completed = False
             try:
                 async for event in events:
@@ -186,6 +169,35 @@ class AgentTurnService:
                             execution.shop_id,
                             execution.fence,
                         )
-                    current_turn.reset(token)
 
         return iterate()
+
+    def _save_exchange(
+        self,
+        execution: TurnExecution,
+        conversation_id: int | None,
+        question: str,
+        answer: str,
+        model: str,
+        version: str,
+    ) -> tuple[int, int]:
+        """Save the exchange atomically with the turn's receipt, then drop the cached
+        history.
+
+        The agent runs it as one worker-thread call, so a disconnect after the commit
+        still drops the cache. `AgentTurnRepository.complete` owns the transaction and
+        its lock order (conversation row, then receipt row).
+        """
+        saved_conversation_id, message_id = self.repository.complete(
+            execution,
+            self.conversations,
+            conversation_id,
+            question,
+            answer,
+            model,
+            version,
+        )
+        self.conversations.drop_cached_history(
+            saved_conversation_id, execution.user_id, execution.shop_id
+        )
+        return saved_conversation_id, message_id
