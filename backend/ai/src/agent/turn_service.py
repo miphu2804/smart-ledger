@@ -3,6 +3,7 @@
 import asyncio
 from collections.abc import AsyncIterator
 from functools import partial
+from typing import NoReturn
 from uuid import UUID
 
 from src.agent.conversation_repository import AgentConversationRepository
@@ -39,11 +40,9 @@ class AgentTurnService:
         if not self.enabled:
             raise TurnProtocolError("ai_turn_unavailable", 503)
 
-    async def admit(
-        self, payload: AgentChatRequest
-    ) -> tuple[bool, dict, TurnExecution]:
+    async def admit(self, payload: AgentChatRequest) -> tuple[bool, TurnExecution]:
         self.require_enabled()
-        created, row, fingerprint = await asyncio.to_thread(
+        created, _, fingerprint = await asyncio.to_thread(
             self.repository.admit,
             payload.turn_id,
             payload.user_id,
@@ -59,14 +58,14 @@ class AgentTurnService:
             payload.execution_fence,
             fingerprint,
         )
-        return created, row, execution
+        return created, execution
 
     async def chat_turn(self, payload: AgentChatRequest) -> AgentChatResult | None:
         """Run a receipted turn once; a retry replays its outcome.
 
         Returns None while another execution of the turn is still running.
         """
-        created, _, execution = await self.admit(payload)
+        created, execution = await self.admit(payload)
         if created:
             return await self.chat(payload, execution)
         return await self.replay(execution)
@@ -75,7 +74,7 @@ class AgentTurnService:
         self, payload: AgentChatRequest
     ) -> AsyncIterator[AgentStreamEvent] | None:
         """The streaming form of `chat_turn`: a replay streams only its `Done`."""
-        created, _, execution = await self.admit(payload)
+        created, execution = await self.admit(payload)
         if created:
             return await self.stream(payload, execution)
         result = await self.replay(execution)
@@ -117,7 +116,7 @@ class AgentTurnService:
         await asyncio.to_thread(self.repository.fail, execution, failure_code(error))
 
     @staticmethod
-    def _raise_safe(error: Exception) -> None:
+    def _raise_safe(error: Exception) -> NoReturn:
         if isinstance(error, SAFE_ERRORS):
             raise error
         raise TurnProtocolError("ai_unavailable", 503) from None
