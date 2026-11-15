@@ -291,7 +291,7 @@ class AgentTurnRepository:
                 or row["input_conversation_id"] != conversation
             ):
                 raise TurnProtocolError("ai_turn_cancelled", 409)
-            cid, _, mid = conversations.write_exchange(
+            conversation_id, _, message_id = conversations.write_exchange(
                 session,
                 execution.user_id,
                 execution.shop_id,
@@ -309,15 +309,15 @@ class AgentTurnRepository:
                 """),
                 {
                     "id": execution.turn_id,
-                    "cid": cid,
-                    "mid": mid,
+                    "cid": conversation_id,
+                    "mid": message_id,
                     "model": model,
                     "version": version,
                     "fence": execution.fence,
                 },
             )
             self._one(changed.rowcount)
-        return cid, mid
+        return conversation_id, message_id
 
     @staticmethod
     def _one(count):

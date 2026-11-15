@@ -150,7 +150,7 @@ def build_restock_tool(restock: RestockService) -> Tool[AgentContext]:
     return Tool(suggest_restock, takes_ctx=True)
 
 
-def build_calculation_tool(calc: CalculationService) -> Tool[AgentContext]:
+def build_calculation_tool(calculation: CalculationService) -> Tool[AgentContext]:
     """Arithmetic tool; the service is injected here, so the plan limits live in it.
 
     The steps are a Pydantic model list with extra keys forbidden, so the model sees
@@ -166,7 +166,7 @@ def build_calculation_tool(calc: CalculationService) -> Tool[AgentContext]:
         # A rejected plan goes back to the model as text so it can fix the steps,
         # like query_shop_data. Nothing else can raise here: the service is pure.
         try:
-            outcome = calc.calculate(operations)
+            outcome = calculation.calculate(operations)
         except ValueError as error:
             return f"{_model_error(error)} Fix the steps and retry."
         payload = {
