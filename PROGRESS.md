@@ -1,3 +1,12 @@
+### 2026-11-16 — Name the AI modules after what they hold
+
+| Area | Change |
+|---|---|
+| AI | • Files take the name of their class: `agent/turn_repository.py`, `agent/turn_service.py`, `agent/conversation_repository.py`, `infra/postgres_client.py`, `llm/tier_router.py`, `llm/model_factory.py`, `sandbox/code_mode.py`, `calculation/operations.py`; `PostgreDBClient` is `PostgresClient` and `LLMRouterService` is `TierRouter`<br>• The four memory dataclasses live in `memory/models.py`, and `phone_number.py` moves to `src/`, so `memory` no longer imports from `agent`<br>• Logger names follow the module paths; no alert or dashboard in `deploy` or `scripts` is keyed on an old name |
+| Docs | • The runtime reference, the service walkthrough, the credential map source paths and two links of the business requirements audit point at the new paths |
+
+Check: AI Ruff lint and format passed; pytest passed 635 with 14 skipped against a disposable pgvector PostgreSQL; tests changed only imports, file names and identifiers. The OpenAPI document, `prompt_version` with the tool names, the env var names, the log messages and the SQL text are identical to `staging` at `aa394ec2`; `okf_sync.py --check` passed. Commit: the commit that adds this entry.
+
 ### 2026-11-16 — Type the turn values and the turn receipt
 
 | Area | Change |
@@ -187,13 +196,3 @@ Check: final Maven verify passed (1,564 tests, 0 failures/errors/skips), includi
 | Docs and Config | • Update contract/requirements/ERD and add Core setup/Test mode/reconciliation guide; document remaining shared-pool acquisition wait<br>• Keep seven env keys aligned in application, example, template and Compose; update Core→SePay credential-map source; generation blocked by missing Dopbase CLI |
 
 Check: final full Maven verify passed (1,543 tests, 0 failures/errors/skips), required PostgreSQL suites including 13 SePay transaction tests and 13 gate self-tests passed. Coverage includes HMAC/raw JSON, Swagger headers/body, same/different-ID concurrency, expiry races, rollback and silently skipped writes. Compose validation used dummy values only; 75 added local links/anchors, requirement uniqueness, OKF (50 concepts) and diff checks passed. Credential-map generation was blocked by missing Dopbase CLI. No shared configuration/migration, provider delivery, FE checkout or Live transfer was executed; subscription/AI quota execution remains pending. Commit: not created.
-
-### 2026-11-07 — Add approved billing and AI quota storage
-
-| Area | Change |
-|---|---|
-| Product | • Record approved BR-027–029 → FR-041–043 → AC-128–150: Free 2 AI turns/day; paid OWNER plans 99,000 VND/1 calendar month or 297,000 VND/3 months, both 300/week<br>• Preserve staging's existing chart AC-127; billing acceptance IDs are unpublished draft additions |
-| Core | • Owner-approved V21 creates six private tables with scoped payment/grant FKs, provider/key dedupe, period/window uniqueness and quota/state checks<br>• Append-only bank/grant guards; no existing ledger mutation or runtime writer |
-| AI and Docs | • Separate receipt migration preserves successful evidence after chat deletion; no receipt API/writer enabled<br>• Update schema, ERD/DBML, requirements/contracts and verification guides; sync staging 0cc94ec while preserving unrelated work |
-
-Check: Maven verify passed (1,523 tests, 0 failures/errors/skips); all required PostgreSQL suites including 9 BillingSchemaPostgresTest tests passed their report gate; 13 gate self-tests passed. Rehearsed V1–V21 plus all AI migrations on an isolated PostgreSQL 17 database (31 Core + 5 AI tables); DBML parser, 64 added local links/anchors, unique requirement definitions, OKF check (49 concepts) and git diff --check passed. Initial runs were interrupted by Docker Hub networking/low disk space; cache/temp moved to D and verification reran successfully. No shared migration, SePay delivery, subscription/quota enforcement or integrated acceptance is claimed. Commit: not created.
