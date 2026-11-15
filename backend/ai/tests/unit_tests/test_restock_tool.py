@@ -10,7 +10,12 @@ from tests.support import (
 )
 
 from src.agent.service import AgentService
-from src.agent.tools import AgentContext, build_restock_tool
+from src.agent.tools import (
+    AgentContext,
+    build_restock_tool,
+    restock_capability,
+    shop_data_capability,
+)
 from src.prompt_templates import (
     APP_GUIDE_PROMPT,
     RESTOCK_PROMPT,
@@ -87,8 +92,10 @@ def build_agent(
     return AgentService(
         model,
         conversations or FakeConversationRepository(),
-        shop_data=shop_data,
-        restock=restock,
+        capabilities=[
+            *([shop_data_capability(shop_data)] if shop_data is not None else []),
+            *([restock_capability(restock)] if restock is not None else []),
+        ],
         guardrail_limits=TEST_GUARDRAIL_LIMITS,
     )
 

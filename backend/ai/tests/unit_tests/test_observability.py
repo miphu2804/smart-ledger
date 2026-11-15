@@ -39,6 +39,7 @@ from tests.unit_tests.test_agent_service import (
 from src import observability
 from src.agent.errors import GuardrailError
 from src.agent.service import AgentService
+from src.agent.tools import shop_data_capability
 from src.app_config import AppConfig
 from src.observability import Observability
 
@@ -85,7 +86,7 @@ def traced_agent(tracer=None, sample_rate: float = 1.0) -> AgentService:
         model,
         FakeConversationRepository(),
         guardrail_limits=TEST_GUARDRAIL_LIMITS,
-        shop_data=FakeShopData(),
+        capabilities=[shop_data_capability(FakeShopData())],
         observability=Observability(tracer, sample_rate),
     )
 

@@ -19,6 +19,7 @@ from tests.support import (
 )
 
 from src.agent.service import AgentService
+from src.agent.tools import shop_data_capability
 from src.infra.postgre_db_client import PostgreDBClient
 from src.sql.repository import ShopDataRepository
 
@@ -709,7 +710,7 @@ async def test_chat_turn_answers_after_a_timed_out_query(
     agent = AgentService(
         model,
         MemoryConversations(),
-        shop_data=reader_db.shop_data(timeout_ms=200),
+        capabilities=[shop_data_capability(reader_db.shop_data(timeout_ms=200))],
         guardrail_limits=TEST_GUARDRAIL_LIMITS,
     )
 

@@ -12,6 +12,7 @@ from src.agent.guardrails.input_redaction import InputRedaction
 from src.agent.guardrails.phone_number import PHONE_NUMBER
 from src.agent.guardrails.tool_call_limit import ToolCallLimit
 from src.agent.service import AgentService
+from src.agent.tools import calculation_capability, shop_data_capability
 from src.calculation.service import CalculationLimits, CalculationService
 
 pytestmark = pytest.mark.anyio
@@ -67,7 +68,7 @@ def service(
             turn_token_limit=turn_token_limit,
             turn_timeout_seconds=turn_timeout_seconds,
         ),
-        shop_data=shop_data,
+        capabilities=[shop_data_capability(shop_data)] if shop_data is not None else [],
     )
 
 
@@ -344,8 +345,10 @@ async def test_the_pure_calculate_tool_stays_callable_past_the_tool_limit() -> N
             turn_token_limit=TURN_TOKEN_LIMIT,
             turn_timeout_seconds=TURN_TIMEOUT_SECONDS,
         ),
-        shop_data=shop_data,
-        calculation=calculation,
+        capabilities=[
+            shop_data_capability(shop_data),
+            calculation_capability(calculation),
+        ],
     ).chat(user_id=3, shop_id=15, message="m")
 
     assert shop_data.calls == TOOL_CALL_LIMIT

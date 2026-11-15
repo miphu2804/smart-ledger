@@ -20,6 +20,14 @@ from src.agent.receipts import AgentTurnRepository
 from src.agent.repository import AgentConversationRepository
 from src.agent.router import router as agent_router
 from src.agent.service import AgentService
+from src.agent.tools import (
+    MEMORY_CAPABILITY,
+    AgentCapability,
+    calculation_capability,
+    restock_capability,
+    sandbox_capability,
+    shop_data_capability,
+)
 from src.agent.turns import AgentTurnService
 from src.app_config import app_config
 from src.calculation.service import CalculationLimits, CalculationService
@@ -120,6 +128,27 @@ def build_sandbox() -> Sandbox | None:
         # A missing codemode extra turns the option off instead of failing the service.
         logger.error("%s; sandbox off", error)
         return None
+
+
+def build_capabilities(
+    shop_data: ShopDataRepository | None, memory: AgentMemoryService | None
+) -> list[AgentCapability]:
+    """The optional agent capabilities in prompt order; one that is off is left out."""
+    calculation = build_calculation()
+    sandbox = build_sandbox()
+    return [
+        *(
+            [
+                shop_data_capability(shop_data),
+                restock_capability(RestockService(shop_data)),
+            ]
+            if shop_data is not None
+            else []
+        ),
+        *([calculation_capability(calculation)] if calculation is not None else []),
+        *([MEMORY_CAPABILITY] if memory is not None else []),
+        *([sandbox_capability(sandbox)] if sandbox is not None else []),
+    ]
 
 
 def build_llm_router(
@@ -231,11 +260,8 @@ async def lifespan(app: FastAPI):
             turn_token_limit=app_config.AGENT_TURN_TOKEN_LIMIT,
             turn_timeout_seconds=app_config.AGENT_TURN_TIMEOUT_SECONDS,
         ),
-        shop_data=shop_data,
-        restock=RestockService(shop_data) if shop_data else None,
+        capabilities=build_capabilities(shop_data, memory),
         memory=memory,
-        calculation=build_calculation(),
-        sandbox=build_sandbox(),
         history_turns=app_config.AGENT_HISTORY_TURNS,
         llm_router=llm_router,
     )

@@ -5,15 +5,22 @@ from dataclasses import asdict, dataclass
 from typing import Literal
 
 from pydantic_ai import RunContext, Tool
+from pydantic_ai.capabilities import AbstractCapability
 
 from src.calculation.ops import CalculationStep
 from src.calculation.service import CalculationService
 from src.prompt_templates import (
+    CALC_PROMPT,
     CALC_RESULT_HEADER,
+    MEMORY_PROMPT,
     QUERY_RESULT_HEADER,
+    RESTOCK_PROMPT,
     RESTOCK_RESULT_HEADER,
+    RUN_CODE_PROMPT,
+    SQL_AGENT_PROMPT,
 )
 from src.restock.service import RestockService
+from src.sandbox.wrapper import Sandbox
 from src.sql.repository import ShopDataRepository
 
 logger = logging.getLogger(__name__)
@@ -41,6 +48,42 @@ class AgentContext:
 
     user_id: int
     shop_id: int
+
+
+@dataclass(frozen=True)
+class AgentCapability:
+    """One optional part of the agent: its prompt section and what the section governs.
+
+    The composition root lists only the capabilities that are on, so a capability that
+    is off contributes neither a tool nor prompt text the model could act on.
+    """
+
+    prompt: str
+    tool: Tool[AgentContext] | None = None
+    capability: AbstractCapability[AgentContext] | None = None
+
+
+def shop_data_capability(shop_data: ShopDataRepository) -> AgentCapability:
+    return AgentCapability(SQL_AGENT_PROMPT, tool=build_shop_data_tool(shop_data))
+
+
+def restock_capability(restock: RestockService) -> AgentCapability:
+    return AgentCapability(RESTOCK_PROMPT, tool=build_restock_tool(restock))
+
+
+def calculation_capability(calculation: CalculationService) -> AgentCapability:
+    return AgentCapability(CALC_PROMPT, tool=build_calculation_tool(calculation))
+
+
+# Memory recalls and remembers around the turn, outside the model's tool list, so the
+# model only needs its prompt section.
+MEMORY_CAPABILITY = AgentCapability(MEMORY_PROMPT)
+
+
+def sandbox_capability(sandbox: Sandbox) -> AgentCapability:
+    """The run_code capability; every registered tool stays native, so a data question
+    or a plain calculation never starts Monty."""
+    return AgentCapability(RUN_CODE_PROMPT, capability=sandbox.capability)
 
 
 def build_shop_data_tool(shop_data: ShopDataRepository) -> Tool[AgentContext]:
