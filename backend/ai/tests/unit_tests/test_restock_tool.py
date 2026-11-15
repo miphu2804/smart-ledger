@@ -16,6 +16,7 @@ from src.agent.tools import (
     restock_capability,
     shop_data_capability,
 )
+from src.llm.service import LLMService
 from src.prompt_templates import (
     APP_GUIDE_PROMPT,
     RESTOCK_PROMPT,
@@ -90,7 +91,7 @@ def build_agent(
     conversations: FakeConversationRepository | None = None,
 ) -> AgentService:
     return AgentService(
-        model,
+        LLMService(model),
         conversations or FakeConversationRepository(),
         capabilities=[
             *([shop_data_capability(shop_data)] if shop_data is not None else []),

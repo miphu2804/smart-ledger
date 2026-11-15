@@ -37,6 +37,7 @@ from src.infra.redis_client import RedisClient
 from src.llm.bifrost_tier_classifier import BifrostTierClassifier
 from src.llm.factory import LLMFactory
 from src.llm.model_router import LLMRouterService
+from src.llm.service import LLMService
 from src.llm.tier import Tier
 from src.log_formatter import LevelColorFormatter
 from src.memory.repository import EMBEDDING_DIMENSIONS, AgentMemoryRepository
@@ -247,7 +248,7 @@ async def lifespan(app: FastAPI):
     memory = build_memory_service(chat_model, postgres, observability)
     app.state.memory = memory
     agent = AgentService(
-        chat_model,
+        LLMService(chat_model, llm_router),
         conversations,
         observability=observability,
         guardrail_limits=GuardrailLimits(
@@ -263,7 +264,6 @@ async def lifespan(app: FastAPI):
         capabilities=build_capabilities(shop_data, memory),
         memory=memory,
         history_turns=app_config.AGENT_HISTORY_TURNS,
-        llm_router=llm_router,
     )
     app.state.agent = agent
     app.state.turns = AgentTurnService(

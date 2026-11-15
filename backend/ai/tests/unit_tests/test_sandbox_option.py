@@ -14,6 +14,7 @@ from src.agent.tools import (
     shop_data_capability,
 )
 from src.calculation.service import CalculationLimits, CalculationService
+from src.llm.service import LLMService
 from src.main import SANDBOX_TOOLS
 from src.prompt_templates import (
     CALC_PROMPT,
@@ -51,7 +52,7 @@ class FakeConversations:
 
 
 def service(model, **kwargs) -> AgentService:
-    return AgentService(model, FakeConversations(), **kwargs)
+    return AgentService(LLMService(model), FakeConversations(), **kwargs)
 
 
 def run_code_call(code: str) -> ModelResponse:

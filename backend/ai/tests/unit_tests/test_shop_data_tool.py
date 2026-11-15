@@ -20,6 +20,7 @@ from src.agent.tools import (
     shop_data_capability,
 )
 from src.infra.postgre_db_client import PostgreDBClient
+from src.llm.service import LLMService
 from src.prompt_templates import (
     APP_GUIDE_PROMPT,
     QUERY_RESULT_HEADER,
@@ -68,7 +69,7 @@ def query_then_answer(args: dict, answer: str = "done") -> ScriptedModel:
 
 def build_agent(model, shop_data=None, conversations=None) -> AgentService:
     return AgentService(
-        model,
+        LLMService(model),
         conversations or FakeConversationRepository(),
         capabilities=[shop_data_capability(shop_data)] if shop_data is not None else [],
         guardrail_limits=TEST_GUARDRAIL_LIMITS,

@@ -22,6 +22,7 @@ from src.agent.repository import AgentConversationRepository
 from src.agent.service import AgentService
 from src.infra.postgre_db_client import PostgreDBClient
 from src.infra.redis_client import RedisClient
+from src.llm.service import LLMService
 from src.main import app
 
 
@@ -82,7 +83,7 @@ def postgres_agent_client(
 
         postgres = PostgreDBClient(schema_url(database_url, schema_name))
         agent = AgentService(
-            FunctionModel(echo_user_prompts),
+            LLMService(FunctionModel(echo_user_prompts)),
             AgentConversationRepository(postgres, FakeRedis()),
             guardrail_limits=TEST_GUARDRAIL_LIMITS,
         )
@@ -226,7 +227,7 @@ def test_chat_sends_only_the_configured_window(
     client, user_id, shop_id, conversations = postgres_agent_client
     conversation_id = seed_conversation(conversations, user_id, shop_id, 3)
     agent = AgentService(
-        FunctionModel(echo_user_prompts),
+        LLMService(FunctionModel(echo_user_prompts)),
         conversations,
         guardrail_limits=TEST_GUARDRAIL_LIMITS,
         history_turns=1,

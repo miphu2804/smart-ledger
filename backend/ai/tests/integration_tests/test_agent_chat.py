@@ -15,6 +15,7 @@ from src.agent.guardrails import GuardrailLimits
 from src.agent.repository import AgentConversationRepository
 from src.agent.service import AgentService
 from src.agent.tools import shop_data_capability
+from src.llm.service import LLMService
 from src.main import app
 
 
@@ -38,7 +39,7 @@ def client(internal_headers: dict[str, str], wire_agent_state) -> TestClient:
     conversations.recent_messages.return_value = []
     conversations.save_exchange.return_value = (101, 502)
     agent = AgentService(
-        FunctionModel(answer),
+        LLMService(FunctionModel(answer)),
         conversations,
         guardrail_limits=TEST_GUARDRAIL_LIMITS,
     )
@@ -121,7 +122,7 @@ def test_agent_chat_endpoint_rejects_blank_messages(
 
 def test_agent_chat_endpoint_strips_message_whitespace(client: TestClient) -> None:
     app.state.agent = AgentService(
-        FunctionModel(echo_user_prompts),
+        LLMService(FunctionModel(echo_user_prompts)),
         app.state.conversations,
         guardrail_limits=TEST_GUARDRAIL_LIMITS,
     )
@@ -136,7 +137,7 @@ def test_agent_chat_does_not_reuse_messages_between_conversations(
     client: TestClient,
 ) -> None:
     app.state.agent = AgentService(
-        FunctionModel(echo_user_prompts),
+        LLMService(FunctionModel(echo_user_prompts)),
         app.state.conversations,
         guardrail_limits=TEST_GUARDRAIL_LIMITS,
     )
@@ -262,7 +263,7 @@ def test_chat_hides_conversation_owned_by_another_scope(client: TestClient) -> N
 
 def test_guardrail_stop_returns_its_code(client: TestClient) -> None:
     app.state.agent = AgentService(
-        FunctionModel(answer),
+        LLMService(FunctionModel(answer)),
         app.state.conversations,
         guardrail_limits=GuardrailLimits(
             max_input_chars=5,
@@ -291,7 +292,7 @@ def test_agent_chat_returns_503_when_agent_missing(client: TestClient) -> None:
 
 def test_agent_chat_returns_503_on_model_error(client: TestClient) -> None:
     app.state.agent = AgentService(
-        FunctionModel(failing_model),
+        LLMService(FunctionModel(failing_model)),
         app.state.conversations,
         guardrail_limits=TEST_GUARDRAIL_LIMITS,
     )
@@ -307,7 +308,7 @@ def test_stream_sends_deltas_then_done_with_the_persisted_turn(
 ) -> None:
     answer = "Rice sells for 30.000 VND/kg, 12 kg left."
     app.state.agent = AgentService(
-        ScriptedModel(answer),
+        LLMService(ScriptedModel(answer)),
         app.state.conversations,
         guardrail_limits=TEST_GUARDRAIL_LIMITS,
     )
@@ -344,17 +345,19 @@ def test_stream_sends_tool_start_and_end_before_the_answer(client: TestClient) -
             return {"columns": ["n"], "rows": [[1]], "truncated": False}
 
     app.state.agent = AgentService(
-        ScriptedModel(
-            ModelResponse(
-                parts=[
-                    ToolCallPart(
-                        "query_shop_data",
-                        {"sql": "SELECT 1 FROM v_shop_profile"},
-                        tool_call_id="call-1",
-                    )
-                ]
-            ),
-            "One product is on sale.",
+        LLMService(
+            ScriptedModel(
+                ModelResponse(
+                    parts=[
+                        ToolCallPart(
+                            "query_shop_data",
+                            {"sql": "SELECT 1 FROM v_shop_profile"},
+                            tool_call_id="call-1",
+                        )
+                    ]
+                ),
+                "One product is on sale.",
+            )
         ),
         app.state.conversations,
         guardrail_limits=TEST_GUARDRAIL_LIMITS,
@@ -378,7 +381,7 @@ def test_stream_retries_a_leaking_answer_without_showing_it(
 ) -> None:
     answer = "Rice sells for 30.000 VND/kg."
     app.state.agent = AgentService(
-        ScriptedModel("SELECT name FROM v_products", answer),
+        LLMService(ScriptedModel("SELECT name FROM v_products", answer)),
         app.state.conversations,
         guardrail_limits=TEST_GUARDRAIL_LIMITS,
     )
@@ -397,7 +400,7 @@ def test_stream_ends_with_an_error_event_when_the_screen_stops_the_answer(
     client: TestClient,
 ) -> None:
     app.state.agent = AgentService(
-        ScriptedModel("Error[SQL_ERROR]", "Error[SQL_ERROR]"),
+        LLMService(ScriptedModel("Error[SQL_ERROR]", "Error[SQL_ERROR]")),
         app.state.conversations,
         guardrail_limits=replace(TEST_GUARDRAIL_LIMITS, model_call_limit=2),
     )
@@ -415,7 +418,7 @@ def test_stream_ends_with_an_error_event_when_the_model_fails_midway(
     client: TestClient,
 ) -> None:
     app.state.agent = AgentService(
-        FunctionModel(stream_function=broken_answer),
+        LLMService(FunctionModel(stream_function=broken_answer)),
         app.state.conversations,
         guardrail_limits=TEST_GUARDRAIL_LIMITS,
     )
@@ -445,7 +448,7 @@ def test_stream_refuses_an_overlong_message_before_streaming(
     client: TestClient,
 ) -> None:
     app.state.agent = AgentService(
-        FunctionModel(answer),
+        LLMService(FunctionModel(answer)),
         app.state.conversations,
         guardrail_limits=GuardrailLimits(
             max_input_chars=5,
