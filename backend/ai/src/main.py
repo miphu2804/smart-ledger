@@ -152,7 +152,7 @@ def build_capabilities(
     ]
 
 
-def build_llm_router(
+def build_tier_router(
     factory: LLMFactory, decisions: httpx.AsyncClient, observability: Observability
 ) -> TierRouter | None:
     url = app_config.TIER_CLASSIFIER_URL
@@ -237,8 +237,8 @@ async def lifespan(app: FastAPI):
         if app_config.MODEL_TIERING_ENABLED and chat_model is not None
         else None
     )
-    llm_router = (
-        build_llm_router(factory, decisions, observability)
+    tier_router = (
+        build_tier_router(factory, decisions, observability)
         if decisions is not None
         else None
     )
@@ -248,7 +248,7 @@ async def lifespan(app: FastAPI):
     memory = build_memory_service(chat_model, postgres, observability)
     app.state.memory = memory
     agent = AgentService(
-        LLMService(chat_model, llm_router),
+        LLMService(chat_model, tier_router),
         conversations,
         observability=observability,
         guardrail_limits=GuardrailLimits(
