@@ -1,3 +1,11 @@
+### 2026-11-16 — Type the turn values and the turn receipt
+
+| Area | Change |
+|---|---|
+| AI | • `TurnData` in `src/agent/service.py` carries one turn's values, including the optional `save`, in place of the eight or nine positional parameters of the stream path and `_save_turn`<br>• `AgentTurnRepository.get` and `cancel` return a frozen `TurnReceipt` with a `TurnState` enum instead of a mutated row dict; the router maps it to `AgentTurnReceipt`, `_pending` builds that schema, and `AgentTurnService` has type hints |
+
+Check: AI Ruff lint and format passed; pytest passed 635 with 14 skipped against a disposable pgvector PostgreSQL; tests changed only access syntax. The OpenAPI document, `prompt_version` with the tool names, the env var names, the log messages and the SQL text are identical to `staging` at `aa394ec2`. Commit: the commit that adds this entry.
+
 ### 2026-11-15 — Give the agent one LLM service
 
 | Area | Change |
@@ -189,11 +197,3 @@ Check: final full Maven verify passed (1,543 tests, 0 failures/errors/skips), re
 | AI and Docs | • Separate receipt migration preserves successful evidence after chat deletion; no receipt API/writer enabled<br>• Update schema, ERD/DBML, requirements/contracts and verification guides; sync staging 0cc94ec while preserving unrelated work |
 
 Check: Maven verify passed (1,523 tests, 0 failures/errors/skips); all required PostgreSQL suites including 9 BillingSchemaPostgresTest tests passed their report gate; 13 gate self-tests passed. Rehearsed V1–V21 plus all AI migrations on an isolated PostgreSQL 17 database (31 Core + 5 AI tables); DBML parser, 64 added local links/anchors, unique requirement definitions, OKF check (49 concepts) and git diff --check passed. Initial runs were interrupted by Docker Hub networking/low disk space; cache/temp moved to D and verification reran successfully. No shared migration, SePay delivery, subscription/quota enforcement or integrated acceptance is claimed. Commit: not created.
-
-### 2026-11-07 — Block the unused Android data-sync foreground-service permission
-
-| Area | Change |
-|---|---|
-| Mobile | • Block the transitive background downloader's `FOREGROUND_SERVICE_DATA_SYNC` permission through Expo config and add a regression test<br>• Document rebuilding the AAB and replacing affected Play artifacts instead of claiming an unused backup feature |
-
-Check: Mobile typecheck, 197 unit tests and web export passed on an isolated branch from staging `875fea99`; Expo introspection emits `tools:node="remove"` for the permission. A rebuilt AAB, device behavior and Play acceptance are not verified. Commit: the commit that adds this entry.
