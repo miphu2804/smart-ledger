@@ -10,6 +10,7 @@ from tests.support import TEST_GUARDRAIL_LIMITS
 from src.agent.repository import AgentConversationRepository
 from src.agent.service import AgentService
 from src.app_config import app_config
+from src.llm.service import LLMService
 from src.main import app
 
 CHAT = "/internal/v1/agent/chat"
@@ -40,7 +41,7 @@ def client(wire_agent_state) -> TestClient:
     conversations.recent_messages.return_value = []
     conversations.save_exchange.return_value = (101, 502)
     agent = AgentService(
-        FunctionModel(answer),
+        LLMService(FunctionModel(answer)),
         conversations,
         guardrail_limits=TEST_GUARDRAIL_LIMITS,
     )

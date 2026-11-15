@@ -30,6 +30,7 @@ from src.agent.schema import AgentChatRequest
 from src.agent.service import AgentService, Done
 from src.agent.turns import AgentTurnService
 from src.infra.postgre_db_client import PostgreDBClient
+from src.llm.service import LLMService
 from src.main import app
 
 
@@ -69,7 +70,7 @@ def receipt_env(monkeypatch, internal_headers):
         conversations = AgentConversationRepository(postgres, FakeRedis())
         store = AgentTurnRepository(postgres)
         model = ScriptedModel("Saved test answer")
-        agent = AgentService(model, conversations, TEST_GUARDRAIL_LIMITS)
+        agent = AgentService(LLMService(model), conversations, TEST_GUARDRAIL_LIMITS)
         turns = AgentTurnService(store, conversations, agent, True)
         monkeypatch.setattr(app.state, "agent", agent, raising=False)
         monkeypatch.setattr(app.state, "conversations", conversations, raising=False)
@@ -143,7 +144,9 @@ def test_json_replay_restart_and_stream_keep_exact_answer_and_model_metadata(
     assert first.json()["request_id"] == body["turn_id"]
     assert first.headers["cache-control"] == "no-store"
     unused = AgentService(
-        ScriptedModel("Must never run"), env.conversations, TEST_GUARDRAIL_LIMITS
+        LLMService(ScriptedModel("Must never run")),
+        env.conversations,
+        TEST_GUARDRAIL_LIMITS,
     )
     fresh = AgentTurnService(
         AgentTurnRepository(env.postgres), env.conversations, unused, True
@@ -252,7 +255,9 @@ def test_parallel_posts_and_existing_in_progress_receipt_start_only_one_model(
     monkeypatch.setattr(
         env.turns,
         "agent",
-        AgentService(FunctionModel(blocked), env.conversations, TEST_GUARDRAIL_LIMITS),
+        AgentService(
+            LLMService(FunctionModel(blocked)), env.conversations, TEST_GUARDRAIL_LIMITS
+        ),
     )
     body = payload(env)
     try:
@@ -384,7 +389,9 @@ def test_technical_failure_is_terminal_and_never_reveals_diagnostics(
         app.state,
         "agent",
         AgentService(
-            ScriptedModel("must not run"), env.conversations, TEST_GUARDRAIL_LIMITS
+            LLMService(ScriptedModel("must not run")),
+            env.conversations,
+            TEST_GUARDRAIL_LIMITS,
         ),
     )
     assert env.client.post("/internal/v1/agent/chat", json=body).status_code == 503

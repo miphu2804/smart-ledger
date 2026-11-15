@@ -41,6 +41,7 @@ from src.agent.errors import GuardrailError
 from src.agent.service import AgentService
 from src.agent.tools import shop_data_capability
 from src.app_config import AppConfig
+from src.llm.service import LLMService
 from src.observability import Observability
 
 pytestmark = pytest.mark.anyio
@@ -83,7 +84,7 @@ def traced_agent(tracer=None, sample_rate: float = 1.0) -> AgentService:
         ModelResponse(parts=[ToolCallPart("query_shop_data", {"sql": SQL})]), ANSWER
     )
     return AgentService(
-        model,
+        LLMService(model),
         FakeConversationRepository(),
         guardrail_limits=TEST_GUARDRAIL_LIMITS,
         capabilities=[shop_data_capability(FakeShopData())],
@@ -104,7 +105,7 @@ async def slow_stream(messages, info):
 
 def slow_agent(tracer, turn_timeout_seconds: float = 60) -> AgentService:
     return AgentService(
-        FunctionModel(function=slow_reply, stream_function=slow_stream),
+        LLMService(FunctionModel(function=slow_reply, stream_function=slow_stream)),
         FakeConversationRepository(),
         guardrail_limits=replace(
             TEST_GUARDRAIL_LIMITS, turn_timeout_seconds=turn_timeout_seconds
@@ -308,7 +309,7 @@ async def test_turn_opens_a_session_with_the_redacted_question() -> None:
     assert remote["metadata"] == {
         "shop_id": 15,
         "conversation_id": None,
-        "model": agent.model_name,
+        "model": agent.llm.model_name(),
         "prompt_version": agent.prompt_version,
         "git_sha": None,
     }
@@ -465,7 +466,7 @@ async def test_the_real_sdk_drops_an_unsampled_turn_quietly() -> None:
     )
     try:
         agent = AgentService(
-            ScriptedModel(ANSWER),
+            LLMService(ScriptedModel(ANSWER)),
             FakeConversationRepository(),
             guardrail_limits=TEST_GUARDRAIL_LIMITS,
             observability=observability,

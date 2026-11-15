@@ -1,3 +1,11 @@
+### 2026-11-15 — Give the agent one LLM service
+
+| Area | Change |
+|---|---|
+| AI | • `LLMService` in `src/llm/service.py` holds the default model and the optional tier router; it picks the turn's model, names the model a turn ran on and keeps a turn's tier, so a turn without a selection runs on the default model<br>• `AgentService` takes `llm` instead of `model` and `llm_router`; the "llm router" span and the tier tags stay in `AgentService`, and memory still uses the `chat` model |
+
+Check: AI Ruff lint and format passed; pytest passed 549 with 100 skipped, because the PostgreSQL and Redis suites were not run, so those suites are unverified; tests changed only imports, constructor calls and attribute paths. The OpenAPI document, `prompt_version` with the tool names, the env var names and the log messages are identical to `staging` at `aa394ec2`. Commit: the commit that adds this entry.
+
 ### 2026-11-15 — Pass the agent capabilities as one list
 
 | Area | Change |
@@ -189,11 +197,3 @@ Check: Maven verify passed (1,523 tests, 0 failures/errors/skips); all required 
 | Mobile | • Block the transitive background downloader's `FOREGROUND_SERVICE_DATA_SYNC` permission through Expo config and add a regression test<br>• Document rebuilding the AAB and replacing affected Play artifacts instead of claiming an unused backup feature |
 
 Check: Mobile typecheck, 197 unit tests and web export passed on an isolated branch from staging `875fea99`; Expo introspection emits `tools:node="remove"` for the permission. A rebuilt AAB, device behavior and Play acceptance are not verified. Commit: the commit that adds this entry.
-
-### 2026-11-07 — Refuse debug-signed production Android builds
-
-| Area | Change |
-|---|---|
-| CI | • `write-release-keystore.sh` fails an `android-production` build when `ANDROID_KEYSTORE_BASE64` is empty instead of signing with the public debug keystore; `mobile-release.yml` passes it the environment<br>• Found when the release AAB from run 42350017899 built green but was signed `CN=Android Debug`, because the Dopbase `release/production` value was empty |
-
-Check: the script exits 1 for android-production without a keystore, 0 for android-staging and with a keystore; `shellcheck --severity=warning` and `actionlint` passed.

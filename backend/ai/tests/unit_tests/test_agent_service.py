@@ -23,6 +23,7 @@ from src.agent.tool_events import ToolFinished, ToolStarted
 from src.agent.tools import calculation_capability, shop_data_capability
 from src.calculation.service import CalculationLimits, CalculationService
 from src.llm.model_router import LLMRouterService
+from src.llm.service import LLMService
 from src.llm.tier import Tier
 from src.prompt_templates import APP_GUIDE_PROMPT, SHOP_AGENT_SYSTEM_PROMPT
 from src.utils import get_time
@@ -77,7 +78,9 @@ class FakeConversationRepository:
 async def test_chat_sends_the_instructions_and_persists_the_exchange() -> None:
     model = ScriptedModel("ok")
     conversations = FakeConversationRepository()
-    agent = AgentService(model, conversations, guardrail_limits=TEST_GUARDRAIL_LIMITS)
+    agent = AgentService(
+        LLMService(model), conversations, guardrail_limits=TEST_GUARDRAIL_LIMITS
+    )
 
     result = await agent.chat(user_id=3, shop_id=15, message="today's revenue?")
 
@@ -103,7 +106,9 @@ async def test_chat_adds_scoped_conversation_history_to_model_context() -> None:
             {"message_id": 2, "role": "ASSISTANT", "content": "hi there"},
         ]
     )
-    agent = AgentService(model, conversations, guardrail_limits=TEST_GUARDRAIL_LIMITS)
+    agent = AgentService(
+        LLMService(model), conversations, guardrail_limits=TEST_GUARDRAIL_LIMITS
+    )
 
     await agent.chat(
         user_id=3,
@@ -131,7 +136,9 @@ async def test_history_replays_old_answers_without_their_screen_buttons() -> Non
             {"message_id": 2, "role": "ASSISTANT", "content": stored},
         ]
     )
-    agent = AgentService(model, conversations, guardrail_limits=TEST_GUARDRAIL_LIMITS)
+    agent = AgentService(
+        LLMService(model), conversations, guardrail_limits=TEST_GUARDRAIL_LIMITS
+    )
 
     await agent.chat(user_id=3, shop_id=15, conversation_id=41, message="m")
 
@@ -141,7 +148,7 @@ async def test_history_replays_old_answers_without_their_screen_buttons() -> Non
 async def test_chat_does_not_save_exchange_when_model_fails() -> None:
     conversations = FakeConversationRepository()
     agent = AgentService(
-        FunctionModel(failing_model),
+        LLMService(FunctionModel(failing_model)),
         conversations,
         guardrail_limits=TEST_GUARDRAIL_LIMITS,
     )
@@ -161,7 +168,7 @@ async def test_chat_sends_only_the_latest_turns_of_a_long_conversation() -> None
     ]
     conversations = FakeConversationRepository(history)
     agent = AgentService(
-        model,
+        LLMService(model),
         conversations,
         guardrail_limits=TEST_GUARDRAIL_LIMITS,
         history_turns=2,
@@ -184,7 +191,7 @@ async def test_chat_sends_only_the_latest_turns_of_a_long_conversation() -> None
 async def test_chat_reads_no_history_for_a_new_conversation() -> None:
     conversations = FakeConversationRepository()
     agent = AgentService(
-        ScriptedModel("ok"),
+        LLMService(ScriptedModel("ok")),
         conversations,
         guardrail_limits=TEST_GUARDRAIL_LIMITS,
     )
@@ -197,7 +204,9 @@ async def test_chat_reads_no_history_for_a_new_conversation() -> None:
 async def test_chat_rejects_a_conversation_outside_the_owner_scope() -> None:
     model = ScriptedModel("ok")
     conversations = FakeConversationRepository(missing=True)
-    agent = AgentService(model, conversations, guardrail_limits=TEST_GUARDRAIL_LIMITS)
+    agent = AgentService(
+        LLMService(model), conversations, guardrail_limits=TEST_GUARDRAIL_LIMITS
+    )
 
     with pytest.raises(ConversationNotFoundError):
         await agent.chat(user_id=3, shop_id=15, conversation_id=41, message="hello")
@@ -208,7 +217,9 @@ async def test_chat_rejects_a_conversation_outside_the_owner_scope() -> None:
 
 async def test_chat_without_a_model_is_unavailable() -> None:
     agent = AgentService(
-        None, FakeConversationRepository(), guardrail_limits=TEST_GUARDRAIL_LIMITS
+        LLMService(None),
+        FakeConversationRepository(),
+        guardrail_limits=TEST_GUARDRAIL_LIMITS,
     )
 
     with pytest.raises(RuntimeError, match="agent model unavailable"):
@@ -219,7 +230,9 @@ async def test_stream_chat_streams_deltas_that_make_up_the_answer() -> None:
     answer = "Rice sells for 30.000 VND/kg, 12 kg left."
     conversations = FakeConversationRepository()
     agent = AgentService(
-        ScriptedModel(answer), conversations, guardrail_limits=TEST_GUARDRAIL_LIMITS
+        LLMService(ScriptedModel(answer)),
+        conversations,
+        guardrail_limits=TEST_GUARDRAIL_LIMITS,
     )
 
     events = await collect(
@@ -252,7 +265,9 @@ async def test_stream_chat_retries_a_leaking_answer_without_streaming_it() -> No
     answer = "Rice sells for 30.000 VND/kg."
     model = ScriptedModel("SELECT name FROM v_products", answer)
     agent = AgentService(
-        model, FakeConversationRepository(), guardrail_limits=TEST_GUARDRAIL_LIMITS
+        LLMService(model),
+        FakeConversationRepository(),
+        guardrail_limits=TEST_GUARDRAIL_LIMITS,
     )
 
     events = await collect(await agent.stream_chat(user_id=3, shop_id=15, message="m"))
@@ -279,7 +294,7 @@ async def test_stream_chat_resets_text_written_before_a_tool_call() -> None:
         answer,
     )
     agent = AgentService(
-        model,
+        LLMService(model),
         FakeConversationRepository(),
         guardrail_limits=TEST_GUARDRAIL_LIMITS,
         capabilities=[shop_data_capability(FakeShopData())],
@@ -303,7 +318,7 @@ async def test_stream_chat_reports_each_tool_call_without_its_arguments() -> Non
     )
     model = ScriptedModel(ModelResponse(parts=[call]), "The phone is 0901234567.")
     agent = AgentService(
-        model,
+        LLMService(model),
         FakeConversationRepository(),
         guardrail_limits=TEST_GUARDRAIL_LIMITS,
         capabilities=[shop_data_capability(FakeShopData())],
@@ -329,7 +344,7 @@ async def test_stream_chat_never_takes_back_text_it_already_sent() -> None:
             yield chunk
 
     agent = AgentService(
-        FunctionModel(stream_function=chunked_answer),
+        LLMService(FunctionModel(stream_function=chunked_answer)),
         FakeConversationRepository(),
         guardrail_limits=TEST_GUARDRAIL_LIMITS,
     )
@@ -346,7 +361,7 @@ async def test_stream_chat_stops_an_answer_the_screen_keeps_rejecting() -> None:
     limits = replace(TEST_GUARDRAIL_LIMITS, model_call_limit=2)
     conversations = FakeConversationRepository()
     agent = AgentService(
-        ScriptedModel("Error[SQL_ERROR]", "Error[SQL_ERROR]"),
+        LLMService(ScriptedModel("Error[SQL_ERROR]", "Error[SQL_ERROR]")),
         conversations,
         guardrail_limits=limits,
     )
@@ -368,7 +383,7 @@ async def test_stream_chat_stops_a_turn_past_the_timeout() -> None:
     limits = replace(TEST_GUARDRAIL_LIMITS, turn_timeout_seconds=0.05)
     conversations = FakeConversationRepository()
     agent = AgentService(
-        FunctionModel(stream_function=slow_answer),
+        LLMService(FunctionModel(stream_function=slow_answer)),
         conversations,
         guardrail_limits=limits,
     )
@@ -389,7 +404,7 @@ async def test_closing_a_stream_early_cancels_the_run_and_saves_nothing() -> Non
 
     conversations = FakeConversationRepository()
     agent = AgentService(
-        FunctionModel(stream_function=slow_answer),
+        LLMService(FunctionModel(stream_function=slow_answer)),
         conversations,
         guardrail_limits=TEST_GUARDRAIL_LIMITS,
     )
@@ -408,7 +423,9 @@ async def test_a_slow_consumer_does_not_use_up_the_turn_timeout() -> None:
     answer = "Rice sells for 30.000 VND/kg, 12 kg left."
     limits = replace(TEST_GUARDRAIL_LIMITS, turn_timeout_seconds=0.05)
     agent = AgentService(
-        ScriptedModel(answer), FakeConversationRepository(), guardrail_limits=limits
+        LLMService(ScriptedModel(answer)),
+        FakeConversationRepository(),
+        guardrail_limits=limits,
     )
 
     events = []
@@ -423,17 +440,19 @@ async def test_a_slow_consumer_does_not_use_up_the_turn_timeout() -> None:
 async def test_pre_stream_refusals_raise_on_await_before_any_event() -> None:
     model = ScriptedModel("ok")
     out_of_scope = AgentService(
-        model,
+        LLMService(model),
         FakeConversationRepository(missing=True),
         guardrail_limits=TEST_GUARDRAIL_LIMITS,
     )
     too_long = AgentService(
-        model,
+        LLMService(model),
         FakeConversationRepository(),
         guardrail_limits=replace(TEST_GUARDRAIL_LIMITS, max_input_chars=5),
     )
     no_model = AgentService(
-        None, FakeConversationRepository(), guardrail_limits=TEST_GUARDRAIL_LIMITS
+        LLMService(None),
+        FakeConversationRepository(),
+        guardrail_limits=TEST_GUARDRAIL_LIMITS,
     )
 
     with pytest.raises(ConversationNotFoundError):
@@ -457,7 +476,9 @@ async def test_each_run_tells_the_model_the_shop_time_after_the_history() -> Non
             {"message_id": 2, "role": "ASSISTANT", "content": "hi there"},
         ]
     )
-    agent = AgentService(model, conversations, guardrail_limits=TEST_GUARDRAIL_LIMITS)
+    agent = AgentService(
+        LLMService(model), conversations, guardrail_limits=TEST_GUARDRAIL_LIMITS
+    )
 
     await agent.chat(
         user_id=3, shop_id=15, conversation_id=41, message="hôm nay thứ mấy?"
@@ -492,10 +513,9 @@ def tiered_agent(
     aliases = {each: each.name.lower() for each in Tier}
     router = LLMRouterService(FixedClassifier(tier), models, aliases, timeout_seconds=1)
     agent = AgentService(
-        ScriptedModel(),
+        LLMService(ScriptedModel(), router),
         conversations,
         guardrail_limits=TEST_GUARDRAIL_LIMITS,
-        llm_router=router,
         capabilities=[
             calculation_capability(
                 CalculationService(
@@ -515,7 +535,7 @@ async def test_chat_runs_the_turn_on_the_model_of_its_tier() -> None:
 
     assert (result.answer, result.model) == ("ok", "simple")
     assert len(models[Tier.SIMPLE].requests) == 1
-    assert agent.llm_router.tiers[41][0] is Tier.SIMPLE
+    assert agent.llm.router.tiers[41][0] is Tier.SIMPLE
 
 
 async def test_stream_chat_runs_every_step_on_the_model_of_its_tier() -> None:
@@ -550,6 +570,6 @@ async def test_only_the_previous_owner_message_leads_the_routed_question() -> No
         user_id=3, shop_id=15, conversation_id=41, message="and last week?"
     )
 
-    assert agent.llm_router.classifier.requests == [
+    assert agent.llm.router.classifier.requests == [
         ["and this week?", "and last week?"]
     ]

@@ -18,7 +18,6 @@ from pydantic_ai.messages import (
     TextPart,
     UserPromptPart,
 )
-from pydantic_ai.models import Model
 
 from src.agent.errors import GuardrailError
 from src.agent.guardrails import GuardrailLimits, GuardrailService
@@ -30,7 +29,8 @@ from src.agent.tool_events import (
     tool_progress,
 )
 from src.agent.tools import AgentCapability, AgentContext
-from src.llm.model_router import LLMRouterService, ModelSelection
+from src.llm.model_router import ModelSelection
+from src.llm.service import LLMService
 from src.llm.session_settings import session_settings
 from src.memory.repository import RecalledMemory
 from src.memory.service import AgentMemoryService
@@ -95,16 +95,15 @@ class AgentService:
 
     def __init__(
         self,
-        model: Model | None,
+        llm: LLMService,
         conversations: AgentConversationRepository,
         guardrail_limits: GuardrailLimits,
         capabilities: list[AgentCapability] | None = None,
         memory: AgentMemoryService | None = None,
         history_turns: int = 100,
         observability: Observability | None = None,
-        llm_router: LLMRouterService | None = None,
     ) -> None:
-        self.model_name = model.model_name if model is not None else ""
+        self.llm = llm
         self.conversations = conversations
         self.observability = observability or Observability()
         self.guardrails = GuardrailService(guardrail_limits)
@@ -128,8 +127,6 @@ class AgentService:
             *(part.capability for part in capabilities if part.capability is not None),
         ]
         self.memory = memory
-        # None runs every turn on `model`; otherwise each turn picks a tier model.
-        self.llm_router = llm_router
         instructions = "\n\n".join(prompt_parts)
         # Short and stable, so traces and evaluation runs can be grouped by prompt. The
         # tool definitions count too: the model reads their descriptions and schemas.
@@ -143,7 +140,7 @@ class AgentService:
         ).hexdigest()[:12]
         self.agent = (
             Agent(
-                model,
+                llm.model,
                 name="chat",
                 deps_type=AgentContext,
                 instructions=instructions,
@@ -155,7 +152,7 @@ class AgentService:
                 # Tags the run's trace, so one shop's turns can be filtered (NFR-007).
                 metadata=lambda ctx: {"shop_id": ctx.deps.shop_id},
             )
-            if model is not None
+            if llm.model is not None
             else None
         )
 
@@ -235,7 +232,7 @@ class AgentService:
             context.user_id,
             conversation_id,
             question,
-            {"model": self.model_name, "prompt_version": self.prompt_version},
+            {"model": self.llm.model_name(), "prompt_version": self.prompt_version},
         )
         async with self._marks_failure():
             # Read before any model call, so a conversation outside the owner's scope
@@ -301,7 +298,7 @@ class AgentService:
         self, conversation_id: int | None, question: str, history: list[dict]
     ) -> ModelSelection | None:
         """The tier model of this turn, or None to run on the default model."""
-        if self.llm_router is None:
+        if not self.llm.tiered:
             return None
         user_messages = self._user_messages(question, history)
         # The classifier calls Bifrost over plain HTTP, which no agent instrumentation
@@ -309,7 +306,7 @@ class AgentService:
         with self.observability.span(
             "llm router", inputs={"user_messages": user_messages}
         ):
-            selection = await self.llm_router.route(conversation_id, user_messages)
+            selection = await self.llm.select(conversation_id, user_messages)
             self.observability.enrich_span(
                 outputs={"tier": selection.tier.name, "alias": selection.alias},
                 metadata={"mechanism": str(selection.mechanism)},
@@ -558,7 +555,7 @@ class AgentService:
             if isinstance(message, ModelResponse)
         )
         self.observability.finish_turn(answer, usage, first_text_ms)
-        return answer, model_name or self.model_name
+        return answer, model_name or self.llm.model_name()
 
     async def _save_turn(
         self,
@@ -571,7 +568,7 @@ class AgentService:
         selection: ModelSelection | None,
         save: SaveExchange | None,
     ) -> AgentChatResult:
-        model = selection.model.model_name if selection is not None else self.model_name
+        model = self.llm.model_name(selection)
         with self.observability.span("save turn"):
             if save is None:
                 saved_conversation_id, message_id = await asyncio.to_thread(
@@ -597,9 +594,8 @@ class AgentService:
                 answer,
                 recalled,
             )
-        if selection is not None:
-            # After the save, so a new conversation keeps its tier under its new id.
-            self.llm_router.remember(saved_conversation_id, selection)
+        # After the save, so a new conversation keeps its tier under its new id.
+        self.llm.remember(saved_conversation_id, selection)
         return AgentChatResult(
             conversation_id=saved_conversation_id,
             message_id=message_id,

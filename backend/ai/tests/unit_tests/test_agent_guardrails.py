@@ -14,6 +14,7 @@ from src.agent.guardrails.tool_call_limit import ToolCallLimit
 from src.agent.service import AgentService
 from src.agent.tools import calculation_capability, shop_data_capability
 from src.calculation.service import CalculationLimits, CalculationService
+from src.llm.service import LLMService
 
 pytestmark = pytest.mark.anyio
 
@@ -59,7 +60,7 @@ def service(
     turn_timeout_seconds=TURN_TIMEOUT_SECONDS,
 ) -> AgentService:
     return AgentService(
-        model,
+        LLMService(model),
         conversations or Conversations(),
         GuardrailLimits(
             max_input_chars=MAX_INPUT_CHARS,
@@ -334,7 +335,7 @@ async def test_the_pure_calculate_tool_stays_callable_past_the_tool_limit() -> N
     )
 
     result = await AgentService(
-        model,
+        LLMService(model),
         Conversations(),
         GuardrailLimits(
             max_input_chars=MAX_INPUT_CHARS,

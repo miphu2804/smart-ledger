@@ -12,6 +12,7 @@ from tests.support import TEST_GUARDRAIL_LIMITS, ScriptedModel, transcript
 
 from src.agent.service import AgentService, Done, MemoryRecalled, TextDelta
 from src.agent.tools import MEMORY_CAPABILITY
+from src.llm.service import LLMService
 from src.main import app
 from src.memory.repository import MemoryGroup, RecalledMemory, StoredMemory
 from src.memory.service import AgentMemoryService
@@ -119,7 +120,7 @@ def recalled(content: str = RICE_SUPPLIER, memory_id: int = 7) -> RecalledMemory
 
 def agent_with(chat_model, memory, conversations=None) -> AgentService:
     return AgentService(
-        chat_model,
+        LLMService(chat_model),
         conversations or FakeConversationRepository(),
         TEST_GUARDRAIL_LIMITS,
         capabilities=[MEMORY_CAPABILITY] if memory is not None else [],

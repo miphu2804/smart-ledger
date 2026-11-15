@@ -35,6 +35,7 @@ from src.agent.repository import AgentConversationRepository
 from src.agent.service import AgentService
 from src.agent.turns import AgentTurnService
 from src.infra.postgre_db_client import PostgreDBClient
+from src.llm.service import LLMService
 from src.main import app
 from src.security import require_internal_token
 
@@ -94,7 +95,9 @@ def main():
             yield word + " "
 
     model = FunctionModel(answer, stream_function=stream, model_name="quota-it-model")
-    app.state.agent = AgentService(model, conversations, TEST_GUARDRAIL_LIMITS)
+    app.state.agent = AgentService(
+        LLMService(model), conversations, TEST_GUARDRAIL_LIMITS
+    )
     turns = AgentTurnService(
         AgentTurnRepository(postgres), conversations, app.state.agent, True
     )

@@ -21,6 +21,7 @@ from tests.support import (
 from src.agent.service import AgentService
 from src.agent.tools import shop_data_capability
 from src.infra.postgre_db_client import PostgreDBClient
+from src.llm.service import LLMService
 from src.sql.repository import ShopDataRepository
 
 # Escaped so the source stays ASCII: an upper-case accented letter (lower() keeps it
@@ -708,7 +709,7 @@ async def test_chat_turn_answers_after_a_timed_out_query(
         tool_call("query_shop_data", {"sql": slow}), "No shop data right now."
     )
     agent = AgentService(
-        model,
+        LLMService(model),
         MemoryConversations(),
         capabilities=[shop_data_capability(reader_db.shop_data(timeout_ms=200))],
         guardrail_limits=TEST_GUARDRAIL_LIMITS,
