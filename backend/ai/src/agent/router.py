@@ -16,6 +16,7 @@ from fastapi.responses import JSONResponse
 from fastapi.sse import EventSourceResponse, format_sse_event
 
 from src.agent.errors import SAFE_ERRORS, TurnProtocolError, failure_code
+from src.agent.receipts import TurnReceipt, TurnState
 from src.agent.repository import AgentConversationRepository
 from src.agent.schema import (
     AgentChatRequest,
@@ -196,17 +197,18 @@ def _stream_error_code(error: Exception) -> str:
     return failure_code(error)
 
 
-def _pending(payload):
+def _pending(payload: AgentChatRequest) -> JSONResponse:
+    receipt = AgentTurnReceipt(
+        turn_id=payload.turn_id,
+        execution_fence=payload.execution_fence,
+        state=TurnState.IN_PROGRESS,
+        resultAvailable=False,
+        result=None,
+        failure_code=None,
+    )
     return JSONResponse(
         status_code=202,
-        content={
-            "turn_id": str(payload.turn_id),
-            "execution_fence": payload.execution_fence,
-            "state": "IN_PROGRESS",
-            "resultAvailable": False,
-            "result": None,
-            "failure_code": None,
-        },
+        content=receipt.model_dump(mode="json"),
         headers={"Retry-After": "2", "Cache-Control": "no-store"},
     )
 
@@ -220,7 +222,7 @@ async def get_agent_turn(
     shop_id: int = Query(gt=0),
 ):
     response.headers["Cache-Control"] = "no-store"
-    return await _require_turns(turns).read(turn_id, user_id, shop_id)
+    return _receipt(await _require_turns(turns).read(turn_id, user_id, shop_id))
 
 
 @router.post("/turns/{turn_id}/cancel", response_model=AgentTurnReceipt)
@@ -228,8 +230,21 @@ async def cancel_agent_turn(
     turn_id: UUID, payload: AgentTurnCancelRequest, turns: TurnsDep, response: Response
 ):
     response.headers["Cache-Control"] = "no-store"
-    return await _require_turns(turns).cancel(
-        turn_id, payload.user_id, payload.shop_id, payload.execution_fence
+    return _receipt(
+        await _require_turns(turns).cancel(
+            turn_id, payload.user_id, payload.shop_id, payload.execution_fence
+        )
+    )
+
+
+def _receipt(receipt: TurnReceipt) -> AgentTurnReceipt:
+    return AgentTurnReceipt(
+        turn_id=receipt.turn_id,
+        execution_fence=receipt.execution_fence,
+        state=receipt.state,
+        resultAvailable=receipt.result_available,
+        result=receipt.result,
+        failure_code=receipt.failure_code,
     )
 
 

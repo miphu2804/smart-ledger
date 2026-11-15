@@ -188,7 +188,7 @@ def test_stream_save_precedes_done_and_json_retry_does_not_run_again(receipt_env
         async for event in events:
             if isinstance(event, Done):
                 state = env.store.get(request.turn_id, env.user, env.shop)
-                assert state["state"] == "SUCCEEDED" and state["resultAvailable"]
+                assert state.state == "SUCCEEDED" and state.result_available
                 seen.append(event.result.answer)
         assert seen == ["Saved test answer"]
 
@@ -345,7 +345,7 @@ def test_cancel_save_race_commits_only_one_terminal_outcome(receipt_env):
     row = receipt(env, body).json()
     assert row["state"] in {"SUCCEEDED", "CANCELLED"}
     assert rows(env, "chat_messages") == (2 if saved else 0)
-    assert stopped["state"] == row["state"]
+    assert stopped.state == row["state"]
 
 
 def test_deleted_conversation_keeps_success_but_replay_is_gone_without_generation(
@@ -429,7 +429,7 @@ async def test_disconnect_during_threaded_save_is_fenced_or_recovers_committed_a
         release.set()
     assert await asyncio.to_thread(finished.wait, 5)
     result = env.store.get(request.turn_id, env.user, env.shop)
-    assert result["state"] == ("SUCCEEDED" if commit_first else "CANCELLED")
+    assert result.state == ("SUCCEEDED" if commit_first else "CANCELLED")
     assert rows(env, "chat_messages") == (2 if commit_first else 0)
 
 
