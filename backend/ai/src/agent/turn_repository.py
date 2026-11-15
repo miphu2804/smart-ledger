@@ -10,9 +10,9 @@ from uuid import UUID
 from sqlalchemy import text
 from sqlalchemy.exc import SQLAlchemyError
 
+from src.agent.conversation_repository import AgentConversationRepository
 from src.agent.errors import ConversationNotFoundError, TurnProtocolError
-from src.agent.repository import AgentConversationRepository
-from src.infra.postgre_db_client import PostgreDBClient
+from src.infra.postgres_client import PostgresClient
 
 
 class TurnState(StrEnum):
@@ -46,7 +46,7 @@ class TurnExecution:
 
 
 class AgentTurnRepository:
-    def __init__(self, postgres: PostgreDBClient):
+    def __init__(self, postgres: PostgresClient):
         self.postgres = postgres
 
     @contextmanager

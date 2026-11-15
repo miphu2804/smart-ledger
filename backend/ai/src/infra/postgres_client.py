@@ -16,7 +16,7 @@ class Base(DeclarativeBase):
     """
 
 
-class PostgreDBClient:
+class PostgresClient:
     """SQLAlchemy engine and sessions of the application database, shared by requests.
 
     Each transaction borrows a pooled connection, so requests run side by side up to

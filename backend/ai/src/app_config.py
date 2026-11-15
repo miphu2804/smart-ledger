@@ -127,7 +127,7 @@ class AppConfig(BaseSettings):
     # integer range (2**53 ~ 9e15), so VND totals keep full precision
     CALC_MAX_OPERAND_VALUE: float = Field(default=1e15, gt=0)
 
-    # Code Mode sandbox (src/sandbox/wrapper.py): an agent option on its own, not
+    # Code Mode sandbox (src/sandbox/code_mode.py): an agent option on its own, not
     # tied to the calculation service. The model reaches it only by writing a
     # run_code snippet, so a turn without one never starts a sandbox. The memory
     # value is the Monty heap limit (a MemoryError becomes a model retry), not a

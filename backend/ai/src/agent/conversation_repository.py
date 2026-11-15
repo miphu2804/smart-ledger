@@ -17,7 +17,7 @@ from sqlalchemy.dialects.postgresql import ENUM
 from sqlalchemy.orm import Mapped, Session, mapped_column
 
 from src.agent.errors import ConversationNotFoundError
-from src.infra.postgre_db_client import Base, PostgreDBClient
+from src.infra.postgres_client import Base, PostgresClient
 from src.infra.redis_client import RedisClient
 
 
@@ -59,7 +59,7 @@ class AgentConversationRepository:
     # process, so every AI process shares one cache and it survives a restart.
     HISTORY_CACHE_TTL_SECONDS = 24 * 3600
 
-    def __init__(self, postgres: PostgreDBClient, cache: RedisClient) -> None:
+    def __init__(self, postgres: PostgresClient, cache: RedisClient) -> None:
         self.postgres = postgres
         self.cache = cache
 

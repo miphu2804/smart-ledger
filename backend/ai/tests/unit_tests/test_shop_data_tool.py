@@ -19,7 +19,7 @@ from src.agent.tools import (
     build_shop_data_tool,
     shop_data_capability,
 )
-from src.infra.postgre_db_client import PostgreDBClient
+from src.infra.postgres_client import PostgresClient
 from src.llm.service import LLMService
 from src.prompt_templates import (
     APP_GUIDE_PROMPT,
@@ -293,7 +293,7 @@ class FakeConnection:
 
 
 class FakeReader:
-    """A `PostgreDBClient` stand-in whose session fails the guarded query."""
+    """A `PostgresClient` stand-in whose session fails the guarded query."""
 
     def __init__(self, error: Exception | None = None) -> None:
         self.connection = FakeConnection(error)
@@ -354,7 +354,7 @@ def test_repository_lets_an_unreachable_database_propagate() -> None:
 
 def test_repository_lets_an_unconfigured_reader_propagate() -> None:
     with pytest.raises(RuntimeError, match="postgres unavailable"):
-        ShopDataRepository(PostgreDBClient(None)).run(15, "SELECT 1")
+        ShopDataRepository(PostgresClient(None)).run(15, "SELECT 1")
 
 
 @pytest.mark.parametrize("shop_id", [0, -1, True, "15"])

@@ -1,6 +1,6 @@
 from pydantic_ai.models import Model
 
-from src.llm.model_router import LLMRouterService, ModelSelection
+from src.llm.tier_router import ModelSelection, TierRouter
 
 
 class LLMService:
@@ -11,9 +11,7 @@ class LLMService:
     whether tiering is on to name the model or to keep a tier.
     """
 
-    def __init__(
-        self, model: Model | None, router: LLMRouterService | None = None
-    ) -> None:
+    def __init__(self, model: Model | None, router: TierRouter | None = None) -> None:
         self.model = model
         self.router = router
 

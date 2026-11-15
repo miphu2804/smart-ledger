@@ -22,9 +22,9 @@ from src.agent.service import (
 from src.agent.tool_events import ToolFinished, ToolStarted
 from src.agent.tools import calculation_capability, shop_data_capability
 from src.calculation.service import CalculationLimits, CalculationService
-from src.llm.model_router import LLMRouterService
 from src.llm.service import LLMService
 from src.llm.tier import Tier
+from src.llm.tier_router import TierRouter
 from src.prompt_templates import APP_GUIDE_PROMPT, SHOP_AGENT_SYSTEM_PROMPT
 from src.utils import get_time
 
@@ -511,7 +511,7 @@ def tiered_agent(
 ) -> tuple[AgentService, dict[Tier, ScriptedModel]]:
     models = {each: ScriptedModel("ok", model_name=each.name.lower()) for each in Tier}
     aliases = {each: each.name.lower() for each in Tier}
-    router = LLMRouterService(FixedClassifier(tier), models, aliases, timeout_seconds=1)
+    router = TierRouter(FixedClassifier(tier), models, aliases, timeout_seconds=1)
     agent = AgentService(
         LLMService(ScriptedModel(), router),
         conversations,

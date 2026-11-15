@@ -17,10 +17,10 @@ from tests.support import (
     schema_url,
 )
 
+from src.agent.conversation_repository import AgentConversationRepository
 from src.agent.errors import ConversationNotFoundError
-from src.agent.repository import AgentConversationRepository
 from src.agent.service import AgentService
-from src.infra.postgre_db_client import PostgreDBClient
+from src.infra.postgres_client import PostgresClient
 from src.infra.redis_client import RedisClient
 from src.llm.service import LLMService
 from src.main import app
@@ -81,7 +81,7 @@ def postgres_agent_client(
             (user_id, "E2E shop", "Retail"),
         ).fetchone()[0]
 
-        postgres = PostgreDBClient(schema_url(database_url, schema_name))
+        postgres = PostgresClient(schema_url(database_url, schema_name))
         agent = AgentService(
             LLMService(FunctionModel(echo_user_prompts)),
             AgentConversationRepository(postgres, FakeRedis()),

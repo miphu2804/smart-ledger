@@ -10,9 +10,9 @@ from pydantic_ai.messages import ModelResponse, TextPart, ToolCallPart
 from pydantic_ai.models.function import FunctionModel
 from tests.support import TEST_GUARDRAIL_LIMITS, ScriptedModel, echo_user_prompts
 
+from src.agent.conversation_repository import AgentConversationRepository
 from src.agent.errors import ConversationNotFoundError
 from src.agent.guardrails import GuardrailLimits
-from src.agent.repository import AgentConversationRepository
 from src.agent.service import AgentService
 from src.agent.tools import shop_data_capability
 from src.llm.service import LLMService

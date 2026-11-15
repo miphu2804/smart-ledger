@@ -7,7 +7,7 @@ from pydantic_ai.messages import ModelResponse, TextPart
 from pydantic_ai.models.function import FunctionModel
 from tests.support import TEST_GUARDRAIL_LIMITS
 
-from src.agent.repository import AgentConversationRepository
+from src.agent.conversation_repository import AgentConversationRepository
 from src.agent.service import AgentService
 from src.app_config import app_config
 from src.llm.service import LLMService

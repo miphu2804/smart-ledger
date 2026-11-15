@@ -7,7 +7,7 @@ from typing import Literal
 from pydantic_ai import RunContext, Tool
 from pydantic_ai.capabilities import AbstractCapability
 
-from src.calculation.ops import CalculationStep
+from src.calculation.operations import CalculationStep
 from src.calculation.service import CalculationService
 from src.prompt_templates import (
     CALC_PROMPT,
@@ -20,7 +20,7 @@ from src.prompt_templates import (
     SQL_AGENT_PROMPT,
 )
 from src.restock.service import RestockService
-from src.sandbox.wrapper import Sandbox
+from src.sandbox.code_mode import Sandbox
 from src.sql.repository import ShopDataRepository
 
 logger = logging.getLogger(__name__)

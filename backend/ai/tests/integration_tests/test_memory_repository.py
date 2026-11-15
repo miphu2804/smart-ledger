@@ -10,10 +10,11 @@ from sqlalchemy import inspect as sa_inspect
 from sqlalchemy.engine import make_url
 from tests.support import REPO_ROOT, apply_ai_baseline, apply_core_migrations
 
-from src.agent.repository import AgentConversationRepository
-from src.infra.postgre_db_client import PostgreDBClient
+from src.agent.conversation_repository import AgentConversationRepository
+from src.infra.postgres_client import PostgresClient
 from src.infra.redis_client import RedisClient
-from src.memory.repository import AgentMemoryRepository, NewMemory
+from src.memory.models import NewMemory
+from src.memory.repository import AgentMemoryRepository
 
 MEMORY_MIGRATIONS = [
     REPO_ROOT / "supabase/migrations/20261014000000_agent_memories.sql",
@@ -31,7 +32,7 @@ def memory(content: str, *head: float, supersedes: int | None = None) -> NewMemo
 
 
 @pytest.fixture
-def memory_db() -> Iterator[tuple[psycopg.Connection, PostgreDBClient, dict]]:
+def memory_db() -> Iterator[tuple[psycopg.Connection, PostgresClient, dict]]:
     database_url = os.getenv("POSTGRES_TEST_URL")
     if not database_url:
         pytest.skip("set POSTGRES_TEST_URL to run PostgreSQL memory tests")
@@ -68,7 +69,7 @@ def memory_db() -> Iterator[tuple[psycopg.Connection, PostgreDBClient, dict]]:
         url = make_url(database_url).update_query_dict(
             {"options": f"-c search_path={search_path}"}
         )
-        postgres = PostgreDBClient(url.render_as_string(hide_password=False))
+        postgres = PostgresClient(url.render_as_string(hide_password=False))
         yield admin, postgres, ids
     finally:
         if postgres is not None:
@@ -84,7 +85,7 @@ def memory_db() -> Iterator[tuple[psycopg.Connection, PostgreDBClient, dict]]:
             admin.close()
 
 
-def new_conversation(postgres: PostgreDBClient, user_id: int, shop_id: int) -> int:
+def new_conversation(postgres: PostgresClient, user_id: int, shop_id: int) -> int:
     conversation_id, _ = AgentConversationRepository(
         postgres, RedisClient()
     ).save_exchange(
@@ -614,7 +615,7 @@ def test_read_session_is_autocommit_and_leaves_session_transactional(
 ) -> None:
     _, postgres, _ = memory_db
     # One pooled connection, so both sessions borrow the same one in turn.
-    client = PostgreDBClient(
+    client = PostgresClient(
         postgres.engine.url.render_as_string(hide_password=False), 1
     )
     try:

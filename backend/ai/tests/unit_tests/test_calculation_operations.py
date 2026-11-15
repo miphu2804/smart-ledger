@@ -7,7 +7,7 @@ the tool can keep returning `Error[CODE]` text to the model and nothing else esc
 import pytest
 from pydantic import ValidationError
 
-from src.calculation.ops import MAX_ROUND_DIGITS, CalculationOp, CalculationStep
+from src.calculation.operations import MAX_ROUND_DIGITS, CalculationOp, CalculationStep
 from src.calculation.service import CalculationLimits, CalculationService
 
 LIMITS = CalculationLimits(max_operations=5, max_operand=1_000_000)

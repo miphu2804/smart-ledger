@@ -8,7 +8,7 @@ from pydantic_ai.models.test import TestModel
 from sqlalchemy import text
 
 from src.app_config import app_config
-from src.infra.postgre_db_client import PostgreDBClient
+from src.infra.postgres_client import PostgresClient
 from src.memory.repository import AgentMemoryRepository, NewMemory
 from src.memory.service import AgentMemoryService
 
@@ -38,7 +38,7 @@ class MemoryTarget:
 
     async def __aenter__(self) -> "MemoryTarget":
         require_local_database(app_config.POSTGRES_URL)
-        self.postgres = PostgreDBClient(app_config.POSTGRES_URL)
+        self.postgres = PostgresClient(app_config.POSTGRES_URL)
         self.embedder = CachingEmbedder(self.cache_directory)
         # Recall makes no model call, so the model only has to exist for the
         # service to build its extraction agents.

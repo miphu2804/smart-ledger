@@ -30,11 +30,11 @@ from tests.support import (
     schema_url,
 )
 
-from src.agent.receipts import AgentTurnRepository
-from src.agent.repository import AgentConversationRepository
+from src.agent.conversation_repository import AgentConversationRepository
 from src.agent.service import AgentService
-from src.agent.turns import AgentTurnService
-from src.infra.postgre_db_client import PostgreDBClient
+from src.agent.turn_repository import AgentTurnRepository
+from src.agent.turn_service import AgentTurnService
+from src.infra.postgres_client import PostgresClient
 from src.llm.service import LLMService
 from src.main import app
 from src.security import require_internal_token
@@ -66,7 +66,7 @@ def main():
                 with sql.transaction():
                     sql.execute((AI_MIGRATIONS / name).read_text(), prepare=False)
 
-    postgres = PostgreDBClient(schema_url(database, args.schema), pool_size=4)
+    postgres = PostgresClient(schema_url(database, args.schema), pool_size=4)
     conversations = AgentConversationRepository(postgres, FakeRedis())
     mode = "SUCCESS"
     calls = 0

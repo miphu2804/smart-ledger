@@ -14,7 +14,7 @@ from src.agent.errors import (
     GuardrailError,
     TurnProtocolError,
 )
-from src.agent.turns import AgentTurnService
+from src.agent.turn_service import AgentTurnService
 
 pytestmark = pytest.mark.anyio
 

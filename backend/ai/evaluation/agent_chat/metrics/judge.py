@@ -5,7 +5,7 @@ from pydantic import BaseModel, Field
 from pydantic_ai import Agent
 
 from src.app_config import app_config
-from src.llm.factory import LLMFactory
+from src.llm.model_factory import LLMFactory
 from src.llm.session_settings import session_settings
 
 RATING_INSTRUCTIONS = (

@@ -10,8 +10,8 @@ from typing import Literal
 
 from pydantic import BaseModel, Field
 
-from src.agent.guardrails.phone_number import PHONE_NUMBER
-from src.memory.repository import NewMemory
+from src.memory.models import NewMemory
+from src.phone_number import PHONE_NUMBER
 
 
 class MemoryFact(BaseModel):

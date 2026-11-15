@@ -30,13 +30,8 @@ from src.memory.fact_rules import (
     screened_extraction,
     without_phone_numbers,
 )
-from src.memory.repository import (
-    AgentMemory,
-    AgentMemoryRepository,
-    MemoryGroup,
-    NewMemory,
-    RecalledMemory,
-)
+from src.memory.models import MemoryGroup, NewMemory, RecalledMemory
+from src.memory.repository import AgentMemory, AgentMemoryRepository
 from src.observability import Observability
 from src.prompt_templates import (
     MEMORY_CONTEXT,
