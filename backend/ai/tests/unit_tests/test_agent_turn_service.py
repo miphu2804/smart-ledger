@@ -69,7 +69,7 @@ def payload():
 
 
 async def admitted(service: AgentTurnService, request):
-    _, _, execution = await service.admit(request)
+    _, execution = await service.admit(request)
     return execution
 
 

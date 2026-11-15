@@ -181,7 +181,7 @@ def test_stream_save_precedes_done_and_json_retry_does_not_run_again(receipt_env
 
     async def exercise():
         request = AgentChatRequest(**body)
-        created, _, execution = await env.turns.admit(request)
+        created, execution = await env.turns.admit(request)
         assert created
         events = await env.turns.stream(request, execution)
         seen = []
@@ -304,7 +304,7 @@ def test_cancel_before_post_tombstone_and_foreign_scope_never_run_model(receipt_
 def test_cancel_fences_stale_save_and_success_wins_a_late_cancel(receipt_env):
     env = receipt_env
     body = payload(env)
-    _, _, execution = asyncio.run(env.turns.admit(AgentChatRequest(**body)))
+    _, execution = asyncio.run(env.turns.admit(AgentChatRequest(**body)))
     assert cancel(env, body, fence=0).status_code == 422
     assert cancel(env, body, fence=2).json()["execution_fence"] == 2
     with pytest.raises(TurnProtocolError, match="ai_turn_cancelled"):
@@ -322,7 +322,7 @@ def test_cancel_fences_stale_save_and_success_wins_a_late_cancel(receipt_env):
 def test_cancel_save_race_commits_only_one_terminal_outcome(receipt_env):
     env = receipt_env
     body = payload(env)
-    _, _, execution = asyncio.run(env.turns.admit(AgentChatRequest(**body)))
+    _, execution = asyncio.run(env.turns.admit(AgentChatRequest(**body)))
     barrier = threading.Barrier(2)
 
     def save():
@@ -418,7 +418,7 @@ async def test_disconnect_during_threaded_save_is_fenced_or_recovers_committed_a
 
     monkeypatch.setattr(env.store, "complete", delayed)
     request = AgentChatRequest(**payload(env))
-    _, _, execution = await env.turns.admit(request)
+    _, execution = await env.turns.admit(request)
     task = asyncio.create_task(env.turns.chat(request, execution))
     try:
         assert await asyncio.to_thread(entered.wait, 5)
