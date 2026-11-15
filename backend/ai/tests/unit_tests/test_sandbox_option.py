@@ -21,7 +21,7 @@ from src.prompt_templates import (
     RUN_CODE_PROMPT,
     SQL_AGENT_PROMPT,
 )
-from src.sandbox.wrapper import Sandbox, SandboxLimits
+from src.sandbox.code_mode import Sandbox, SandboxLimits
 
 pytestmark = pytest.mark.anyio
 

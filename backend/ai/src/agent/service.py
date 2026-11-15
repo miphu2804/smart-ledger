@@ -19,9 +19,9 @@ from pydantic_ai.messages import (
     UserPromptPart,
 )
 
+from src.agent.conversation_repository import AgentConversationRepository
 from src.agent.errors import GuardrailError
 from src.agent.guardrails import GuardrailLimits, GuardrailService
-from src.agent.repository import AgentConversationRepository
 from src.agent.tool_events import (
     ToolFinished,
     ToolStarted,
@@ -29,10 +29,10 @@ from src.agent.tool_events import (
     tool_progress,
 )
 from src.agent.tools import AgentCapability, AgentContext
-from src.llm.model_router import ModelSelection
 from src.llm.service import LLMService
 from src.llm.session_settings import session_settings
-from src.memory.repository import RecalledMemory
+from src.llm.tier_router import ModelSelection
+from src.memory.models import RecalledMemory
 from src.memory.service import AgentMemoryService
 from src.observability import Observability
 from src.prompt_templates import (

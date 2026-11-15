@@ -23,13 +23,13 @@ from tests.support import (
     schema_url,
 )
 
+from src.agent.conversation_repository import AgentConversationRepository
 from src.agent.errors import TurnProtocolError
-from src.agent.receipts import AgentTurnRepository
-from src.agent.repository import AgentConversationRepository
 from src.agent.schema import AgentChatRequest
 from src.agent.service import AgentService, Done
-from src.agent.turns import AgentTurnService
-from src.infra.postgre_db_client import PostgreDBClient
+from src.agent.turn_repository import AgentTurnRepository
+from src.agent.turn_service import AgentTurnService
+from src.infra.postgres_client import PostgresClient
 from src.llm.service import LLMService
 from src.main import app
 
@@ -66,7 +66,7 @@ def receipt_env(monkeypatch, internal_headers):
             "VALUES (%s,'Test','Retail') RETURNING id",
             (user,),
         ).fetchone()[0]
-        postgres = PostgreDBClient(schema_url(database, name), pool_size=4)
+        postgres = PostgresClient(schema_url(database, name), pool_size=4)
         conversations = AgentConversationRepository(postgres, FakeRedis())
         store = AgentTurnRepository(postgres)
         model = ScriptedModel("Saved test answer")

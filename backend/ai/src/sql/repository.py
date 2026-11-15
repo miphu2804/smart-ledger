@@ -1,6 +1,6 @@
 """Run guarded SQL for one shop through the read-only reader's connection pool.
 
-Each run borrows a pooled connection from its own `PostgreDBClient` (separate from the
+Each run borrows a pooled connection from its own `PostgresClient` (separate from the
 chat-history client), runs in one READ ONLY transaction, binds the shop from the
 authenticated request and caps run time and rows. The scope, timeout and search path
 are transaction-local settings, so they end with the transaction and a connection goes
@@ -24,7 +24,7 @@ from psycopg import errors
 from sqlalchemy import func, select
 from sqlalchemy.exc import DBAPIError
 
-from src.infra.postgre_db_client import PostgreDBClient
+from src.infra.postgres_client import PostgresClient
 from src.sql.guard import SqlGuard
 
 
@@ -36,7 +36,7 @@ class ShopDataRepository:
 
     def __init__(
         self,
-        reader: PostgreDBClient,
+        reader: PostgresClient,
         timeout_ms: int = 3000,
         row_limit: int = 100,
         view_schema: str = SqlGuard.VIEW_SCHEMA,

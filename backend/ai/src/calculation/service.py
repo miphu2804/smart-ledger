@@ -7,7 +7,11 @@ tool call. Model-written programs run in the agent's separate sandbox option
 
 from dataclasses import dataclass
 
-from src.calculation.ops import CalculationOutcome, CalculationStep, evaluate_plan
+from src.calculation.operations import (
+    CalculationOutcome,
+    CalculationStep,
+    evaluate_plan,
+)
 
 
 @dataclass(frozen=True)

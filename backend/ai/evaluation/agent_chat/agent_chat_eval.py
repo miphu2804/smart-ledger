@@ -18,7 +18,7 @@ from evaluation.core.schema import Case
 from sqlalchemy import Connection, text
 
 from src.app_config import app_config
-from src.infra.postgre_db_client import PostgreDBClient
+from src.infra.postgres_client import PostgresClient
 
 DIRECTORY = Path(__file__).parent
 
@@ -170,7 +170,7 @@ class AgentChatEval:
 
     @staticmethod
     def _connect() -> Connection:
-        return PostgreDBClient(app_config.POSTGRES_URL).engine.connect()
+        return PostgresClient(app_config.POSTGRES_URL).engine.connect()
 
     @staticmethod
     def _read_column(connection: Connection, query: str | None) -> list:

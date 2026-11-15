@@ -9,12 +9,12 @@ from src.agent.errors import GuardrailError
 from src.agent.guardrails import GuardrailLimits
 from src.agent.guardrails.answer_screen import AnswerScreen
 from src.agent.guardrails.input_redaction import InputRedaction
-from src.agent.guardrails.phone_number import PHONE_NUMBER
 from src.agent.guardrails.tool_call_limit import ToolCallLimit
 from src.agent.service import AgentService
 from src.agent.tools import calculation_capability, shop_data_capability
 from src.calculation.service import CalculationLimits, CalculationService
 from src.llm.service import LLMService
+from src.phone_number import PHONE_NUMBER
 
 pytestmark = pytest.mark.anyio
 

@@ -8,6 +8,7 @@ from fastapi import APIRouter, Depends, FastAPI, Request
 from fastapi.responses import JSONResponse
 from prometheus_fastapi_instrumentator import Instrumentator
 
+from src.agent.conversation_repository import AgentConversationRepository
 from src.agent.errors import (
     CONVERSATION_NOT_FOUND_STATUS,
     GUARDRAIL_STATUS,
@@ -16,8 +17,6 @@ from src.agent.errors import (
     TurnProtocolError,
 )
 from src.agent.guardrails import GuardrailLimits
-from src.agent.receipts import AgentTurnRepository
-from src.agent.repository import AgentConversationRepository
 from src.agent.router import router as agent_router
 from src.agent.service import AgentService
 from src.agent.tools import (
@@ -28,17 +27,18 @@ from src.agent.tools import (
     sandbox_capability,
     shop_data_capability,
 )
-from src.agent.turns import AgentTurnService
+from src.agent.turn_repository import AgentTurnRepository
+from src.agent.turn_service import AgentTurnService
 from src.app_config import app_config
 from src.calculation.service import CalculationLimits, CalculationService
 from src.embedding.factory import build_embedder
-from src.infra.postgre_db_client import PostgreDBClient
+from src.infra.postgres_client import PostgresClient
 from src.infra.redis_client import RedisClient
 from src.llm.bifrost_tier_classifier import BifrostTierClassifier
-from src.llm.factory import LLMFactory
-from src.llm.model_router import LLMRouterService
+from src.llm.model_factory import LLMFactory
 from src.llm.service import LLMService
 from src.llm.tier import Tier
+from src.llm.tier_router import TierRouter
 from src.log_formatter import LevelColorFormatter
 from src.memory.repository import EMBEDDING_DIMENSIONS, AgentMemoryRepository
 from src.memory.router import router as memory_router
@@ -46,7 +46,7 @@ from src.memory.service import AgentMemoryService
 from src.observability import Observability
 from src.prompt_templates import TIER_CLASSIFIER_PROMPT, TIER_DESCRIPTIONS
 from src.restock.service import RestockService
-from src.sandbox.wrapper import Sandbox, SandboxLimits
+from src.sandbox.code_mode import Sandbox, SandboxLimits
 from src.security import require_internal_token
 from src.sql.repository import ShopDataRepository
 
@@ -67,7 +67,7 @@ logger = logging.getLogger(__name__)
 pydantic_ai.BANNER_ENABLED = False
 
 
-def build_shop_data(reader: PostgreDBClient) -> ShopDataRepository | None:
+def build_shop_data(reader: PostgresClient) -> ShopDataRepository | None:
     url = app_config.AI_SQL_READER_URL
     if url is None or not url.strip():
         logger.info("sql reader unconfigured; shop-data tool off")
@@ -154,7 +154,7 @@ def build_capabilities(
 
 def build_llm_router(
     factory: LLMFactory, decisions: httpx.AsyncClient, observability: Observability
-) -> LLMRouterService | None:
+) -> TierRouter | None:
     url = app_config.TIER_CLASSIFIER_URL
     models = {
         tier: factory.create_model(alias) for tier, alias in CHAT_TIER_ALIASES.items()
@@ -174,7 +174,7 @@ def build_llm_router(
         descriptions=TIER_DESCRIPTIONS,
         observability=observability,
     )
-    return LLMRouterService(
+    return TierRouter(
         classifier,
         models,
         CHAT_TIER_ALIASES,
@@ -183,7 +183,7 @@ def build_llm_router(
 
 
 def build_memory_service(
-    chat_model, postgres: PostgreDBClient, observability: Observability
+    chat_model, postgres: PostgresClient, observability: Observability
 ) -> AgentMemoryService | None:
     if not app_config.AGENT_MEMORY_ENABLED:
         return None
@@ -217,12 +217,12 @@ async def lifespan(app: FastAPI):
     # Here, not at import, so importing the app (as the tests do) sends no traces;
     # still before any agent runs, so every run is traced when a key is set.
     observability = Observability.start(app_config)
-    postgres = PostgreDBClient(
+    postgres = PostgresClient(
         app_config.POSTGRES_URL, pool_size=app_config.POSTGRES_POOL_MAX_SIZE
     )
     cache = RedisClient(app_config.REDIS_URL)
     # Model-written SQL runs as the read-only login, so it gets its own pool.
-    reader = PostgreDBClient(
+    reader = PostgresClient(
         app_config.AI_SQL_READER_URL, pool_size=app_config.SQL_POOL_MAX_SIZE
     )
     factory = LLMFactory(app_config)

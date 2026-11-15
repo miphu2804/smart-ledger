@@ -35,7 +35,7 @@ class ModelSelection:
     mechanism: Mechanism
 
 
-class LLMRouterService:
+class TierRouter:
     """Routes each turn of a conversation to the model its request's tier needs.
 
     It knows no gateway, agent or prompt: the classifier rates the request, and the

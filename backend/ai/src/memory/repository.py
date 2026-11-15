@@ -1,5 +1,4 @@
-from dataclasses import dataclass
-from datetime import date, datetime, timedelta
+from datetime import datetime, timedelta
 from itertools import groupby
 
 from pgvector.sqlalchemy import Vector
@@ -22,8 +21,9 @@ from sqlalchemy.dialects.postgresql import JSONB, insert
 from sqlalchemy.engine import Row
 from sqlalchemy.orm import Mapped, load_only, mapped_column
 
-from src.infra.postgre_db_client import Base, PostgreDBClient
+from src.infra.postgres_client import Base, PostgresClient
 from src.memory import ranking
+from src.memory.models import MemoryGroup, NewMemory, RecalledMemory, StoredMemory
 from src.utils import SHOP_TIMEZONE
 
 # Size of agent_memories.embedding, fixed by its migration; every embedder is cut to it.
@@ -65,47 +65,6 @@ class AgentMemorySetting(Base):
     )
 
 
-@dataclass(frozen=True)
-class NewMemory:
-    memory_type: str
-    content: str
-    importance: float
-    embedding: list[float]
-    # Id of a recalled memory this one corrects; that memory stops being recalled.
-    supersedes: int | None = None
-
-
-@dataclass(frozen=True)
-class RecalledMemory:
-    id: int
-    content: str
-    memory_type: str
-    created_at: datetime
-    # Cosine relevance to the message; None for a standing preference, which is
-    # recalled whatever the message is.
-    relevance: float | None
-    # The chat the memory came from, so the owner can open it from the reply.
-    source_conversation_id: int
-
-
-@dataclass(frozen=True)
-class StoredMemory:
-    id: int
-    memory_type: str
-    content: str
-    importance: float
-    created_at: datetime
-
-
-@dataclass(frozen=True)
-class MemoryGroup:
-    """Old memories one conversation produced on one shop day, to be summarized."""
-
-    conversation_id: int
-    day: date
-    memories: list[StoredMemory]
-
-
 class AgentMemoryRepository:
     """Reads and appends one owner's memories; every statement is scoped to them."""
 
@@ -115,7 +74,7 @@ class AgentMemoryRepository:
     # least recently used ones are the ones left out.
     LIST_LIMIT = 200
 
-    def __init__(self, postgres: PostgreDBClient) -> None:
+    def __init__(self, postgres: PostgresClient) -> None:
         self.postgres = postgres
 
     def search(

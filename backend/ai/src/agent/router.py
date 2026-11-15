@@ -15,9 +15,8 @@ from fastapi import APIRouter, Depends, Query, Request, Response
 from fastapi.responses import JSONResponse
 from fastapi.sse import EventSourceResponse, format_sse_event
 
+from src.agent.conversation_repository import AgentConversationRepository
 from src.agent.errors import SAFE_ERRORS, TurnProtocolError, failure_code
-from src.agent.receipts import TurnReceipt, TurnState
-from src.agent.repository import AgentConversationRepository
 from src.agent.schema import (
     AgentChatRequest,
     AgentChatResponse,
@@ -36,7 +35,8 @@ from src.agent.service import (
     TextDelta,
 )
 from src.agent.tool_events import ToolFinished, ToolStarted
-from src.agent.turns import AgentTurnService
+from src.agent.turn_repository import TurnReceipt, TurnState
+from src.agent.turn_service import AgentTurnService
 
 router = APIRouter(prefix="/agent", tags=["agent"])
 logger = logging.getLogger(__name__)

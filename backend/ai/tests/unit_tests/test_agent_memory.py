@@ -14,7 +14,7 @@ from src.agent.service import AgentService, Done, MemoryRecalled, TextDelta
 from src.agent.tools import MEMORY_CAPABILITY
 from src.llm.service import LLMService
 from src.main import app
-from src.memory.repository import MemoryGroup, RecalledMemory, StoredMemory
+from src.memory.models import MemoryGroup, RecalledMemory, StoredMemory
 from src.memory.service import AgentMemoryService
 from src.prompt_templates import MEMORY_PROMPT
 

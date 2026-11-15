@@ -3,7 +3,7 @@ from pydantic_ai.models.fallback import FallbackModel
 from pydantic_ai.models.openai import OpenAIChatModel, OpenAIResponsesModel
 
 from src.app_config import AppConfig, ModelAlias
-from src.llm.factory import LLMFactory
+from src.llm.model_factory import LLMFactory
 from src.llm.session_settings import session_settings
 
 

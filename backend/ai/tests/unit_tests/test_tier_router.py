@@ -3,8 +3,8 @@ import asyncio
 import pytest
 from pydantic_ai.models.test import TestModel
 
-from src.llm.model_router import LLMRouterService, Mechanism
 from src.llm.tier import Tier
+from src.llm.tier_router import Mechanism, TierRouter
 
 pytestmark = pytest.mark.anyio
 
@@ -33,11 +33,11 @@ class FakeClassifier:
         return answer
 
 
-def router(classifier: FakeClassifier, **options) -> LLMRouterService:
-    return LLMRouterService(classifier, MODELS, ALIASES, timeout_seconds=0.5, **options)
+def router(classifier: FakeClassifier, **options) -> TierRouter:
+    return TierRouter(classifier, MODELS, ALIASES, timeout_seconds=0.5, **options)
 
 
-async def turn(tiers: LLMRouterService, conversation_id: int | None, question="?"):
+async def turn(tiers: TierRouter, conversation_id: int | None, question="?"):
     selection = await tiers.route(conversation_id, [question])
     if conversation_id is not None:
         tiers.remember(conversation_id, selection)
