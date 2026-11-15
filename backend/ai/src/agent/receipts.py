@@ -4,6 +4,7 @@ import hashlib
 import json
 from contextlib import contextmanager
 from dataclasses import dataclass
+from enum import StrEnum
 from uuid import UUID
 
 from sqlalchemy import text
@@ -12,6 +13,25 @@ from sqlalchemy.exc import SQLAlchemyError
 from src.agent.errors import ConversationNotFoundError, TurnProtocolError
 from src.agent.repository import AgentConversationRepository
 from src.infra.postgre_db_client import PostgreDBClient
+
+
+class TurnState(StrEnum):
+    IN_PROGRESS = "IN_PROGRESS"
+    SUCCEEDED = "SUCCEEDED"
+    FAILED = "FAILED"
+    CANCELLED = "CANCELLED"
+
+
+@dataclass(frozen=True)
+class TurnReceipt:
+    """A turn's receipt as Core reads it; `result` is set only when it is available."""
+
+    turn_id: UUID
+    execution_fence: int
+    state: TurnState
+    result_available: bool
+    result: dict | None
+    failure_code: str | None
 
 
 @dataclass(frozen=True)
@@ -102,7 +122,7 @@ class AgentTurnRepository:
             row = self._row(session, turn, user, shop, lock=True, required=True)
             if row["request_hash"] is not None and row["request_hash"] != fingerprint:
                 raise TurnProtocolError("ai_turn_conflict", 409)
-            if row["state"] != "CANCELLED" and row["execution_fence"] != fence:
+            if row["state"] != TurnState.CANCELLED and row["execution_fence"] != fence:
                 raise TurnProtocolError("ai_turn_conflict", 409)
             if inserted is not None and conversation is not None:
                 try:
@@ -129,17 +149,16 @@ class AgentTurnRepository:
             raise ConversationNotFoundError
         return inserted is not None, row, fingerprint
 
-    def get(self, turn: UUID, user: int, shop: int):
+    def get(self, turn: UUID, user: int, shop: int) -> TurnReceipt:
         with self.transaction() as session:
             row = self._row(session, turn, user, shop)
             return self._result(session, row)
 
     @staticmethod
-    def _result(session, row):
-        row["result"] = None
-        row["resultAvailable"] = False
+    def _result(session, row) -> TurnReceipt:
+        chat_result = None
         if (
-            row["state"] == "SUCCEEDED"
+            row["state"] == TurnState.SUCCEEDED
             and row["result_conversation_id"] is not None
             and row["result_message_id"] is not None
         ):
@@ -161,8 +180,7 @@ class AgentTurnRepository:
             if result is not None:
                 if row["result_model"] is None or row["result_model_version"] is None:
                     raise TurnProtocolError("ai_turn_unavailable", 503)
-                row["resultAvailable"] = True
-                row["result"] = {
+                chat_result = {
                     "conversation_id": row["result_conversation_id"],
                     "message_id": row["result_message_id"],
                     "request_id": str(row["turn_id"]),
@@ -170,9 +188,16 @@ class AgentTurnRepository:
                     "model": row["result_model"],
                     "model_version": row["result_model_version"],
                 }
-        return row
+        return TurnReceipt(
+            turn_id=row["turn_id"],
+            execution_fence=row["execution_fence"],
+            state=TurnState(row["state"]),
+            result_available=chat_result is not None,
+            result=chat_result,
+            failure_code=row["failure_code"],
+        )
 
-    def cancel(self, turn: UUID, user: int, shop: int, fence: int):
+    def cancel(self, turn: UUID, user: int, shop: int, fence: int) -> TurnReceipt:
         with self.transaction() as session:
             session.execute(
                 text("""
@@ -185,7 +210,7 @@ class AgentTurnRepository:
                 {"id": turn, "user": user, "shop": shop, "fence": fence},
             )
             row = self._row(session, turn, user, shop, lock=True, required=True)
-            if row["state"] == "IN_PROGRESS":
+            if row["state"] == TurnState.IN_PROGRESS:
                 if fence < row["execution_fence"]:
                     raise TurnProtocolError("ai_turn_conflict", 409)
                 changed = session.execute(
@@ -213,7 +238,7 @@ class AgentTurnRepository:
                 lock=True,
             )
             if (
-                row["state"] == "IN_PROGRESS"
+                row["state"] == TurnState.IN_PROGRESS
                 and row["execution_fence"] == execution.fence
             ):
                 changed = session.execute(
@@ -260,7 +285,7 @@ class AgentTurnRepository:
                 lock=True,
             )
             if (
-                row["state"] != "IN_PROGRESS"
+                row["state"] != TurnState.IN_PROGRESS
                 or row["execution_fence"] != execution.fence
                 or row["request_hash"] != execution.fingerprint
                 or row["input_conversation_id"] != conversation

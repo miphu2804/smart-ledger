@@ -3,6 +3,7 @@
 import asyncio
 from collections.abc import AsyncIterator
 from functools import partial
+from uuid import UUID
 
 from src.agent.errors import (
     SAFE_ERRORS,
@@ -10,9 +11,15 @@ from src.agent.errors import (
     failure_code,
     failure_status,
 )
-from src.agent.receipts import AgentTurnRepository, TurnExecution
+from src.agent.receipts import (
+    AgentTurnRepository,
+    TurnExecution,
+    TurnReceipt,
+    TurnState,
+)
 from src.agent.repository import AgentConversationRepository
-from src.agent.service import AgentChatResult, AgentService, Done
+from src.agent.schema import AgentChatRequest
+from src.agent.service import AgentChatResult, AgentService, AgentStreamEvent, Done
 
 
 class AgentTurnService:
@@ -28,11 +35,13 @@ class AgentTurnService:
         self.agent = agent
         self.enabled = enabled
 
-    def require_enabled(self):
+    def require_enabled(self) -> None:
         if not self.enabled:
             raise TurnProtocolError("ai_turn_unavailable", 503)
 
-    async def admit(self, payload):
+    async def admit(
+        self, payload: AgentChatRequest
+    ) -> tuple[bool, dict, TurnExecution]:
         self.require_enabled()
         created, row, fingerprint = await asyncio.to_thread(
             self.repository.admit,
@@ -52,7 +61,7 @@ class AgentTurnService:
         )
         return created, row, execution
 
-    async def chat_turn(self, payload) -> AgentChatResult | None:
+    async def chat_turn(self, payload: AgentChatRequest) -> AgentChatResult | None:
         """Run a receipted turn once; a retry replays its outcome.
 
         Returns None while another execution of the turn is still running.
@@ -62,7 +71,9 @@ class AgentTurnService:
             return await self.chat(payload, execution)
         return await self.replay(execution)
 
-    async def stream_turn(self, payload) -> AsyncIterator | None:
+    async def stream_turn(
+        self, payload: AgentChatRequest
+    ) -> AsyncIterator[AgentStreamEvent] | None:
         """The streaming form of `chat_turn`: a replay streams only its `Done`."""
         created, _, execution = await self.admit(payload)
         if created:
@@ -73,45 +84,47 @@ class AgentTurnService:
         return self._replayed(result)
 
     @staticmethod
-    async def _replayed(result: AgentChatResult) -> AsyncIterator:
+    async def _replayed(result: AgentChatResult) -> AsyncIterator[AgentStreamEvent]:
         yield Done(result)
 
-    async def read(self, turn, user, shop):
+    async def read(self, turn: UUID, user: int, shop: int) -> TurnReceipt:
         self.require_enabled()
         return await asyncio.to_thread(self.repository.get, turn, user, shop)
 
-    async def cancel(self, turn, user, shop, fence):
+    async def cancel(self, turn: UUID, user: int, shop: int, fence: int) -> TurnReceipt:
         self.require_enabled()
         return await asyncio.to_thread(self.repository.cancel, turn, user, shop, fence)
 
-    async def replay(self, execution):
+    async def replay(self, execution: TurnExecution) -> AgentChatResult | None:
         row = await self.read(execution.turn_id, execution.user_id, execution.shop_id)
-        if row["state"] == "IN_PROGRESS":
+        if row.state == TurnState.IN_PROGRESS:
             return None
-        if row["state"] == "SUCCEEDED":
-            if not row["resultAvailable"]:
+        if row.state == TurnState.SUCCEEDED:
+            if not row.result_available:
                 raise TurnProtocolError("ai_turn_result_removed", 410)
             return AgentChatResult(
                 **{
                     key: value
-                    for key, value in row["result"].items()
+                    for key, value in row.result.items()
                     if key != "request_id"
                 }
             )
-        code = row["failure_code"]
-        status = 409 if row["state"] == "CANCELLED" else failure_status(code)
+        code = row.failure_code
+        status = 409 if row.state == TurnState.CANCELLED else failure_status(code)
         raise TurnProtocolError(code, status)
 
-    async def _failed(self, execution, error):
+    async def _failed(self, execution: TurnExecution, error: Exception) -> None:
         await asyncio.to_thread(self.repository.fail, execution, failure_code(error))
 
     @staticmethod
-    def _raise_safe(error):
+    def _raise_safe(error: Exception) -> None:
         if isinstance(error, SAFE_ERRORS):
             raise error
         raise TurnProtocolError("ai_unavailable", 503) from None
 
-    async def chat(self, payload, execution):
+    async def chat(
+        self, payload: AgentChatRequest, execution: TurnExecution
+    ) -> AgentChatResult:
         try:
             return await self.agent.chat(
                 user_id=payload.user_id,
@@ -130,7 +143,9 @@ class AgentTurnService:
             await self._failed(execution, error)
             self._raise_safe(error)
 
-    async def stream(self, payload, execution):
+    async def stream(
+        self, payload: AgentChatRequest, execution: TurnExecution
+    ) -> AsyncIterator[AgentStreamEvent]:
         try:
             events = await self.agent.stream_chat(
                 user_id=payload.user_id,
@@ -148,7 +163,7 @@ class AgentTurnService:
             await self._failed(execution, error)
             self._raise_safe(error)
 
-        async def iterate() -> AsyncIterator:
+        async def iterate() -> AsyncIterator[AgentStreamEvent]:
             completed = False
             try:
                 async for event in events:

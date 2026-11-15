@@ -90,6 +90,20 @@ AgentStreamEvent = (
 SaveExchange = Callable[[int | None, str, str, str, str], tuple[int, int]]
 
 
+@dataclass(frozen=True)
+class TurnData:
+    """One turn's values once its question is checked and its model is picked."""
+
+    context: AgentContext
+    conversation_id: int | None
+    question: str
+    prompt: str
+    history: list[dict]
+    recalled: list[RecalledMemory]
+    selection: ModelSelection | None
+    save: SaveExchange | None
+
+
 class AgentService:
     """One chat turn: load recent history, run the agent, persist the reply."""
 
@@ -171,19 +185,20 @@ class AgentService:
             prompt, recalled, selection = await self._recall_and_select(
                 context, conversation_id, question, history
             )
-            answer, version = await self._answer(
-                prompt, history, context, self._session_id(conversation_id), selection
-            )
-            return await self._save_turn(
+            turn = TurnData(
                 context,
                 conversation_id,
                 question,
-                answer,
-                version,
+                prompt,
+                history,
                 recalled,
                 selection,
                 save,
             )
+            answer, version = await self._answer(
+                prompt, history, context, self._session_id(conversation_id), selection
+            )
+            return await self._save_turn(turn, answer, version)
 
     async def stream_chat(
         self,
@@ -203,15 +218,17 @@ class AgentService:
                 context, conversation_id, question, history
             )
         return self._stream_events(
-            question,
-            prompt,
-            recalled,
-            history,
-            context,
-            conversation_id,
-            selection,
+            TurnData(
+                context,
+                conversation_id,
+                question,
+                prompt,
+                history,
+                recalled,
+                selection,
+                save,
+            ),
             started,
-            save,
         )
 
     async def _prepare_turn(
@@ -360,32 +377,10 @@ class AgentService:
             return self._read_result(run)
 
     async def _stream_events(
-        self,
-        question: str,
-        prompt: str,
-        recalled: list[RecalledMemory],
-        history: list[dict],
-        context: AgentContext,
-        conversation_id: int | None,
-        selection: ModelSelection | None,
-        started: float,
-        save: SaveExchange | None,
+        self, turn: TurnData, started: float
     ) -> AsyncGenerator[AgentStreamEvent]:
         events: asyncio.Queue[AgentStreamEvent | Exception] = asyncio.Queue()
-        producer = asyncio.create_task(
-            self._produce_turn(
-                question,
-                prompt,
-                recalled,
-                history,
-                context,
-                conversation_id,
-                selection,
-                started,
-                events,
-                save,
-            )
-        )
+        producer = asyncio.create_task(self._produce_turn(turn, started, events))
         try:
             while True:
                 event = await events.get()
@@ -402,29 +397,22 @@ class AgentService:
 
     async def _produce_turn(
         self,
-        question: str,
-        prompt: str,
-        recalled: list[RecalledMemory],
-        history: list[dict],
-        context: AgentContext,
-        conversation_id: int | None,
-        selection: ModelSelection | None,
+        turn: TurnData,
         started: float,
         events: asyncio.Queue[AgentStreamEvent | Exception],
-        save: SaveExchange | None,
     ) -> None:
         # The run gets its own task: pydantic-ai binds its run state to the task that
         # opened it, so a generator suspended mid-run cannot be closed from outside.
         try:
             async with self._marks_failure():
-                if recalled:
-                    events.put_nowait(MemoryRecalled(recalled))
+                if turn.recalled:
+                    events.put_nowait(MemoryRecalled(turn.recalled))
                 delivered, answer, version = await self._stream_run(
-                    prompt,
-                    history,
-                    context,
-                    self._session_id(conversation_id),
-                    selection,
+                    turn.prompt,
+                    turn.history,
+                    turn.context,
+                    self._session_id(turn.conversation_id),
+                    turn.selection,
                     started,
                     events,
                 )
@@ -433,16 +421,7 @@ class AgentService:
                     delivered = ""
                 if answer[len(delivered) :]:
                     events.put_nowait(TextDelta(answer[len(delivered) :]))
-                saved = await self._save_turn(
-                    context,
-                    conversation_id,
-                    question,
-                    answer,
-                    version,
-                    recalled,
-                    selection,
-                    save,
-                )
+                saved = await self._save_turn(turn, answer, version)
                 events.put_nowait(Done(saved))
         except Exception as error:
             # The consumer re-raises it, so the caller sees the same error as chat().
@@ -558,19 +537,14 @@ class AgentService:
         return answer, model_name or self.llm.model_name()
 
     async def _save_turn(
-        self,
-        context: AgentContext,
-        conversation_id: int | None,
-        question: str,
-        answer: str,
-        version: str,
-        recalled: list[RecalledMemory],
-        selection: ModelSelection | None,
-        save: SaveExchange | None,
+        self, turn: TurnData, answer: str, version: str
     ) -> AgentChatResult:
-        model = self.llm.model_name(selection)
+        context = turn.context
+        conversation_id = turn.conversation_id
+        question = turn.question
+        model = self.llm.model_name(turn.selection)
         with self.observability.span("save turn"):
-            if save is None:
+            if turn.save is None:
                 saved_conversation_id, message_id = await asyncio.to_thread(
                     self.conversations.save_exchange,
                     user_id=context.user_id,
@@ -581,7 +555,7 @@ class AgentService:
                 )
             else:
                 saved_conversation_id, message_id = await asyncio.to_thread(
-                    save, conversation_id, question, answer, model, version
+                    turn.save, conversation_id, question, answer, model, version
                 )
         if conversation_id is None:
             self.observability.link_conversation(saved_conversation_id)
@@ -592,10 +566,10 @@ class AgentService:
                 saved_conversation_id,
                 question,
                 answer,
-                recalled,
+                turn.recalled,
             )
         # After the save, so a new conversation keeps its tier under its new id.
-        self.llm.remember(saved_conversation_id, selection)
+        self.llm.remember(saved_conversation_id, turn.selection)
         return AgentChatResult(
             conversation_id=saved_conversation_id,
             message_id=message_id,

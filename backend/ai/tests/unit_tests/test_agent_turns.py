@@ -22,7 +22,7 @@ pytestmark = pytest.mark.anyio
 class StubRepository:
     """Answers `get` with a fixed row; records each call and each `fail` code."""
 
-    def __init__(self, row: dict | None = None):
+    def __init__(self, row: SimpleNamespace | None = None):
         self.row = row
         self.calls: list[str] = []
         self.failed: list[str] = []
@@ -88,7 +88,7 @@ async def admitted(service: AgentTurnService, request):
 async def test_replay_of_an_ended_turn_raises_its_code_with_a_fixed_status(
     state, code, status
 ):
-    repository = StubRepository({"state": state, "failure_code": code})
+    repository = StubRepository(SimpleNamespace(state=state, failure_code=code))
     service = AgentTurnService(repository, None, agent=None, enabled=True)
 
     with pytest.raises(TurnProtocolError) as raised:
