@@ -1,3 +1,12 @@
+### 2026-11-21 — Buy a plan from the Quản lý tab
+
+| Area | Change |
+|---|---|
+| Mobile | • A "Mua gói" card under the shop card on Quản lý shows the current plan and opens `app/plans.tsx`: Miễn phí, 1 tháng and 3 tháng from Core's catalog (prices are never hardcoded), "Phổ biến nhất" on the 1-month plan, a benefits table and a pay button<br>• `app/plan-payment.tsx` shows the QR, amount, bank account and `SLP…` code from Core's stored request, counts down to `expiresAt`, re-reads the status every 4 seconds and moves through Chờ thanh toán, Đã nhận thanh toán — đang kích hoạt gói and Gói đã được kích hoạt; a pending request is kept per account so reopening continues it instead of creating a second one<br>• `EXPO_PUBLIC_IN_APP_PURCHASE` hides the card and screens in Google Play builds (Play Billing policy); empty means on for web and the self-updating landing APK<br>• Plan illustrations are SVG in `PlanArt.tsx` (Canva's AI image tool is disabled for the team); the mock Core serves the catalog and pays a request after 15 seconds |
+| Docs | • PRD SePay section: mobile checkout status and the Play rule with its source<br>• FE handoff: the checkout gap is closed, quota display and chat keys remain<br>• User flow: Mua gói, Chuyển khoản and Gói đã kích hoạt in the Quản lý flow, captured on the mock web build |
+
+Check: `npx tsc --noEmit` passes; `node --test` 213 of 213 including 12 new billing tests; Playwright e2e 25 of 25 on the mock web build including the purchase and resume flows; with `EXPO_PUBLIC_IN_APP_PURCHASE=false` the card is gone. Not verified: real Core billing on staging (gates off), a real SePay transfer, Android. Commit: the one that adds this entry.
+
 ### 2026-11-16 — Tighten the turn service and the composition root
 
 | Area | Change |
@@ -186,11 +195,3 @@ Check: full Maven verify passed (1,591 tests, no failures/errors/skips); affecte
 
 Check: Linux AI Ruff lint/format and pytest passed (625 passed, 14 skipped: 13 opt-in live model cases and 1 optional real Redis case); all 16 new real-PostgreSQL receipt/migration cases executed. Windows full pytest had 623 passed/14 skipped and two unchanged cache/Redis timing failures; both pass on Linux. Core Maven verify passed (1,564 tests, 0 failures/errors/skips), required PostgreSQL report gate and 13 gate self-tests passed. TLC checked AgentTurn (340 distinct states) and DurableTurn (49), separately from runtime tests; Pele-rendered SVGs were inspected. DBML parsing, Compose dummy config, local links/traceability, OKF and diff checks passed. Dopbase CLI is missing, so credential-map generation remains blocked. No shared migration/configuration, live provider call, FE acceptance or Core quota enforcement was executed. Commit: not created.
 
-### 2026-11-08 — Add durable subscription fulfillment and quota reads
-
-| Area | Change |
-|---|---|
-| Core | • Independently default-off grant worker atomically applies unique accepted payments, calendar-month renewal and APPLIED evidence with restart/concurrency recovery<br>• Shopless active-OWNER subscription/quota GETs; exact-expiry Free fallback, Vietnam/weekly windows and existing counters, enforcementEnabled=false; no chat admission/debit |
-| Safety/docs | • Disabled/unsupported payers and backward clocks retain pending money; skipped writes roll back; bounded cursor batches avoid failed-row starvation<br>• Reuse approved V21 without a new migration; sync contracts, FR status, runbook and default-off variable/templates |
-
-Check: final Maven verify passed (1,564 tests, 0 failures/errors/skips), including 11 required SubscriptionPostgresTest cases; the full PostgreSQL report gate and 13 gate self-tests passed. Compose validation used dummy values; local links/traceability, OKF (50 concepts) and diff checks passed. Initial sandbox Mockito attach was interrupted and rerun outside the sandbox with its agent preloaded. Dopbase CLI is missing, so credential-map generation remains blocked. No shared migration/configuration, SePay delivery, real transfer, FE acceptance or AI quota enforcement was executed. Commit: not created.

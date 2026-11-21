@@ -3,8 +3,9 @@ import { router } from 'expo-router';
 import React, { useState } from 'react';
 import { Image, ImageSourcePropType, Linking, Pressable, StyleSheet, View } from 'react-native';
 import { QuickNavButton } from '../../src/components/QuickNav';
+import { PlanCard } from '../../src/components/PlanCard';
 import { Badge, Dialog, Row, Screen, T } from '../../src/components/ui';
-import { WEBSITE_URL } from '../../src/config';
+import { IN_APP_PURCHASE, WEBSITE_URL } from '../../src/config';
 import { authClient } from '../../src/lib/auth';
 import { vnd } from '../../src/lib/format';
 import { useCoreData } from '../../src/lib/useCoreData';
@@ -114,6 +115,9 @@ export default function More() {
           <Feather name="chevron-right" size={18} color={colors.disabled} />
         </Row>
       </Pressable>
+
+      {/* Mua gói chỉ có ở bản ngoài Google Play (xem IN_APP_PURCHASE) */}
+      {IN_APP_PURCHASE ? <PlanCard userId={app.userId} /> : null}
 
       <T w="bold" size={12.5} color={colors.muted} style={styles.sectionTitle}>
         QUẢN LÝ KINH DOANH

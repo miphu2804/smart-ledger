@@ -68,7 +68,7 @@ enforcementEnabled reports the configured Core admission gate, not health or int
 
 ## Current FE gaps and acceptance checklist
 
-Source review in this feature worktree on 2026-11-08: frontend/mobile/src/lib/agentApi.ts sends chat without a key; apiStream has no idempotency option and treats every 2xx response as a stream. The assistant and quick-ask sheet restore a draft on failure without durable logical-attempt handling. Billing/catalog/checkout and quota displays are not implemented by this phase. This review does not claim that a deployed FE build matches the checkout.
+Source review in this feature worktree on 2026-11-08: frontend/mobile/src/lib/agentApi.ts sends chat without a key; apiStream has no idempotency option and treats every 2xx response as a stream. The assistant and quick-ask sheet restore a draft on failure without durable logical-attempt handling. Billing/catalog/checkout and quota displays are not implemented by this phase. This review does not claim that a deployed FE build matches the checkout. Update 2026-11-21: the mobile app now has the catalog and checkout (`frontend/mobile/app/plans.tsx`, `app/plan-payment.tsx`, client in `src/lib/billingApi.ts`), hidden in Google Play builds by `EXPO_PUBLIC_IN_APP_PURCHASE`; quota display and chat keys are still missing.
 
 - Implement the same attempt handling for the full assistant and quick-ask sheet, JSON/SSE transport switch, pending/reload retry and account/shop switch.
 - Test double tap and same-key replay across transports, last slot, changed input conflict, timeout before/after save, terminal cancellation and deleted result. Show a pending state without adding a second user/assistant message on every retry.
