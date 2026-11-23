@@ -30,6 +30,7 @@ import type {
   SalesSeriesView,
 } from '../data/types';
 import { ApiError } from './apiError';
+import type { BillingPlan, PaymentRequest as BillingPaymentRequest, Subscription } from './billing';
 import { dayKey, normalizeText, vnd } from './format';
 import { canonicalJson } from './idempotency';
 import type { PageResponse } from './pageApi';
@@ -1562,6 +1563,88 @@ function idempotent<T>(operation: string, key: string | undefined, body: unknown
 }
 
 // ---------------------------------------------------------------------------
+// Gói dịch vụ và thanh toán phí (billingApi.ts) — catalog giống Core; tiền "tới" sau MOCK_PAY_AFTER_MS
+// ---------------------------------------------------------------------------
+
+const MOCK_PLANS: BillingPlan[] = [
+  { planCode: 'FREE', version: 1, amountVnd: 0, currency: 'VND', durationMonths: null, featureScope: 'EXISTING_FEATURES', aiQuota: { limit: 2, period: 'DAY', scope: 'OWNER' } },
+  { planCode: 'FULL_MONTHLY', version: 1, amountVnd: 99000, currency: 'VND', durationMonths: 1, featureScope: 'EXISTING_FEATURES', aiQuota: { limit: 300, period: 'WEEK', scope: 'OWNER' } },
+  { planCode: 'FULL_QUARTERLY', version: 1, amountVnd: 297000, currency: 'VND', durationMonths: 3, featureScope: 'EXISTING_FEATURES', aiQuota: { limit: 300, period: 'WEEK', scope: 'OWNER' } },
+];
+/** Bản mock giả như khách đã chuyển khoản sau 15 giây, rồi kích hoạt sau 5 giây nữa. */
+const MOCK_PAY_AFTER_MS = 15_000;
+const MOCK_APPLY_AFTER_MS = 5_000;
+const PAYMENT_WINDOW_MS = 30 * 60 * 1000;
+
+const billingRequests: BillingPaymentRequest[] = [];
+let mockSubscription: Subscription = {
+  effectiveTier: 'FREE',
+  lastPurchasedPlanCode: null,
+  scope: 'OWNER',
+  status: 'FREE',
+  activatedAt: null,
+  expiresAt: null,
+  weeklyAnchorAt: null,
+  renewalMode: 'MANUAL',
+};
+
+function createBillingRequest(body: { planCode?: string; planVersion?: number }): BillingPaymentRequest {
+  const plan = MOCK_PLANS.find((p) => p.planCode === body.planCode && p.version === body.planVersion);
+  if (!plan || plan.durationMonths === null) throw apiErr(409, 'billing_offer_unavailable', 'This plan offer is not available.');
+  const now = Date.now();
+  const code = Array.from({ length: 12 }, () => 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'[Math.floor(Math.random() * 32)]).join('');
+  const req: BillingPaymentRequest = {
+    id: billingRequests.length + 1,
+    planCode: plan.planCode,
+    planVersion: plan.version,
+    amountVnd: plan.amountVnd,
+    currency: 'VND',
+    durationMonths: plan.durationMonths,
+    quotaPolicyVersion: 1,
+    paymentCode: `SLP${code}`,
+    status: 'PENDING',
+    reviewRequired: false,
+    fulfillmentStatus: 'NOT_STARTED',
+    createdAt: new Date(now).toISOString(),
+    expiresAt: new Date(now + PAYMENT_WINDOW_MS).toISOString(),
+    paidAt: null,
+    recipient: { bankCode: 'MB', accountNumber: '0000123456789', accountName: 'SO NGHE LOI (MOCK)' },
+    qrUrl: 'mock:qr',
+  };
+  billingRequests.push(req);
+  return req;
+}
+
+function readBillingRequest(id: number): BillingPaymentRequest {
+  const req = billingRequests[id - 1];
+  if (!req) throw apiErr(404, 'billing_request_not_found', 'Payment request not found.');
+  const now = Date.now();
+  const created = Date.parse(req.createdAt);
+  if (req.status === 'PENDING' && now >= created + MOCK_PAY_AFTER_MS) {
+    req.status = 'PAID';
+    req.paidAt = new Date(created + MOCK_PAY_AFTER_MS).toISOString();
+    req.fulfillmentStatus = 'PENDING';
+  }
+  if (req.status === 'PAID' && req.fulfillmentStatus === 'PENDING' && now >= created + MOCK_PAY_AFTER_MS + MOCK_APPLY_AFTER_MS) {
+    req.fulfillmentStatus = 'APPLIED';
+    const start = mockSubscription.expiresAt && Date.parse(mockSubscription.expiresAt) > now ? new Date(mockSubscription.expiresAt) : new Date(now);
+    const end = new Date(start);
+    end.setMonth(end.getMonth() + (req.durationMonths ?? 0));
+    mockSubscription = {
+      ...mockSubscription,
+      effectiveTier: 'FULL',
+      status: 'ACTIVE',
+      lastPurchasedPlanCode: req.planCode,
+      activatedAt: mockSubscription.activatedAt ?? new Date(now).toISOString(),
+      weeklyAnchorAt: mockSubscription.weeklyAnchorAt ?? new Date(now).toISOString(),
+      expiresAt: end.toISOString(),
+    };
+  }
+  const expired = req.status === 'PENDING' && now >= Date.parse(req.expiresAt);
+  return { ...req, status: expired ? 'EXPIRED' : req.status, qrUrl: req.status === 'PENDING' && !expired ? req.qrUrl : null };
+}
+
+// ---------------------------------------------------------------------------
 // Định tuyến — nhận đúng path/method mà catalogApi/salesApi/debtApi/customerApi/expenseApi gửi
 // ---------------------------------------------------------------------------
 
@@ -1667,6 +1750,17 @@ export function mockCoreRequest<T>(path: string, method: string, body: unknown, 
   if (segments[0] === 'expenses' && segments.length === 2 && method === 'DELETE') {
     archiveExpense(Number(segments[1]));
     return undefined as T;
+  }
+
+  if (path === '/billing/plans' && method === 'GET') return MOCK_PLANS as unknown as T;
+  if (path === '/billing/subscription' && method === 'GET') return mockSubscription as unknown as T;
+  if (path === '/billing/payment-requests' && method === 'POST') {
+    return idempotent('POST /billing/payment-requests', idempotencyKey, body, () =>
+      createBillingRequest(body as { planCode?: string; planVersion?: number }),
+    ) as unknown as T;
+  }
+  if (segments[0] === 'billing' && segments[1] === 'payment-requests' && segments.length === 3 && method === 'GET') {
+    return readBillingRequest(Number(segments[2])) as unknown as T;
   }
 
   if (path === '/agent/chat' && method === 'POST') return agentChat(body as AgentChatRequest) as unknown as T;

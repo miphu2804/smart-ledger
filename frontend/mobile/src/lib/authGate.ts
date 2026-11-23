@@ -14,6 +14,8 @@ export const PROTECTED_SCREENS = [
   'invoice/[id]',
   'notification-settings',
   'notifications',
+  'plan-payment',
+  'plans',
   'pos',
   'printer',
   'products',
