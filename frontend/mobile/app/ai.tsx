@@ -32,6 +32,7 @@ import type {
   ThoughtStep,
 } from '../src/data/types';
 import { agentApi, agentErrorMessage } from '../src/lib/agentApi';
+import { usePlanPromo } from '../src/components/PlanPromo';
 import { track } from '../src/lib/analytics';
 import { ApiError } from '../src/lib/api';
 import { withoutActions } from '../src/lib/chatMarkdown';
@@ -81,6 +82,7 @@ function lastActive(iso: string): string {
 const HEADER_BTN = 40;
 
 export default function Ai() {
+  const promo = usePlanPromo();
   const reducedMotion = useReducedMotion();
   const welcomeProgress = useRef(new Animated.Value(1)).current;
   useEffect(() => {
@@ -192,8 +194,10 @@ export default function Ai() {
       track('ai_message_sent', { conversation: conversationId ? 'existing' : 'new' });
       setConversationId(reply.conversation_id);
       setMsgs((m) => [...m, { id: `a${reply.message_id}`, from: 'ai', text: reply.answer }]);
+      promo.aiAnswered();
     } catch (err) {
       if (err instanceof ApiError && err.code === 'conversation_not_found') setConversationId(null);
+      if (err instanceof ApiError && err.code === 'ai_quota_exhausted') promo.aiQuotaExhausted();
       // Không mất câu đã gõ: gỡ bong bóng chưa gửi được và trả câu về ô nhập (trừ khi đã gõ câu khác).
       setMsgs((m) => m.filter((x) => x.id !== userMessage.id));
       setText((current) => (current.trim() ? current : message));

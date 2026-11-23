@@ -12,6 +12,7 @@ import React, { useEffect } from 'react';
 import { ActivityIndicator, Platform, View } from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { AnalyticsConsentPrompt } from '../src/components/AnalyticsConsentPrompt';
+import { PlanPromoProvider } from '../src/components/PlanPromo';
 import { ToastProvider } from '../src/components/brand';
 import { UpdatePrompt } from '../src/components/UpdatePrompt';
 import { trackScreen } from '../src/lib/analytics';
@@ -76,9 +77,11 @@ export default function RootLayout() {
           <AppStoreProvider>
             <ToastProvider>
               <StatusBar style="dark" />
-              <AppStack />
-              <UpdatePrompt />
-              <AnalyticsConsentPrompt />
+              <PlanPromoProvider>
+                <AppStack />
+                <UpdatePrompt />
+                <AnalyticsConsentPrompt />
+              </PlanPromoProvider>
             </ToastProvider>
           </AppStoreProvider>
         </View>

@@ -335,6 +335,16 @@ export const FLOWS: Flow[] = [
         notes: ['Câu trả lời trong ảnh là câu trả lời thật của Agent trên staging, dựa trên đơn của tiệm thử.'],
       },
       { kind: 'screen', id: 'products', x: 1520, y: 0, title: 'Hàng hoá', caption: 'Món sắp hết, nhập hàng', image: 'dashboard-products', file: 'app/products.tsx', refs: ['FR-009', 'FR-030'] },
+      {
+        kind: 'screen', id: 'plan-promo-ai', x: 1840, y: 620, title: 'Gợi ý mua gói', caption: 'Khi hỏi đủ lượt Miễn phí trong ngày', image: 'plan-promo-ai', file: 'src/components/PlanPromo.tsx', refs: ['FR-042', 'FR-043'],
+        notes: [
+          'Chỉ gói Miễn phí, chỉ bản web và APK ngoài Google Play; một lần mỗi ngày, cách quảng cáo trước ít nhất 1 tiếng, không hiện ở lần mở app đầu tiên trên máy.',
+          'Bảng hỏi nhanh ở Đơn hàng chỉ đếm câu hỏi, không mở popup đè lên bảng.',
+          'Core trả 429 ai_quota_exhausted thì popup đổi thành "Hết lượt hỏi Bobi hôm nay", một lần mỗi ngày.',
+          'Ảnh chụp trên bản web mock.',
+        ],
+      },
+      { kind: 'step', id: 'promo-plans', x: 2140, y: 843, title: 'Mua gói', caption: 'Mở màn chọn gói', link: { flow: 'manage', node: 'plans' } },
       { kind: 'screen', id: 'analytics', x: 1520, y: 1240, title: 'Báo cáo', caption: 'Doanh thu, thu chi, lãi gộp', image: 'dashboard-revenue-report', file: 'app/analytics.tsx', refs: ['FR-006'] },
     ],
     edges: [
@@ -348,6 +358,8 @@ export const FLOWS: Flow[] = [
       { from: 'agent', to: 'chat-ask', label: 'AI lỗi: thông báo, hỏi lại', fail: true, sides: 'tt', via: [[990, 560], [690, 560]], labelSeg: 1 },
       { from: 'chat-answer', to: 'products', label: 'Mở Hàng hoá', sides: 'tl' },
       { from: 'chat-answer', to: 'analytics', label: 'Mở Báo cáo', sides: 'bl' },
+      { from: 'chat-answer', to: 'plan-promo-ai', label: 'Đủ lượt Miễn phí hôm nay' },
+      { from: 'plan-promo-ai', to: 'promo-plans', label: 'Xem các gói' },
     ],
   },
   {
@@ -356,6 +368,14 @@ export const FLOWS: Flow[] = [
     summary: 'Tab Quản lý mở thông tin tiệm, mua gói, báo cáo, hàng hoá, công nợ, chi phí, cài đặt và các mục tài khoản; đăng xuất về màn Đăng nhập.',
     nodes: [
       { kind: 'screen', id: 'home', x: 0, y: 0, title: 'Tổng quan', caption: 'Thanh tab dưới cùng', image: 'dashboard-overview', file: 'app/(tabs)/index.tsx', refs: ['FR-006'] },
+      {
+        kind: 'screen', id: 'plan-promo', x: 0, y: -620, title: 'Quảng cáo gói', caption: 'Lúc mở app, có ô tick nghỉ hôm nay', image: 'plan-promo', file: 'src/components/PlanPromo.tsx', refs: ['FR-042'],
+        notes: [
+          'Chỉ gói Miễn phí, chỉ bản web và APK ngoài Google Play; không hiện ở lần mở app đầu tiên trên máy, khi còn hướng dẫn hoặc đang chờ thanh toán.',
+          'Mỗi lần mở app tối đa một lần, cách lần trước ít nhất 6 tiếng; tick "Không hiện lại hôm nay" thì nghỉ tới hết ngày, kể cả gợi ý ở Trợ lý.',
+          'Ảnh chụp trên bản web mock.',
+        ],
+      },
       {
         kind: 'screen', id: 'manage', x: 300, y: 0, title: 'Quản lý', caption: 'Kinh doanh, tài khoản và ứng dụng', image: 'manage', file: 'app/(tabs)/more.tsx', refs: ['FR-035'],
         notes: [
@@ -410,6 +430,8 @@ export const FLOWS: Flow[] = [
     ],
     edges: [
       { from: 'home', to: 'manage', label: 'Quản lý' },
+      { from: 'home', to: 'plan-promo', label: 'Mở app, 2,5 giây', sides: 'tb' },
+      { from: 'plan-promo', to: 'plans', label: 'Xem các gói', sides: 'rt', toShift: 30, labelSeg: 0 },
       { from: 'manage', to: 'profile', label: 'Thẻ tiệm', sides: 'rt', labelSeg: 1 },
       { from: 'manage', to: 'analytics', label: 'Báo cáo', sides: 'rt', labelSeg: 1 },
       { from: 'manage', to: 'products', label: 'Hàng hoá', sides: 'rt', labelSeg: 1 },
