@@ -1,3 +1,12 @@
+### 2026-11-25 — Show the plans on the landing page and refresh its screenshots
+
+| Area | Change |
+|---|---|
+| Web | • The landing page gains a "Bảng giá" section, a nav link and a hero teaser with the plans of the app's plan screen: Miễn phí with 2 lượt/ngày, 1 tháng 99.000đ marked "Phổ biến nhất" and 3 tháng 297.000đ, both 300 lượt/tuần; the FAQ answer on fees says how to buy in Quản lý → Mua gói<br>• `/chinh-sach` replaces the three planned Google Play tiers with the same plans and describes the SePay QR purchase, manual renewal, expiry to Miễn phí, mismatched transfers and SePay as a processor; its date moves to 25/11/2026<br>• Nine app screenshots are recaptured from the mock web build with the five-tab bar, and `ai-answer.webp` with chat UI cards replaces the `ai-recall` image and video, which still showed the removed screen button |
+
+Check: Web typecheck, oxlint and build passed; desktop and 390 px renders of the hero, gallery, plans and `/chinh-sach` were checked in headless Chrome. Not verified: the policy text has no owner or legal review. Commit: the commit that adds this entry.
+
+
 ### 2026-11-23 — Plan ads on app open and in the Bobi chat
 
 | Area | Change |
@@ -185,13 +194,3 @@ Check: `scripts/infra/lint.sh` and `okf_sync.py --check` passed; a local Grafana
 | Handoff/docs | • Add client payment/fulfillment state handling, stable chat attempts/202/429/410, quota display, rollout compatibility and rerun instructions<br>• Sync implementation/FR status, metadata and remaining phase-six descriptions; no FE/runtime behavior or migration changes |
 
 Check: explicit integration suite passed 9/9 without skips; Firebase verification/preliminary shop lookup, model and cache are fixtures. Restart recreates the Core context/facade and the AI process, not a separate Core JVM; paid activation is a SQL fixture, not SePay acceptance. Full Core verify passed (1,591 tests, no failures/errors/skips), all 21 required PostgreSQL suites and 13 gate self-tests passed. Linux AI Ruff lint/format passed (141 files); pytest passed (625 passed, 14 optional skips: 13 live-model and 1 Redis case). Local links/traceability, OKF (52 concepts) and diff checks passed. Dopbase CLI is missing, so credential-map generation remains blocked; only the nonsecret test-interpreter source entry was added. No shared DB/configuration, provider/real transfer, deployed FE acceptance, commit or push was performed.
-
-### 2026-11-08 — Connect Core chat quota to durable AI receipts
-
-| Area | Change |
-|---|---|
-| Core | • Default-off JSON/SSE quota admission with OWNER-wide atomic reservation, cross-transport stable keys and captured windows<br>• Receipt-based debit/release before result/done; 202 pending, safe 429/410/errors, no legacy fallback for keyed calls |
-| Recovery/docs | • Fenced restart/lease reconciliation never regenerates or releases an unknown outcome; cancellation tombstones preserve late-save safety<br>• Reuse approved V21 without new migrations; sync contracts, FR status, Core/AI guides, ERD, CoreQuota model/chart and nonsecret gates/templates |
-
-Check: full Maven verify passed (1,591 tests, no failures/errors/skips); affected HTTP/controller/transaction/Swagger suites passed again after final hardening. The required PostgreSQL report gate passed all 21 suites including 17 ChatQuotaPostgresTest cases, and its 13 self-tests passed. TLC checked CoreQuota separately (1,786 distinct states, no invariant errors); Pele SVG was rendered and inspected. DBML parsing, dummy Compose config, 105 added local links, traceability, OKF (51 concepts) and diff checks passed. Core uses a fake durable AI transport for transaction races plus scoped HTTP adapter tests; full deployed Core–AI/FE/provider acceptance and latency remain unverified. AI runtime was unchanged from phase five, whose Linux test evidence is retained below. Dopbase CLI is missing, so credential-map generation remains blocked. No shared migration/configuration, real transfer, commit or push was executed.
-

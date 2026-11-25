@@ -143,7 +143,8 @@ export default function PolicyPage() {
             <li>Vercel và Cloudflare R2: phân phối website và file cài đặt Android.</li>
             <li>OpenAI và Inception: tạo câu trả lời của trợ lý AI.</li>
             <li>HoneyHive: ghi lại hội thoại với trợ lý AI để tìm lỗi và cải thiện chất lượng.</li>
-            <li>Google Play: phân phối ứng dụng và xử lý thanh toán subscription nếu được triển khai.</li>
+            <li>SePay: báo cho chúng tôi các khoản chuyển khoản vào tài khoản nhận tiền để xác nhận thanh toán gói.</li>
+            <li>Google Play: phân phối ứng dụng.</li>
           </ul>
         </Item>
 
@@ -258,13 +259,12 @@ export default function PolicyPage() {
         </Item>
         <Item title="10. Gói trả phí">
           <p>
-            Sổ Nghe Lời hiện miễn phí. Sau này một số chức năng có thể yêu cầu subscription; giá, quota, thời hạn và quyền lợi được hiển thị trước khi bạn mua. Trên bản Android phân phối qua
-            Google Play, subscription mở khoá tính năng số trong ứng dụng sẽ được triển khai qua Google Play Billing khi bắt đầu thu phí, trừ trường hợp thuộc
-            ngoại lệ được Google Play cho phép.
+            Sổ Nghe Lời có gói Miễn phí và các gói trả phí theo thời hạn. Giá, thời hạn và quyền lợi của từng gói được hiển thị trong ứng dụng trước khi bạn
+            thanh toán. Mục <a href="#thanh-toan">Thanh toán, gia hạn, huỷ và hoàn tiền</a> mô tả cách mua và dùng gói.
           </p>
         </Item>
         <Item title="11. Giới hạn sử dụng">
-          <p>Để chống lạm dụng, hệ thống giới hạn tần suất một số thao tác như tạo cửa hàng và tải ảnh. Khi có gói trả phí, gói có thể giới hạn thêm theo phút voice, số yêu cầu AI hoặc tài nguyên khác; khi đạt quota, tính năng liên quan có thể tạm dừng đến kỳ tiếp theo hoặc yêu cầu nâng cấp.</p>
+          <p>Để chống lạm dụng, hệ thống giới hạn tần suất một số thao tác như tạo cửa hàng và tải ảnh. Mỗi gói giới hạn số câu hỏi trợ lý AI theo kỳ; khi hết lượt, chỉ việc hỏi trợ lý AI tạm dừng đến kỳ tiếp theo hoặc khi bạn nâng cấp, các chức năng khác vẫn dùng bình thường.</p>
         </Item>
         <Item title="12. Khoá hoặc đình chỉ tài khoản">
           <p>Chúng tôi có thể tạm giới hạn tài khoản khi có nguy cơ bảo mật, gian lận, lạm dụng hoặc vi phạm Điều khoản. Vi phạm nghiêm trọng hoặc lặp lại có thể dẫn đến chấm dứt tài khoản.</p>
@@ -272,7 +272,7 @@ export default function PolicyPage() {
         <Item title="13. Xoá tài khoản">
           <p>
             Bạn có thể yêu cầu xoá tài khoản trong ứng dụng (Quản lý → Xoá tài khoản) hoặc qua trang <Link to="/delete-account">Xoá tài khoản</Link>. Xoá ứng dụng khỏi điện thoại không
-            đồng nghĩa với xoá tài khoản và cũng không tự động huỷ subscription Google Play.
+            đồng nghĩa với xoá tài khoản.
           </p>
         </Item>
         <Item title="14. Giới hạn trách nhiệm">
@@ -289,128 +289,100 @@ export default function PolicyPage() {
       <section className="lp-legal-sec" id="thanh-toan">
         <h2>III. Thanh toán, gia hạn, huỷ và hoàn tiền</h2>
 
-        <Item title="1. Trạng thái hiện tại">
-          <p>Sổ Nghe Lời hiện miễn phí và chưa có mua hàng trong ứng dụng. Các gói dưới đây là phương án dự kiến, chưa mua được. Các mục sau áp dụng khi bắt đầu thu phí qua Google Play Billing.</p>
-        </Item>
-        <Item title="2. Các gói dự kiến">
+        <Item title="1. Các gói">
           <table className="lp-legal-table">
             <thead>
               <tr>
                 <th scope="col">Quyền lợi</th>
-                <th scope="col">Gọn</th>
-                <th scope="col">Thông minh</th>
-                <th scope="col">Chuyên nghiệp</th>
+                <th scope="col">Miễn phí</th>
+                <th scope="col">1 tháng</th>
+                <th scope="col">3 tháng</th>
               </tr>
             </thead>
             <tbody>
               <tr>
-                <th scope="row">Giá tháng</th>
-                <td>59.000đ</td>
-                <td>109.000đ</td>
-                <td>199.000đ</td>
+                <th scope="row">Giá</th>
+                <td>0đ</td>
+                <td>99.000đ</td>
+                <td>297.000đ</td>
               </tr>
               <tr>
-                <th scope="row">Giá năm</th>
-                <td>590.000đ</td>
-                <td>1.090.000đ</td>
-                <td>1.990.000đ</td>
+                <th scope="row">Thời hạn</th>
+                <td>Không thời hạn</td>
+                <td>1 tháng lịch</td>
+                <td>3 tháng lịch</td>
               </tr>
               <tr>
-                <th scope="row">Cửa hàng</th>
-                <td>1</td>
-                <td>1</td>
-                <td>Tối đa 3</td>
+                <th scope="row">Bán hàng, sổ sách, báo cáo</th>
+                <td>Đầy đủ</td>
+                <td>Đầy đủ</td>
+                <td>Đầy đủ</td>
               </tr>
               <tr>
-                <th scope="row">Tài khoản sử dụng</th>
-                <td>1</td>
-                <td>Tối đa 3</td>
-                <td>Tối đa 10</td>
-              </tr>
-              <tr>
-                <th scope="row">Sản phẩm</th>
-                <td>Tối đa 2.000</td>
-                <td>Tối đa 10.000</td>
-                <td>Tối đa 50.000</td>
-              </tr>
-              <tr>
-                <th scope="row">Khách hàng</th>
-                <td>Tối đa 1.000</td>
-                <td>Tối đa 5.000</td>
-                <td>Tối đa 20.000</td>
-              </tr>
-              <tr>
-                <th scope="row">Voice AI mỗi tháng</th>
-                <td>120 phút</td>
-                <td>350 phút</td>
-                <td>800 phút</td>
-              </tr>
-              <tr>
-                <th scope="row">Yêu cầu AI mỗi tháng</th>
-                <td>100</td>
-                <td>500</td>
-                <td>1.500</td>
-              </tr>
-              <tr>
-                <th scope="row">Báo cáo</th>
-                <td>Cơ bản</td>
-                <td>Nâng cao</td>
-                <td>Nâng cao, hỗ trợ ưu tiên</td>
+                <th scope="row">Lượt hỏi Trợ lý Bobi</th>
+                <td>2 lượt/ngày</td>
+                <td>300 lượt/tuần</td>
+                <td>300 lượt/tuần</td>
               </tr>
             </tbody>
           </table>
-          <p>Giá chính thức là giá hiển thị trên Google Play tại thời điểm mua.</p>
-        </Item>
-        <Item title="3. Google Play Billing">
           <p>
-            Khi subscription được triển khai trên Android, giao dịch mua quyền truy cập tính năng số trong ứng dụng được xử lý qua Google Play Billing. Google xử
-            lý phương thức thanh toán; chúng tôi không lưu đầy đủ số thẻ, mã CVV hoặc mật khẩu thanh toán, và có thể lưu mã giao dịch, product ID, trạng thái
-            subscription, kỳ thanh toán và ngày hết hạn để xác định quyền truy cập.
+            Gói áp dụng cho tài khoản chủ tiệm và dùng chung cho mọi cửa hàng, mọi thiết bị của tài khoản đó. Hai gói trả phí có cùng quyền lợi, chỉ khác thời
+            hạn. Giá chính thức là giá hiển thị trong màn mua gói tại thời điểm bạn tạo yêu cầu thanh toán.
           </p>
         </Item>
-        <Item title="4. Dùng thử">
-          <p>Nếu có chương trình dùng thử, thời lượng, giá sau dùng thử và ngày bắt đầu thu tiền được hiển thị trước khi bạn xác nhận.</p>
-        </Item>
-        <Item title="5. Tự động gia hạn">
-          <p>Subscription tự động gia hạn theo chu kỳ cho đến khi bạn huỷ trong Google Play. Bạn được xem giá và chu kỳ thanh toán trước khi mua.</p>
-        </Item>
-        <Item title="6. Huỷ subscription">
+        <Item title="2. Cách mua">
           <p>
-            Bạn có thể huỷ subscription trong Google Play. Gỡ cài đặt ứng dụng không tự động huỷ subscription. Sau khi huỷ, bạn thường vẫn dùng được quyền lợi đã
-            thanh toán tới hết kỳ hiện tại, tuỳ điều kiện hiển thị tại thời điểm mua.
+            Bạn mua gói trong ứng dụng tại Quản lý → Mua gói. Ứng dụng tạo một yêu cầu thanh toán gồm mã QR, số tiền, tài khoản nhận và nội dung chuyển khoản
+            bắt đầu bằng <b>SLP</b>. Bạn chuyển khoản bằng ứng dụng ngân hàng, giữ nguyên số tiền và nội dung, trong vòng 30 phút.
+          </p>
+          <p>
+            Gói chỉ được kích hoạt khi hệ thống nhận được khoản chuyển khớp yêu cầu qua SePay; quét QR hoặc chờ hết giờ không có nghĩa là đã thanh toán. Ứng
+            dụng hiển thị trạng thái Chờ thanh toán, Đã nhận thanh toán — đang kích hoạt gói, và Gói đã được kích hoạt.
+          </p>
+          <p>
+            Bản cài đặt từ Google Play không có lối mua gói. Gói đã mua từ bản khác vẫn áp dụng trên mọi thiết bị của tài khoản. Chúng tôi không lưu số thẻ, mật
+            khẩu ngân hàng hoặc mã OTP; hệ thống chỉ lưu số tiền, thời gian, ngân hàng nhận và mã nội dung của khoản chuyển.
           </p>
         </Item>
-        <Item title="7. Nâng hoặc hạ gói">
+        <Item title="3. Gia hạn">
           <p>
-            Việc nâng, hạ gói, phần phí chênh lệch và thời điểm hiệu lực theo cấu hình subscription trên Google Play và được hiển thị trước khi xác nhận. Nếu hạ gói
-            khiến dữ liệu vượt quota mới, chúng tôi không tự ý xoá dữ liệu chỉ vì việc hạ gói; ứng dụng có thể giới hạn thao tác tạo mới cho tới khi bạn giảm dữ
-            liệu hoặc nâng cấp lại.
+            Gói không tự gia hạn và không tự trừ tiền. Khi gói còn hạn, mua thêm sẽ cộng nối tiếp thời hạn; lượt hỏi trong tuần hiện tại không bị đặt lại.
           </p>
         </Item>
-        <Item title="8. Quota AI">
-          <p>Quota Voice AI và AI Chat được tính theo kỳ. Hạn mức không dùng hết không chuyển sang kỳ sau, trừ khi màn hình mua ghi rõ khác.</p>
-        </Item>
-        <Item title="9. Hoàn tiền">
+        <Item title="4. Lượt hỏi Trợ lý Bobi">
           <p>
-            Với giao dịch do Google Play lập hoá đơn, bạn gửi yêu cầu hoàn tiền theo cơ chế của Google Play. Khả năng đủ điều kiện phụ thuộc vào thời điểm yêu cầu,
-            loại giao dịch, tình trạng sử dụng và chính sách hiện hành của Google. Chúng tôi có thể hỗ trợ xác định giao dịch và xử lý trường hợp Google chuyển yêu
-            cầu về nhà phát triển, nhưng không cam kết mọi yêu cầu đều được hoàn tiền.
+            Lượt của gói Miễn phí đặt lại lúc 0 giờ theo giờ Việt Nam. Lượt của gói trả phí tính theo từng 7 ngày kể từ lúc kích hoạt gói. Mỗi câu hỏi được
+            trả lời xong tính một lượt, kể cả khi trợ lý hỏi lại để làm rõ; câu hỏi lỗi kỹ thuật không trừ lượt. Lượt không dùng hết không chuyển sang kỳ sau.
           </p>
         </Item>
-        <Item title="10. Giao dịch trái phép hoặc tính phí nhầm">
+        <Item title="5. Hết hạn và huỷ">
           <p>
-            Nếu thấy giao dịch lạ, tính phí lặp hoặc sai gói, hãy liên hệ Google Play và chúng tôi sớm nhất có thể. Chúng tôi có thể yêu cầu mã giao dịch nhưng
-            không yêu cầu mật khẩu Google, mật khẩu ngân hàng hoặc CVV.
+            Khi gói trả phí hết hạn, tài khoản trở về gói Miễn phí. Dữ liệu bán hàng giữ nguyên và vẫn theo Chính sách quyền riêng tư. Vì gói không tự gia hạn,
+            bạn không cần huỷ; nếu không mua thêm, gói kết thúc khi hết thời hạn.
           </p>
         </Item>
-        <Item title="11. Hết hạn gói">
-          <p>Khi subscription hết hạn, tính năng trả phí có thể bị khoá hoặc giảm hạn mức. Dữ liệu cửa hàng không bị xoá ngay chỉ vì subscription hết hạn và vẫn theo Chính sách quyền riêng tư.</p>
+        <Item title="6. Chuyển khoản sai, thừa hoặc trễ">
+          <p>
+            Khoản chuyển sai số tiền, sai nội dung hoặc đến sau khi yêu cầu hết hạn không tự kích hoạt gói; ứng dụng báo có khoản chuyển cần đối soát. Hãy liên
+            hệ chúng tôi kèm nội dung <b>SLP…</b>, thời gian và số tiền đã chuyển. Chúng tôi đối soát và hỗ trợ kích hoạt gói hoặc xử lý khoản tiền
+            đó.
+          </p>
         </Item>
-        <Item title="12. Thay đổi giá">
-          <p>Giá có thể thay đổi trong tương lai. Giá mới không áp dụng hồi tố cho kỳ đã thanh toán, và việc thay đổi tuân theo cơ chế thông báo và xác nhận của Google Play.</p>
+        <Item title="7. Hoàn tiền">
+          <p>
+            Bạn gửi yêu cầu hoàn tiền qua email liên hệ, kèm nội dung chuyển khoản. Chúng tôi xem xét từng trường hợp theo thời điểm yêu cầu và tình trạng sử
+            dụng gói, nhưng không cam kết mọi yêu cầu đều được hoàn tiền.
+          </p>
         </Item>
-        <Item title="13. Quyền người tiêu dùng">
-          <p>Không nội dung nào trong chính sách này nhằm loại trừ quyền bắt buộc của người tiêu dùng theo pháp luật Việt Nam hoặc quy định bắt buộc của Google Play.</p>
+        <Item title="8. Giao dịch lạ">
+          <p>Nếu thấy giao dịch lạ hoặc bị trừ tiền nhầm, hãy liên hệ ngân hàng của bạn và chúng tôi sớm nhất có thể. Chúng tôi không bao giờ hỏi mật khẩu ngân hàng hoặc mã OTP.</p>
+        </Item>
+        <Item title="9. Thay đổi giá">
+          <p>Giá có thể thay đổi trong tương lai. Giá mới chỉ áp dụng cho yêu cầu thanh toán tạo sau khi thay đổi; gói đã thanh toán giữ nguyên thời hạn và quyền lợi.</p>
+        </Item>
+        <Item title="10. Quyền người tiêu dùng">
+          <p>Không nội dung nào trong chính sách này nhằm loại trừ quyền bắt buộc của người tiêu dùng theo pháp luật Việt Nam.</p>
         </Item>
       </section>
 
