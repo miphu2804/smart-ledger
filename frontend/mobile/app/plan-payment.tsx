@@ -2,9 +2,10 @@ import { Feather } from '@expo/vector-icons';
 import { router, useFocusEffect, useLocalSearchParams } from 'expo-router';
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, Image, StyleSheet, View } from 'react-native';
+import { useToast } from '../src/components/brand';
 import { FakeQR } from '../src/components/FakeQR';
 import { PlanArt, planArtKind } from '../src/components/PlanArt';
-import { Button, EmptyState, Header, LoadingState, Screen, T } from '../src/components/ui';
+import { Button, EmptyState, Header, LoadingState, Screen, Sheet, T } from '../src/components/ui';
 import { USE_MOCK } from '../src/config';
 import {
   billingErrorMessage,
@@ -31,6 +32,7 @@ const POLL_MAX_MS = 30000;
 /**
  * Chuyển khoản cho một yêu cầu thanh toán (contract §9). QR, số tiền, tài khoản nhận và nội dung đều lấy từ yêu cầu Core
  * đã lưu, không tự dựng lại. Chỉ trạng thái của Core quyết định đã trả hay chưa; đóng màn không huỷ khoản đang chuyển.
+ * "Huỷ yêu cầu" chỉ bỏ theo dõi trên máy để tạo yêu cầu khác: Core chưa có API huỷ, nên yêu cầu vẫn nhận tiền tới hạn.
  */
 export default function PlanPayment() {
   const app = useApp();
@@ -41,6 +43,16 @@ export default function PlanPayment() {
   const [now, setNow] = useState(Date.now());
   const [term, setTerm] = useState<SubscriptionSummary | null>(null);
   const delay = useRef(POLL_MS);
+  const [cancelOpen, setCancelOpen] = useState(false);
+  const toast = useToast();
+
+  const cancel = async () => {
+    const owner = billingOwnerKey(app.userId);
+    if (owner) await clearStoredPayment(owner);
+    setCancelOpen(false);
+    toast('Đã huỷ yêu cầu thanh toán');
+    router.dismissTo('/plans');
+  };
 
   const refresh = useCallback(async () => {
     try {
@@ -123,6 +135,8 @@ export default function PlanPayment() {
           <Button title="Xong" onPress={() => router.dismissTo('/(tabs)/more')} />
         ) : view.stage === 'expired' ? (
           <Button title="Chọn gói và tạo yêu cầu mới" onPress={() => router.dismissTo('/plans')} />
+        ) : view.stage === 'awaiting' ? (
+          <Button title="Huỷ yêu cầu" icon="x-circle" variant="outline" onPress={() => setCancelOpen(true)} />
         ) : null
       }
     >
@@ -205,6 +219,15 @@ export default function PlanPayment() {
       ) : null}
 
       {view.stage === 'activating' ? <LoadingState compact label="Đang kích hoạt gói…" /> : null}
+
+      <Sheet visible={cancelOpen} onClose={() => setCancelOpen(false)} title="Huỷ yêu cầu thanh toán?">
+        <T size={13} color={colors.inkSecondary} style={styles.cancelText}>
+          Nếu bạn đã chuyển khoản thì đừng huỷ: khoản tiền vẫn được ghi nhận và gói sẽ tự kích hoạt. Sau khi huỷ, đừng chuyển tiền
+          với nội dung {req.paymentCode} nữa.
+        </T>
+        <Button title="Huỷ yêu cầu" variant="danger" onPress={() => void cancel()} />
+        <Button title="Tiếp tục thanh toán" variant="ghost" onPress={() => setCancelOpen(false)} style={{ marginTop: 8 }} />
+      </Sheet>
     </Screen>
   );
 }
@@ -232,6 +255,10 @@ const statusTone = StyleSheet.create({
 });
 
 const styles = StyleSheet.create({
+  cancelText: {
+    lineHeight: 19,
+    marginBottom: 14,
+  },
   status: {
     flexDirection: 'row',
     alignItems: 'center',

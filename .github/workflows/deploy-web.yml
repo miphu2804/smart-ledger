@@ -65,7 +65,8 @@ jobs:
         # the mock build of mobile-web would otherwise leak into the real bundle of deploy-web.
         if: runner.environment == 'self-hosted'
         run: scripts/ci/isolate-metro-cache.sh
-      - run: vercel pull --yes --environment="$VERCEL_TARGET" --token="$VERCEL_TOKEN"
+      # The CLI reads VERCEL_TOKEN from the job env; a token argument would show in ps to every process on the runner.
+      - run: vercel pull --yes --environment="$VERCEL_TARGET"
       # Job env wins over values pulled from Vercel, so GitHub stays the source of EXPO_PUBLIC_*.
       - run: scripts/ci/vercel-build.sh
       - name: Deploy

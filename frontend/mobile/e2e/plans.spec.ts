@@ -53,3 +53,25 @@ test('thoát ra khi đang chờ thanh toán thì card mở lại đúng yêu c�
   await expect(page).toHaveURL(/plan-payment\?id=1/);
   await expect(page.getByText(code ?? '', { exact: true })).toBeVisible();
 });
+
+test('huỷ yêu cầu đang chờ thì về màn chọn gói và tạo được yêu cầu mới', async ({ page }) => {
+  await enterSampleShop(page);
+  await page.getByRole('tab', { name: 'Quản lý' }).click();
+  await page.getByRole('button', { name: /^Mua gói\./ }).click();
+  await page.getByText('Thanh toán 99.000đ', { exact: true }).click();
+  await expect(page).toHaveURL(/plan-payment\?id=1/);
+
+  // Hỏi lại trước khi huỷ; "Tiếp tục thanh toán" giữ nguyên yêu cầu
+  await page.getByRole('button', { name: 'Huỷ yêu cầu' }).click();
+  await expect(page.getByText('Huỷ yêu cầu thanh toán?', { exact: true })).toBeVisible();
+  await page.getByRole('button', { name: 'Tiếp tục thanh toán' }).click();
+  await expect(page.getByText('Chờ thanh toán', { exact: true })).toBeVisible();
+
+  await page.getByRole('button', { name: 'Huỷ yêu cầu' }).first().click();
+  await page.getByRole('button', { name: 'Huỷ yêu cầu' }).last().click();
+  await expect(page).toHaveURL(/plans/);
+  await expect(page.getByRole('button', { name: 'Mở yêu cầu thanh toán đang chờ' })).toHaveCount(0);
+
+  await page.getByText('Thanh toán 99.000đ', { exact: true }).click();
+  await expect(page).toHaveURL(/plan-payment\?id=2/);
+});

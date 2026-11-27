@@ -1,3 +1,31 @@
+### 2026-11-27 — Keep the Vercel token out of process arguments
+
+| Area | Change |
+|---|---|
+| CI | • `vercel pull`, `vercel-build.sh` and `vercel-deploy.sh` drop `--token`: Vercel CLI 62.2.0 reads `VERCEL_TOKEN` from the job env, so another job on the same self-hosted Mac cannot read the token with `ps`<br>• `alias-vercel-deployment.sh` hands curl the `Authorization` header through a file descriptor instead of a `-H` argument |
+| Docs | • CI runners in `ci-cd.md` records that the Vercel token never goes in a command argument |
+
+Check: shims that log argv show no token in any `vercel` or curl argument for preview and production under macOS `/bin/bash` 3.2; CLI 62.2.0 with a fake `VERCEL_TOKEN` reports the env token invalid; the alias script with a fake token gets Vercel's `invalidToken` (`missingToken` when empty); actionlint, shellcheck, provider coupling and `okf_sync.py --check` pass. Not verified: a real deploy run. Commit: the one that adds this entry.
+
+### 2026-11-27 — Give the Free plan 100 AI questions a week in Core
+
+| Area | Change |
+|---|---|
+| Core | • `SubscriptionPolicy.free` is one calendar week from 00:00 Monday Asia/Ho_Chi_Minh with 100 turns, and the `GET /billing/plans` catalog returns FREE `100/WEEK`; the stored window kind stays `FREE_DAILY`, so no migration<br>• Quota tests prefill the current Free window to reach the limit; the PostgreSQL report gate lists the renamed Monday reset test |
+| Docs | • BR-029, AC-141/142, the API contract, the subscription design, the technical design and the AI chat quota guide state 100 per week from Monday |
+
+Check: Core `./mvnw clean verify` passed 1,600 tests with no failures or skips against a disposable PostgreSQL 16; `verify_postgres_tests.py` passed and its 13 self-tests passed; `CoreAiQuotaIT` passed 9 of 9 with pgvector; `okf_sync.py --check` passed. Not verified: an existing `FREE_DAILY` row from this Monday, written while `AI_QUOTA_ENABLED` was on, fails closed for that owner until next Monday. Commit: the one that adds this entry.
+
+### 2026-11-27 — Show Free as 100 questions a week and let owners cancel a payment request
+
+| Area | Change |
+|---|---|
+| Mobile | • `withFreeQuota` in `src/lib/billing.ts` shows the Free plan as 100 lượt/tuần on the plan screen and plan ads, so both plan kinds count by week; Core's catalog and quota stay 2 per day<br>• Plan ads count Bobi answers per week from Monday (`weekKey`), still at most once a day; the quota popup reads "Hết lượt hỏi Bobi tuần này"<br>• The payment screen gets "Huỷ yêu cầu" with a confirmation sheet; it stops tracking the request on the device and returns to the plan screen, since Core has no cancel API and the request still accepts money until it expires |
+| Web | • Landing plans, the fee FAQ and `/chinh-sach` show Free as 100 lượt/tuần resetting at 00:00 Monday; the policy date moves to 27/11/2026 |
+| Docs | • PRD: the FE-only Free display decision, the cancel button and the weekly ad rule; user flow notes follow |
+
+Check: mobile `npx tsc --noEmit` passes and `npm test` 224 of 224; web typecheck, lint and build pass. Not verified: Core still enforces 2 per day when `AI_QUOTA_ENABLED` is on. Commit: the one that adds this entry.
+
 ### 2026-11-25 — Show the plans on the landing page and refresh its screenshots
 
 | Area | Change |
@@ -168,29 +196,3 @@ Check: Core Maven verify passed 1,595 tests with no failures, errors, or skips. 
 | Docs | • Correct the AI protocol guide to describe the implemented Core turn/fence integration<br>• Prepare the staging PR with migration/rollback boundaries, FE handoff and explicit remaining provider/FE acceptance |
 
 Check: retained reports confirm Core verify 1,591 tests and explicit Core–AI integration 9 tests, all without failures/errors/skips; Linux AI has 625 passed and 14 optional skips. Runtime sources did not change after those checks; the three fetched staging commits affect only Mobile and the eval workflow. Fresh Ruff lint/format, 21-suite PostgreSQL report gate, 13 gate self-tests, 123 added-document links, traceability, OKF (52 concepts, Linux read-only checker), proposed-file credential-pattern and diff checks passed. Exact Compose image builds were attempted twice but blocked by auth.docker.io connection resets before compilation; CI image-build verification remains required. Dopbase CLI is unavailable, so private credential-map regeneration was attempted but not completed. No live provider, transfer, FE acceptance, shared DB/configuration or deployment was exercised. Commit: included in this change.
-
-### 2026-11-09 — Define GA4 system boundaries and native verification
-
-| Area | Change |
-|---|---|
-| Docs | • Extend ADR-0010 with verified event semantics and proposed consent, reporting and rollout safeguards; link the native verification matrix<br>• Add GA4 system boundaries and separate staging validation from production insights; rebalance logical architecture around business capabilities, rename the combined runtime/delivery diagram to system design, and add SVG-renderer-compatible labels and PNG preview |
-
-Check: source inspected at staging `9613e47e`; Mobile typecheck, 205 unit tests and mock web export passed; OKF/link and diff checks passed. Three SVGs render white in light/dark; logical SVG text renders in librsvg, but Zed is not independently verified. GA4 validator: 0 warnings; system design: 0 errors/crossings, with existing warnings. Native delivery, Console settings and product/legal acceptance remain unverified; no runtime changes. Commit: the commits that add this entry.
-
-### 2026-11-09 — Grafana monitors only the system
-
-| Area | Change |
-|---|---|
-| Deploy | • Overview drops its environment picker and repeats the Health and Services rows for each environment, with the alert list above them; Resources drops its unused picker<br>• Removed the product analytics dashboard, its two PostgreSQL datasources, the playbook tasks and template that wrote their login, and `GRAFANA_PG_*` from the monitor template, `run.sh` and the credential map, since GA4 now measures usage |
-| Docs | • ADR-0003 is superseded by ADR-0010, and ADR-0010 records the removal |
-
-Check: `scripts/infra/lint.sh` and `okf_sync.py --check` passed; a local Grafana 13.3.0 with fake `probe_success` metrics showed only the Infra folder, one Health and Services row per environment and no environment picker on Overview or Resources. Not verified on the VPS; `check-templates.sh` needs Dopbase and will flag `GRAFANA_PG_*` until those keys are deleted there. Commit: the commit that adds this entry.
-
-### 2026-11-08 — Verify Core–AI integration and hand off billing/quota to FE
-
-| Area | Change |
-|---|---|
-| Integration tests | • Explicit CoreAiQuotaIT uses real loopback Core HTTP → Python AI HTTP and disposable PostgreSQL, retaining production router/receipt/save/cancel logic<br>• Nine cases cover JSON/SSE replay, done-after-debit, pending/last slot, rollback/restart, fenced cancellation, failure, deletion, unavailable protocol and paid expiry |
-| Handoff/docs | • Add client payment/fulfillment state handling, stable chat attempts/202/429/410, quota display, rollout compatibility and rerun instructions<br>• Sync implementation/FR status, metadata and remaining phase-six descriptions; no FE/runtime behavior or migration changes |
-
-Check: explicit integration suite passed 9/9 without skips; Firebase verification/preliminary shop lookup, model and cache are fixtures. Restart recreates the Core context/facade and the AI process, not a separate Core JVM; paid activation is a SQL fixture, not SePay acceptance. Full Core verify passed (1,591 tests, no failures/errors/skips), all 21 required PostgreSQL suites and 13 gate self-tests passed. Linux AI Ruff lint/format passed (141 files); pytest passed (625 passed, 14 optional skips: 13 live-model and 1 Redis case). Local links/traceability, OKF (52 concepts) and diff checks passed. Dopbase CLI is missing, so credential-map generation remains blocked; only the nonsecret test-interpreter source entry was added. No shared DB/configuration, provider/real transfer, deployed FE acceptance, commit or push was performed.

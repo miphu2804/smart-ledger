@@ -320,7 +320,7 @@ export default function PolicyPage() {
               </tr>
               <tr>
                 <th scope="row">Lượt hỏi Trợ lý Bobi</th>
-                <td>2 lượt/ngày</td>
+                <td>100 lượt/tuần</td>
                 <td>300 lượt/tuần</td>
                 <td>300 lượt/tuần</td>
               </tr>
@@ -352,7 +352,7 @@ export default function PolicyPage() {
         </Item>
         <Item title="4. Lượt hỏi Trợ lý Bobi">
           <p>
-            Lượt của gói Miễn phí đặt lại lúc 0 giờ theo giờ Việt Nam. Lượt của gói trả phí tính theo từng 7 ngày kể từ lúc kích hoạt gói. Mỗi câu hỏi được
+            Lượt của gói Miễn phí đặt lại lúc 0 giờ thứ Hai hằng tuần theo giờ Việt Nam. Lượt của gói trả phí tính theo từng 7 ngày kể từ lúc kích hoạt gói. Mỗi câu hỏi được
             trả lời xong tính một lượt, kể cả khi trợ lý hỏi lại để làm rõ; câu hỏi lỗi kỹ thuật không trừ lượt. Lượt không dùng hết không chuyển sang kỳ sau.
           </p>
         </Item>
