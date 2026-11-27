@@ -391,8 +391,7 @@
   border-radius: 13.3cqw;
   background: var(--bg);
 }
-.phone-screen img,
-.phone-screen video {
+.phone-screen img {
   display: block;
   width: 100%;
   height: 100%;
@@ -430,6 +429,22 @@
   justify-content: center;
   gap: 12px 28px;
   margin-top: 30px;
+}
+/* Dòng giới thiệu bảng giá dưới nút tải */
+.lp-price-teaser {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  min-height: 44px;
+  margin-top: 14px;
+  padding: 8px 16px;
+  border-radius: 999px;
+  background: var(--primary-50);
+  color: var(--primary);
+  font-size: 15px;
+}
+.lp-price-teaser:hover {
+  background: var(--brand-border);
 }
 .lp-hero-copy {
   /* Chữ mờ và trôi lên nhẹ khi cuộn rời hero */
@@ -920,8 +935,7 @@
   font-weight: 700;
   letter-spacing: -0.01em;
 }
-.bento-tile .bobi-mark,
-.gallery-intro .bobi-mark {
+.bento-tile .bobi-mark {
   display: inline-block;
   width: 1.1em;
   height: 1.1em;
@@ -1655,3 +1669,143 @@ main:has(.lp-closing) + .lp-footer {
 .lp .feedback-status { margin: 0; color: var(--primary); }
 @media (max-width: 960px) { .lp .feedback-grid { grid-template-columns: 1fr; gap: 32px; } }
 @media (max-width: 560px) { .lp .feedback-fields { grid-template-columns: 1fr; } .lp .feedback-submit .lp-pill { width: 100%; justify-content: center; } }
+
+/* ---------- Bảng giá ---------- */
+.lp-pricing {
+  background: var(--surface);
+}
+.plans {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 16px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.plan {
+  display: flex;
+  flex-direction: column;
+  padding: 28px;
+  border: 1px solid var(--border);
+  border-radius: 28px;
+  background: var(--bg);
+}
+.plan-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+.plan-head h3 {
+  font-size: 21px;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+}
+.plan-badge {
+  padding: 4px 10px;
+  border-radius: 999px;
+  background: var(--yellow);
+  color: var(--ink);
+  font-size: 13px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+.plan-price {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 20px;
+}
+.plan-price b {
+  font-size: clamp(36px, 4vw, 44px);
+  font-weight: 700;
+  letter-spacing: -0.035em;
+  line-height: 1;
+}
+.plan-price span {
+  font-size: 16px;
+  color: var(--muted);
+}
+.plan-quota {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  margin-top: 22px;
+  padding: 14px 16px;
+  border-radius: 16px;
+  background: var(--brand-tint);
+  font-size: 15px;
+  line-height: 1.5;
+}
+.plan-quota .bobi-mark {
+  flex: none;
+  width: 20px;
+  height: 20px;
+  margin-top: 1px;
+  color: var(--primary);
+}
+.plan-quota b {
+  color: var(--ink);
+}
+.plan-includes {
+  display: grid;
+  gap: 10px;
+  margin: 22px 0 0;
+  padding: 0;
+  list-style: none;
+  font-size: 15px;
+}
+.plan-includes li {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.plan-includes svg {
+  flex: none;
+  color: var(--green);
+}
+.plan-cta {
+  margin-top: auto;
+  padding-top: 28px;
+}
+.plan-cta .lp-pill {
+  width: 100%;
+  padding: 0 16px;
+  font-size: 15px;
+  white-space: nowrap;
+}
+.plan-cta .lp-pill svg {
+  flex: none;
+}
+.plan.is-featured .lp-pill {
+  background: #fff;
+  color: var(--primary);
+}
+.plan.is-featured {
+  border-color: transparent;
+  background:
+    radial-gradient(360px 260px at 85% 0%, rgba(143, 219, 110, 0.25), transparent 70%),
+    linear-gradient(160deg, #5334c4, var(--primary) 55%, #2c1977);
+  color: #fff;
+  box-shadow: var(--shadow-lg);
+}
+.plan.is-featured .plan-price span {
+  color: rgba(255, 255, 255, 0.72);
+}
+.plan.is-featured .plan-quota {
+  background: rgba(255, 255, 255, 0.12);
+}
+.plan.is-featured .plan-quota b,
+.plan.is-featured .plan-quota .bobi-mark,
+.plan.is-featured .plan-includes svg {
+  color: var(--accent);
+}
+.plan.is-featured .plan-quota b {
+  color: #fff;
+}
+@media (max-width: 900px) {
+  .plans {
+    grid-template-columns: 1fr;
+    max-width: 480px;
+  }
+}

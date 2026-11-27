@@ -12,7 +12,7 @@ export const CONTROLLER = 'Team HEXA (dự án môn EXE201, Trường Đại h�
 export const LEGAL_UPDATED = '01/11/2026'
 
 /** Ngày của bản chính sách gửi Google Play (/chinh-sach). */
-export const POLICY_UPDATED = '01/11/2026'
+export const POLICY_UPDATED = '25/11/2026'
 
 /** Số ngày nhóm cam kết xử lý yêu cầu xoá dữ liệu. */
 export const DELETION_DAYS = 30

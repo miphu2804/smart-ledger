@@ -14,6 +14,7 @@ import FeedbackSection from './FeedbackSection'
 const NAV = [
   { href: '#cach-hoat-dong', label: 'Cách hoạt động' },
   { href: '#tinh-nang', label: 'Tính năng' },
+  { href: '#bang-gia', label: 'Bảng giá' },
   { href: '#hoi-dap', label: 'Hỏi đáp' },
   { href: '#doi-ngu', label: 'Đội ngũ' },
   { href: '#gop-y', label: 'Góp ý' },
@@ -22,26 +23,27 @@ const NAV = [
 /** Độ trễ hiện dần (giây) cho phần tử thứ i trong một nhóm */
 const delay = (i: number): CSSProperties => ({ ['--d' as string]: `${i * 0.07}s` })
 
-/** `video`: đoạn quay màn hình thật của app, `src` là khung hình hiện trước khi video tải xong */
-type Shot = { src: string; alt: string; lightStatus?: boolean; video?: string }
+type Shot = { src: string; alt: string; lightStatus?: boolean }
 
 /** Ảnh chụp app, khai báo một lần; Hero, luồng cuộn, thư viện và cuối trang cùng dùng. */
 const SHOT = {
   home: {
     src: '/screens/home.webp',
-    alt: 'Màn Tổng quan: doanh thu tuần và bốn lối vào đọc đơn, chọn hàng, quét mã, trợ lý AI',
+    alt: 'Màn Tổng quan: doanh thu hôm nay, số đơn đã chốt, nợ toàn tiệm và việc cần làm hôm nay',
     lightStatus: true,
   },
   voice: { src: '/screens/voice.webp', alt: 'Màn Đọc đơn: câu nói được tách thành ba món có số lượng và giá, tổng 80.000đ' },
-  pos: { src: '/screens/pos.webp', alt: 'Màn Bán hàng: chọn hàng có ảnh, lọc và sắp xếp' },
+  pos: { src: '/screens/pos.webp', alt: 'Màn Tạo đơn: nút Đọc đơn và Quét mã, lọc theo nhóm, lưới hàng chạm là thêm' },
   scan: { src: '/screens/scan.webp', alt: 'Màn Quét mã vạch: đưa mã sản phẩm vào khung camera để thêm vào đơn', lightStatus: true },
   checkout: { src: '/screens/checkout.webp', alt: 'Màn Thanh toán: danh sách món, hình thức tiền mặt, chuyển khoản hoặc ghi nợ' },
   debts: { src: '/screens/debts.webp', alt: 'Màn Công nợ: tổng còn nợ, khách đang nợ và từng đơn chưa trả' },
   orders: { src: '/screens/orders.webp', alt: 'Màn Đơn hàng: các đơn theo ngày, lọc hôm nay, hôm qua, 7 ngày' },
   products: { src: '/screens/products.webp', alt: 'Màn Hàng hoá: giá bán, tồn kho, hàng sắp hết' },
   reports: { src: '/screens/reports.webp', alt: 'Màn Báo cáo: doanh thu tuần, biểu đồ theo ngày, thu chi và lãi gộp ước tính' },
-  /* Ảnh chụp Bobi từ app bản staging với dữ liệu tiệm thử. */
-  bobiRecall: { src: '/screens/ai-recall.webp', video: '/screens/ai-recall.mp4', alt: 'Ở hội thoại mới, câu trả lời có nhãn 2 ghi nhớ, liệt kê từng điều đã nhớ và liên kết mở hội thoại gốc' },
+  bobiAnswer: {
+    src: '/screens/ai-answer.webp',
+    alt: 'Trợ lý Bobi trả lời bằng thẻ: doanh thu, số đơn, lãi gộp tuần này và thanh ngân sách chi phí tháng',
+  },
 }
 
 /** Câu nói mẫu dùng xuyên trang; khớp với ảnh màn Đọc đơn để không lệch số liệu. */
@@ -129,14 +131,12 @@ function Nav() {
 function PhoneFrame({
   src,
   alt = '',
-  video,
   eager = false,
   lightStatus = false,
   children,
 }: {
   src?: string
   alt?: string
-  video?: string
   eager?: boolean
   lightStatus?: boolean
   children?: ReactNode
@@ -145,12 +145,7 @@ function PhoneFrame({
     <div className="phone">
       <div className="phone-body">
         <div className="phone-screen">
-          {children ??
-            (video ? (
-              <video src={video} poster={src} aria-label={alt} autoPlay muted loop playsInline preload="none" width={660} height={1434} />
-            ) : (
-              <img src={src} alt={alt} loading={eager ? 'eager' : 'lazy'} width={660} height={1434} decoding="async" />
-            ))}
+          {children ?? <img src={src} alt={alt} loading={eager ? 'eager' : 'lazy'} width={660} height={1434} decoding="async" />}
           <div className={`phone-status${lightStatus ? ' is-light' : ''}`} aria-hidden="true">
             <svg className="phone-time" viewBox="0 0 40 13" fill="currentColor">
               <text y="12.5" fontSize="17" fontWeight="600">
@@ -213,6 +208,12 @@ function Hero() {
             Xem cách hoạt động <ChevronRight size={18} />
           </a>
         </div>
+        <a href="#bang-gia" className="lp-price-teaser">
+          <span>
+            <b>Miễn phí</b> để bắt đầu · Gói Bobi từ 99.000đ/tháng
+          </span>
+          <ChevronRight size={16} aria-hidden="true" />
+        </a>
       </div>
 
       <div className="hero-stage" aria-label="Ảnh ứng dụng Sổ Nghe Lời">
@@ -231,7 +232,7 @@ function Hero() {
           <PhoneFrame {...SHOT.reports} eager />
           <span className="hero-result">
             <span>Doanh thu tuần này</span>
-            <b>772.000đ</b>
+            <b>644.000đ</b>
           </span>
         </div>
       </div>
@@ -356,13 +357,13 @@ function BobiMark() {
 }
 
 /** Mỗi màn là một tính năng; màn nằm giữa dòng chữ tiêu đề khi cuộn thì phần giới thiệu bên dưới đổi theo. */
-const SCREENS: { shot: Shot; title: string; text: string; bobi?: boolean }[] = [
+const SCREENS: { shot: Shot; title: string; text: string }[] = [
   { shot: SHOT.voice, title: 'Đọc đơn bằng giọng nói', text: 'Nhấn giữ nút ghi âm và đọc đơn, hoặc gõ khi quán ồn. Ứng dụng tách món, số lượng và giá.' },
   { shot: SHOT.orders, title: 'Đơn hàng', text: 'Mỗi đơn lưu kèm giờ bán; lọc nhanh theo hôm nay, hôm qua hoặc 7 ngày.' },
-  { shot: SHOT.pos, title: 'Bán hàng', text: 'Chọn hàng có ảnh, lọc theo nhóm, sắp xếp theo tên hoặc tồn kho; chạm là thêm vào đơn.' },
+  { shot: SHOT.pos, title: 'Tạo đơn', text: 'Đọc đơn, quét mã hoặc chọn hàng theo nhóm ngay trên một màn; chạm là thêm vào đơn.' },
   { shot: SHOT.debts, title: 'Công nợ', text: 'Ghi nợ khi thanh toán; xem ai còn nợ bao nhiêu, từ hôm nào và ghi từng lần thu.' },
   { shot: SHOT.reports, title: 'Báo cáo', text: 'Doanh thu, số đơn, lãi gộp ước tính và món bán chạy theo ngày, tuần, tháng.' },
-  { shot: SHOT.bobiRecall, bobi: true, title: 'Bobi nhớ cách bạn làm', text: 'Bạn dặn một lần, lần sau Bobi vẫn nhớ. Mở "ghi nhớ" để xem nhớ từ hôm nào.' },
+  { shot: SHOT.bobiAnswer, title: 'Hỏi Bobi, xem ngay bằng thẻ', text: 'Bobi trả lời số liệu của tiệm bằng thẻ, thanh ngân sách và biểu đồ, đọc một lần là hiểu.' },
 ]
 
 /**
@@ -445,10 +446,7 @@ function Gallery() {
           <ol className="gallery-intro" aria-live="polite">
             {SCREENS.map((s, i) => (
               <li key={s.title} data-i={i}>
-                <strong>
-                  {s.bobi && <BobiMark />}
-                  {s.title}
-                </strong>
+                <strong>{s.title}</strong>
                 <span>{s.text}</span>
               </li>
             ))}
@@ -550,6 +548,70 @@ function Compare() {
 
 /* ------------------------------------------------------------------ */
 
+/**
+ * Gói theo catalog của Core (`BillingPlanResponse.java`) và màn chọn gói của app (`frontend/mobile/app/plans.tsx`).
+ * Không quảng cáo "không giới hạn" và không ngụ ý gói 3 tháng có quota tuần lớn hơn (billing-ai-client-handoff.md).
+ */
+const PLANS: { name: string; price: string; per?: string; quota: string; cta: string; badge?: string }[] = [
+  { name: 'Miễn phí', price: '0đ', quota: '2 lượt/ngày hỏi Bobi', cta: 'Dùng miễn phí' },
+  { name: '1 tháng', price: '99.000đ', per: 'mỗi tháng', quota: '300 lượt/tuần hỏi Bobi', cta: 'Mua trong ứng dụng', badge: 'Phổ biến nhất' },
+  { name: '3 tháng', price: '297.000đ', per: '99.000đ/tháng', quota: '300 lượt/tuần hỏi Bobi', cta: 'Mua trong ứng dụng' },
+]
+
+const PLAN_INCLUDES = ['Bán hàng, sổ sách, báo cáo', 'Đọc đơn bằng giọng nói, quét mã', 'Dùng chung cho mọi tiệm của bạn']
+
+function Pricing() {
+  return (
+    <section className="lp-section lp-pricing" id="bang-gia" aria-labelledby="pricing-title">
+      <div className="lp-container">
+        <div className="lp-sec-head">
+          <h2 className="lp-display" id="pricing-title">
+            Sổ dùng miễn phí.
+            <br />
+            <span className="is-muted">Hỏi Bobi nhiều hơn khi cần.</span>
+          </h2>
+          <p>Mọi gói đều có đủ chức năng bán hàng. Gói trả phí chỉ thêm lượt hỏi trợ lý Bobi.</p>
+        </div>
+        <ul className="plans">
+          {PLANS.map((p, i) => (
+            <li key={p.name} className={`plan${p.badge ? ' is-featured' : ''}`} data-reveal style={delay(i)}>
+              <div className="plan-head">
+                <h3>{p.name}</h3>
+                {p.badge && <span className="plan-badge">{p.badge}</span>}
+              </div>
+              <p className="plan-price">
+                <b>{p.price}</b>
+                {/* Gói Miễn phí không có dòng phụ; giữ chỗ để ô lượt hỏi của ba gói thẳng hàng */}
+                <span>{p.per ?? '\u00a0'}</span>
+              </p>
+              <p className="plan-quota">
+                <BobiMark />
+                <b>{p.quota}</b>
+              </p>
+              <ul className="plan-includes">
+                {PLAN_INCLUDES.map((f) => (
+                  <li key={f}>
+                    <Check size={16} strokeWidth={2.6} aria-hidden="true" /> {f}
+                  </li>
+                ))}
+              </ul>
+              <div className="plan-cta">
+                <DownloadCta label={p.cta} />
+              </div>
+            </li>
+          ))}
+        </ul>
+        <p className="lp-fineprint">
+          Mua gói trong ứng dụng tại Quản lý → Mua gói, thanh toán bằng chuyển khoản ngân hàng qua mã QR; bản cài từ Google Play chưa có lối mua. Gói không
+          tự gia hạn; mua thêm khi còn hạn thì thời hạn được cộng nối tiếp. Hết hạn sẽ về gói Miễn phí, dữ liệu bán hàng giữ nguyên.
+        </p>
+      </div>
+    </section>
+  )
+}
+
+/* ------------------------------------------------------------------ */
+
 /** Thông tin thành viên Team HEXA, giữ tên và vai trò từ nội dung hiện có. */
 const TEAM: { slug: string; name: string; role: string }[] = [
   { slug: 'minh-tho', name: 'Minh Thọ', role: 'Giúp Sổ Nghe Lời hiểu bạn hơn' },
@@ -621,7 +683,7 @@ const FAQS: { q: string; a: ReactNode }[] = [
   },
   {
     q: 'Dùng có mất phí không?',
-    a: 'Ứng dụng đang ở giai đoạn thử nghiệm: chưa thu phí và chưa công bố gói trả phí nào.',
+    a: 'Sổ và mọi chức năng bán hàng dùng miễn phí, kèm 2 lượt hỏi Bobi mỗi ngày. Khi cần hỏi Bobi nhiều hơn, bạn mua gói 1 tháng 99.000đ hoặc 3 tháng 297.000đ, mỗi gói 300 lượt mỗi tuần, trong mục Quản lý → Mua gói. Thanh toán bằng chuyển khoản qua mã QR và gói không tự gia hạn.',
   },
 ]
 
@@ -719,6 +781,7 @@ export default function LandingPage() {
         <Gallery />
         <Features />
         <Compare />
+        <Pricing />
         <Team />
         <Faq />
         <FeedbackSection />
