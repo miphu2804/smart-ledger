@@ -1,3 +1,12 @@
+### 2026-11-27 — Give the Free plan 100 AI questions a week in Core
+
+| Area | Change |
+|---|---|
+| Core | • `SubscriptionPolicy.free` is one calendar week from 00:00 Monday Asia/Ho_Chi_Minh with 100 turns, and the `GET /billing/plans` catalog returns FREE `100/WEEK`; the stored window kind stays `FREE_DAILY`, so no migration<br>• Quota tests prefill the current Free window to reach the limit; the PostgreSQL report gate lists the renamed Monday reset test |
+| Docs | • BR-029, AC-141/142, the API contract, the subscription design, the technical design and the AI chat quota guide state 100 per week from Monday |
+
+Check: Core `./mvnw clean verify` passed 1,600 tests with no failures or skips against a disposable PostgreSQL 16; `verify_postgres_tests.py` passed and its 13 self-tests passed; `CoreAiQuotaIT` passed 9 of 9 with pgvector; `okf_sync.py --check` passed. Not verified: an existing `FREE_DAILY` row from this Monday, written while `AI_QUOTA_ENABLED` was on, fails closed for that owner until next Monday. Commit: the one that adds this entry.
+
 ### 2026-11-27 — Show Free as 100 questions a week and let owners cancel a payment request
 
 | Area | Change |
@@ -186,12 +195,3 @@ Check: retained reports confirm Core verify 1,591 tests and explicit Core–AI i
 | Docs | • Extend ADR-0010 with verified event semantics and proposed consent, reporting and rollout safeguards; link the native verification matrix<br>• Add GA4 system boundaries and separate staging validation from production insights; rebalance logical architecture around business capabilities, rename the combined runtime/delivery diagram to system design, and add SVG-renderer-compatible labels and PNG preview |
 
 Check: source inspected at staging `9613e47e`; Mobile typecheck, 205 unit tests and mock web export passed; OKF/link and diff checks passed. Three SVGs render white in light/dark; logical SVG text renders in librsvg, but Zed is not independently verified. GA4 validator: 0 warnings; system design: 0 errors/crossings, with existing warnings. Native delivery, Console settings and product/legal acceptance remain unverified; no runtime changes. Commit: the commits that add this entry.
-
-### 2026-11-09 — Grafana monitors only the system
-
-| Area | Change |
-|---|---|
-| Deploy | • Overview drops its environment picker and repeats the Health and Services rows for each environment, with the alert list above them; Resources drops its unused picker<br>• Removed the product analytics dashboard, its two PostgreSQL datasources, the playbook tasks and template that wrote their login, and `GRAFANA_PG_*` from the monitor template, `run.sh` and the credential map, since GA4 now measures usage |
-| Docs | • ADR-0003 is superseded by ADR-0010, and ADR-0010 records the removal |
-
-Check: `scripts/infra/lint.sh` and `okf_sync.py --check` passed; a local Grafana 13.3.0 with fake `probe_success` metrics showed only the Infra folder, one Health and Services row per environment and no environment picker on Overview or Resources. Not verified on the VPS; `check-templates.sh` needs Dopbase and will flag `GRAFANA_PG_*` until those keys are deleted there. Commit: the commit that adds this entry.

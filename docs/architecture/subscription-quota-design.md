@@ -28,7 +28,7 @@ At expiry the effective plan is FREE without waiting for a cron job. An already-
 
 | Effective tier | Allowance | Window |
 |---|---|---|
-| FREE | 2 successful logical turns | Local calendar day, 00:00 to next 00:00 Asia/Ho_Chi_Minh |
+| FREE | 100 successful logical turns | Calendar week, 00:00 Monday to the next 00:00 Monday Asia/Ho_Chi_Minh; the stored window kind stays `FREE_DAILY` |
 | FULL_MONTHLY | 300 successful logical turns | Consecutive seven-day windows anchored at paid activation |
 | FULL_QUARTERLY | 300 successful logical turns | The same seven-day windows, across the three-month term |
 

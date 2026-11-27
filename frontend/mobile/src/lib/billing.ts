@@ -76,7 +76,7 @@ export function planName(plan: Pick<BillingPlan, 'planCode' | 'durationMonths'>)
 
 /**
  * Lượt hỏi Bobi của gói Miễn phí mà app hiện: 100 lượt mỗi tuần, tuần bắt đầu 00:00 thứ Hai (quyết định ngày 2026-11-27).
- * ponytail: chỉ đổi phần hiển thị; catalog và hạn mức của Core vẫn là 2 lượt/ngày. Bỏ ghi đè khi Core đổi catalog.
+ * ponytail: Core mới trả đúng giá trị này; ghi đè giữ cho Core cũ (2 lượt/ngày) còn chạy. Bỏ khi mọi môi trường đã deploy Core mới.
  */
 export const FREE_AI_QUOTA: AiQuotaPolicy = { limit: 100, period: 'WEEK', scope: 'OWNER' };
 

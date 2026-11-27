@@ -81,6 +81,7 @@ class ChatQuotaPostgresTest {
     }
 
     @Test void concurrentIndependentInstancesCannotBothReserveLastFreeSlot() throws Exception {
+        usedFree(98);
         service.chat(TOKEN, sid(), QUESTION, "first");
         ai.mode = "PENDING";
         try (var workers = Executors.newFixedThreadPool(2)) {
@@ -89,7 +90,7 @@ class ChatQuotaPostgresTest {
             assertThat(List.of(a.get(10, TimeUnit.SECONDS), b.get(10, TimeUnit.SECONDS)))
                     .containsExactlyInAnyOrder("PENDING", "ai_quota_exhausted");
         }
-        assertCounts(1, 1);
+        assertCounts(99, 1);
         assertThat(ai.generations.get()).isEqualTo(2);
         assertThat(quota().remaining()).isZero(); assertThat(quota().enforcementEnabled()).isTrue();
     }
@@ -133,7 +134,7 @@ class ChatQuotaPostgresTest {
         var before = usage("before-midnight");
         clock.advance(2); ai.succeed(before);
         service.chat(TOKEN, sid(), QUESTION, "before-midnight");
-        assertThat(quota().remaining()).isEqualTo(2);
+        assertThat(quota().remaining()).isEqualTo(100);
         assertThat(sql.queryForObject("SELECT committed_count FROM ai_quota_windows WHERE id=?", Integer.class, before.window())).isEqualTo(1);
         var anchor = SubscriptionPolicy.now(clock.instant()); period(anchor, 1);
         ai.mode = "SUCCESS"; service.chat(TOKEN, sid(), QUESTION, "paid");
@@ -148,7 +149,7 @@ class ChatQuotaPostgresTest {
         clock.current.set(SubscriptionPolicy.expiry(anchor, 1).toInstant());
         ai.mode = "SUCCESS"; service.chat(TOKEN, sid(), QUESTION, "now-free");
         ai.succeed(old); service.chat(TOKEN, sid(), QUESTION, "paid-pending");
-        assertThat(quota().limit()).isEqualTo(2); assertThat(quota().committed()).isEqualTo(1);
+        assertThat(quota().limit()).isEqualTo(100); assertThat(quota().committed()).isEqualTo(1);
         assertThat(count("ai_quota_windows")).isEqualTo(2);
         assertThat(sql.queryForObject("SELECT committed_count FROM ai_quota_windows WHERE id=?", Integer.class, old.window())).isEqualTo(1);
     }
@@ -264,7 +265,7 @@ class ChatQuotaPostgresTest {
             assertThat(waiting.get(10, TimeUnit.SECONDS)).isEqualTo("PENDING");
         }
         assertThat(usage("next-day").window()).isNotEqualTo(old.window());
-        assertThat(quota().reserved()).isEqualTo(1); assertThat(quota().remaining()).isEqualTo(1);
+        assertThat(quota().reserved()).isEqualTo(1); assertThat(quota().remaining()).isEqualTo(99);
     }
 
     @Test void definitiveGuardrailFailureReleasesExactlyOnceAndItsKeyCannotRestart() {
@@ -303,6 +304,7 @@ class ChatQuotaPostgresTest {
     }
 
     @Test void completedReplayAfterExhaustionAndActivationDoesNotUseNewPaidAllowance() {
+        usedFree(98);
         service.chat(TOKEN, sid(), QUESTION, "a"); service.chat(TOKEN, sid(), QUESTION, "b");
         assertCode(() -> service.chat(TOKEN, sid(), QUESTION, "c"), ErrorCode.AI_QUOTA_EXHAUSTED);
         service.chat(TOKEN, sid(), QUESTION, "a");
@@ -342,6 +344,14 @@ class ChatQuotaPostgresTest {
                 INSERT INTO billing_subscription_periods(user_id,activated_at,purchased_months,quota_policy_version,expires_at,version)
                 VALUES (?,?,?,1,?,1) RETURNING id
                 """, Long.class, owner, anchor, months, SubscriptionPolicy.expiry(anchor, months));
+    }
+    /** Pre-fills this week's Free window so a test reaches the 100-turn limit with a few real questions. */
+    private void usedFree(int committed) {
+        var free = SubscriptionPolicy.free(SubscriptionPolicy.now(clock.instant()));
+        sql.update("""
+                INSERT INTO ai_quota_windows(id,user_id,kind,period_id,policy_version,window_start,nominal_end,
+                    limit_count,committed_count) VALUES (?,?,'FREE_DAILY',NULL,1,?,?,100,?)
+                """, UUID.randomUUID(), owner, free.start(), free.nominalEnd(), committed);
     }
     private void assertCounts(int committed, int reserved) {
         assertThat(sql.queryForObject("SELECT coalesce(sum(committed_count),0) FROM ai_quota_windows", Integer.class)).isEqualTo(committed);

@@ -76,8 +76,8 @@ class SubscriptionPostgresTest {
         assertThat(disabled.subscription(TOKEN).effectiveTier()).isEqualTo("FREE");
         assertThat(disabled.subscription(TOKEN).lastPurchasedPlanCode()).isNull();
         var quota = disabled.quota(TOKEN);
-        assertThat(quota.limit()).isEqualTo(2); assertThat(quota.enforcementEnabled()).isFalse();
-        assertThat(quota.windowStart().toInstant()).isEqualTo(Instant.parse("2027-01-30T17:00:00Z"));
+        assertThat(quota.limit()).isEqualTo(100); assertThat(quota.enforcementEnabled()).isFalse();
+        assertThat(quota.windowStart().toInstant()).isEqualTo(Instant.parse("2027-01-24T17:00:00Z"));
         assertThat(quota.nextResetAt().toInstant()).isEqualTo(Instant.parse("2027-01-31T17:00:00Z"));
         owner("admin", "ADMIN", "ACTIVE"); owner("disabled", "OWNER", "DISABLED");
         assertCode(() -> disabled.subscription(token("admin")), ErrorCode.SHOP_ACCESS_DENIED);
@@ -151,7 +151,7 @@ class SubscriptionPostgresTest {
         assertThat(service.subscription(TOKEN).effectiveTier()).isEqualTo("FREE");
         assertThat(service.subscription(TOKEN).activatedAt()).isNull();
         assertThat(service.subscription(TOKEN).lastPurchasedPlanCode()).isEqualTo("FULL_MONTHLY");
-        assertThat(service.quota(TOKEN).limit()).isEqualTo(2);
+        assertThat(service.quota(TOKEN).limit()).isEqualTo(100);
         assertThat(count("billing_subscription_periods")).isEqualTo(1);
         var second = paid("FULL_QUARTERLY"); clock.advance(86400);
         service.fulfill(second.id());
@@ -174,7 +174,7 @@ class SubscriptionPostgresTest {
         assertThat(service.subscription(TOKEN).activatedAt().toInstant()).isEqualTo(clock.instant());
         long other = owner("another", "OWNER", "ACTIVE");
         assertThat(service.subscription(token("another")).effectiveTier()).isEqualTo("FREE");
-        assertThat(service.quota(token("another")).remaining()).isEqualTo(2);
+        assertThat(service.quota(token("another")).remaining()).isEqualTo(100);
         assertThat(other).isNotEqualTo(owner);
     }
 
@@ -224,17 +224,17 @@ class SubscriptionPostgresTest {
         assertThat(count("ai_quota_windows")).isEqualTo(1); assertThat(count("ai_turn_usages")).isZero();
     }
 
-    @Test void freeCountersResetAtVietnamMidnightAndPaidActivationDoesNotStackAllowances() {
-        var daily = service.quota(TOKEN);
+    @Test void freeCountersResetAtMondayVietnamMidnightAndPaidActivationDoesNotStackAllowances() {
+        var week = service.quota(TOKEN);
         sql.update("""
                 INSERT INTO ai_quota_windows(id,user_id,kind,policy_version,window_start,nominal_end,limit_count,committed_count)
-                VALUES (?,?,'FREE_DAILY',1,?,?,2,2)
-                """, UUID.randomUUID(), owner, daily.windowStart(), daily.windowEnd());
+                VALUES (?,?,'FREE_DAILY',1,?,?,100,100)
+                """, UUID.randomUUID(), owner, week.windowStart(), week.windowEnd());
         assertThat(service.quota(TOKEN).remaining()).isZero();
-        clock.current.set(daily.nextResetAt().toInstant().minusNanos(1000));
+        clock.current.set(week.nextResetAt().toInstant().minusNanos(1000));
         assertThat(service.quota(TOKEN).remaining()).isZero();
         clock.advance(1);
-        assertThat(service.quota(TOKEN).remaining()).isEqualTo(2);
+        assertThat(service.quota(TOKEN).remaining()).isEqualTo(100);
         service.fulfill(paid("FULL_MONTHLY").id());
         assertThat(service.quota(TOKEN).remaining()).isEqualTo(300);
         assertThat(count("ai_quota_windows")).isEqualTo(1);

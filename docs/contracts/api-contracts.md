@@ -767,7 +767,7 @@ All three OWNER billing operations below require Firebase and an active OWNER. A
 | `POST /api/v1/billing/payment-requests` | Firebase Bearer; Idempotency-Key (trimmed, nonblank, at most 255 characters); body `{ "planCode": "FULL_MONTHLY", "planVersion": 1 }` | 201 PaymentRequestResponse |
 | `GET /api/v1/billing/payment-requests/{id}` | Firebase Bearer; positive BIGINT ID owned by caller | 200 PaymentRequestResponse with current state |
 
-Catalog decisions are FREE (0 VND; no paid term; 2 AI turns/day), FULL_MONTHLY (99,000 VND; 1 calendar month; 300/week) and FULL_QUARTERLY (297,000 VND; 3 calendar months; 300/week). All have the same existing feature access subject to account/shop/provider guards. Free is not payable. The backend rejects unavailable/stale plan versions instead of silently changing the purchase. Catalog reads remain available to an active OWNER while new creation is disabled or lacks provider configuration. This catalog is not permission to charge real users or evidence of enabled entitlements; quota execution is implemented behind independent default-off Core/AI gates in §10.
+Catalog decisions are FREE (0 VND; no paid term; 100 AI turns/week from Monday), FULL_MONTHLY (99,000 VND; 1 calendar month; 300/week) and FULL_QUARTERLY (297,000 VND; 3 calendar months; 300/week). All have the same existing feature access subject to account/shop/provider guards. Free is not payable. The backend rejects unavailable/stale plan versions instead of silently changing the purchase. Catalog reads remain available to an active OWNER while new creation is disabled or lacks provider configuration. This catalog is not permission to charge real users or evidence of enabled entitlements; quota execution is implemented behind independent default-off Core/AI gates in §10.
 
 The backend snapshots planCode, planVersion, amount, durationMonths, quotaPolicyVersion and recipient. `PaymentRequestResponse = { id, planCode, planVersion, amountVnd, currency, durationMonths, quotaPolicyVersion, paymentCode, status, reviewRequired, fulfillmentStatus, createdAt, expiresAt, paidAt, recipient: { bankCode, accountNumber, accountName }, qrUrl }`. fulfillmentStatus is NOT_STARTED before payment, PENDING after acceptance, and APPLIED only after a unique subscription grant commits. paidAt and qrUrl can be null; VND is integral, instants follow existing Core offset conventions. Do not return provider secrets, signature, raw bank payload, bank balance or sender identity.
 
@@ -823,7 +823,7 @@ The [FE handoff](billing-ai-client-handoff.md) supplies consumer state/retry gui
 
 ### Plans, effective access and status
 
-Catalog GET in §9 is the single plan source. Plans are FREE (0 VND, no term, 2/day), FULL_MONTHLY (99,000 VND, 1 calendar month, 300/week) and FULL_QUARTERLY (297,000 VND, 3 calendar months, 300/week). All retain existing features subject to normal account/shop/provider guards. Terms and weekly windows are OWNER-scoped across shops/devices; this is not a per-shop purchase or unlimited-AI offer.
+Catalog GET in §9 is the single plan source. Plans are FREE (0 VND, no term, 100/week from Monday), FULL_MONTHLY (99,000 VND, 1 calendar month, 300/week) and FULL_QUARTERLY (297,000 VND, 3 calendar months, 300/week). All retain existing features subject to normal account/shop/provider guards. Terms and weekly windows are OWNER-scoped across shops/devices; this is not a per-shop purchase or unlimited-AI offer.
 
 | Implemented endpoint | Authentication/input | Response |
 |---|---|---|
@@ -834,7 +834,7 @@ Both GETs resolve only the verified active OWNER and need no shop. Reads remain 
 
 Both paid purchase codes map to the same FULL tier. lastPurchasedPlanCode describes the most recently fulfilled purchase, not a different feature tier or the length of the whole continuous term; mixed one/three-month renewals extend the same FULL epoch. An expired account is effectiveTier FREE even when a historical paid purchase is present.
 
-Use no-store. remaining is max(0, limit - committed - reserved). Free resets at local midnight; paid windows span seven days from activation, not calendar Mondays. Clip the last paid window at subscription expiry. nextResetAt is null when no further paid window exists without renewal, with accessExpiresAt explaining the deadline; FE then re-reads effective access at expiry. All displayed dates use Core's instant conventions.
+Use no-store. remaining is max(0, limit - committed - reserved). Free resets at 00:00 Monday local time; paid windows span seven days from activation, not calendar Mondays. Clip the last paid window at subscription expiry. nextResetAt is null when no further paid window exists without renewal, with accessExpiresAt explaining the deadline; FE then re-reads effective access at expiry. All displayed dates use Core's instant conventions.
 
 A fulfilled first/new paid term starts at activation application, while an early renewal extends the current continuous calendar-month term and does not reset a weekly counter. Preserve the original calendar anchor for month-end clamping. At expiry the effective tier becomes Free without waiting for a scheduled job. Returning payment status PAID alone never proves fulfillment APPLIED.
 
