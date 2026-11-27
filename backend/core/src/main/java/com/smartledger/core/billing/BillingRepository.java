@@ -21,8 +21,10 @@ public class BillingRepository {
             String code, long amount, String bank, String account, String status, String fulfillment,
             OffsetDateTime created, OffsetDateTime expires, OffsetDateTime paid, OffsetDateTime cancelled, boolean review) {}
 
+    // JSON lookup keeps existing billing reads usable on V21 before the approved V22 rollout.
     private static final String SELECT_REQUEST = """
-            SELECT r.*, EXISTS(SELECT 1 FROM billing_bank_transactions b WHERE b.matched_request_id=r.id
+            SELECT r.*, (to_jsonb(r)->>'cancelled_at')::timestamptz AS cancellation_time,
+                EXISTS(SELECT 1 FROM billing_bank_transactions b WHERE b.matched_request_id=r.id
                 AND b.disposition='REVIEW_REQUIRED') AS review_required FROM billing_payment_requests r
             """;
     private static final RowMapper<Request> REQUEST = (rs, row) -> new Request(rs.getLong("id"), rs.getLong("payer_user_id"),
@@ -30,7 +32,7 @@ public class BillingRepository {
             rs.getString("payment_code"), rs.getLong("amount_vnd"), rs.getString("recipient_bank_code"),
             rs.getString("recipient_account_number"), rs.getString("status"), rs.getString("fulfillment_status"),
             rs.getObject("created_at", OffsetDateTime.class), rs.getObject("expires_at", OffsetDateTime.class),
-            rs.getObject("paid_at", OffsetDateTime.class), rs.getObject("cancelled_at", OffsetDateTime.class),
+            rs.getObject("paid_at", OffsetDateTime.class), rs.getObject("cancellation_time", OffsetDateTime.class),
             rs.getBoolean("review_required"));
 
     void deadlines() {

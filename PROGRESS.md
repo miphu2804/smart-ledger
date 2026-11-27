@@ -3,9 +3,9 @@
 | Area | Change |
 |---|---|
 | Core | • Add retry-safe OWNER payment cancellation, CANCELLED/cancelledAt and paid-request conflict handling on approved V22<br>• Serialize cancellation with webhook acceptance; retain later transfers for reconciliation without automatic grants |
-| Docs | • Update BR-027, FR-041/AC-151, the API contract, schema and FE handoff; document V22-before-binary rollout and retained-schema rollback |
+| Docs | • Update BR-027, FR-041/AC-151, the API contract, schema and FE handoff; document V21-compatible deployment, V22-before-cancellation rollout and retained-schema rollback |
 
-Check: Core Maven verify passed 1,609 tests with no failures, errors or skips on disposable PostgreSQL 17 with pgvector. V21-to-V22 preservation, cancellation retry/authorization, both webhook races, no-grant review and failed-write rollback are covered. The strengthened 11-test schema suite passed again, including rollback after the first ALTER succeeds. All 21 required PostgreSQL suites, 13 report-gate self-tests, OKF and diff checks passed. No shared migration, configuration change or deployment was performed. Commit: the one that adds this entry.
+Check: Core Maven verify passed 1,610 tests with no failures, errors or skips on disposable PostgreSQL 17 with pgvector. V21 billing compatibility through receipt/grant before V22, V21-to-V22 preservation, cancellation retry/authorization, both webhook races, no-grant review and failed-write rollback are covered. The strengthened 11-test schema suite passed again, including rollback after the first ALTER succeeds. All 21 required PostgreSQL suites, 13 report-gate self-tests, OKF and diff checks passed. No shared migration, configuration change or deployment was performed. Commit: the one that adds this entry.
 
 ### 2026-11-27 — Keep the Vercel token out of process arguments
 

@@ -52,6 +52,7 @@ REQUIRED = {
         "disabledCreationOrPayerDoesNotDiscardAlreadyIssuedMoney",
         "distinctSimultaneousTransfersCannotBothPayOneRequest",
         "silentSkippedWritesCannotProduceAnAcceptedUnpaidReceipt",
+        "v21BillingRemainsAvailableUntilCancellationMigrationIsApplied",
         "cancellationRetriesPreserveSnapshotAndWorkWithCollectionDisabled",
         "cancellationGuardsHideOtherOwnersAndPreservePaidAndExpiredRequests",
         "webhookAfterCancellationIsDurableReviewAndNeverGrants",

@@ -326,6 +326,29 @@ class SePayPaymentsPostgresTest {
     }
 
     @Test
+    void v21BillingRemainsAvailableUntilCancellationMigrationIsApplied() {
+        // Rebuild only this generated fixture at the exact deployed schema version.
+        sql.execute("DROP SCHEMA " + schema + " CASCADE");
+        sql.execute("CREATE SCHEMA " + schema);
+        Flyway.configure().dataSource(source).schemas(schema).defaultSchema(schema).target("21").load().migrate();
+        owner("billing-owner", "OWNER", "ACTIVE");
+        assertThat(billing.plans(TOKEN)).hasSize(3);
+        var first = billing.create(TOKEN, "v21-live", MONTHLY);
+        assertThat(billing.get(TOKEN, first.id())).isEqualTo(first);
+        assertCode(() -> billing.cancel(TOKEN, first.id()), ErrorCode.BILLING_UNAVAILABLE);
+        assertThat(billing.get(TOKEN, first.id()).status()).isEqualTo("PENDING");
+        assertThat(billing.create(TOKEN, "v21-live", MONTHLY)).isEqualTo(first);
+        receive(payload("100", first.paymentCode(), "in", 99000, "0000000001", null));
+        var grants = new SubscriptionService(repository, new SubscriptionRepository(sql), new SubscriptionProperties(true), clock, manager);
+        assertThat(grants.fulfill(first.id())).isTrue();
+        assertThat(billing.get(TOKEN, first.id()).fulfillmentStatus()).isEqualTo("APPLIED");
+        var second = billing.create(TOKEN, "v21-then-v22", MONTHLY);
+        Flyway.configure().dataSource(source).schemas(schema).defaultSchema(schema).load().migrate();
+        assertThat(billing.cancel(TOKEN, second.id()).status()).isEqualTo("CANCELLED");
+        assertThat(billing.get(TOKEN, first.id()).fulfillmentStatus()).isEqualTo("APPLIED");
+    }
+
+    @Test
     void cancellationRetriesPreserveSnapshotAndWorkWithCollectionDisabled() throws Exception {
         var first = billing.create(TOKEN, "cancel-replay", MONTHLY);
         // A V21 snapshot has no cancellation property. It must remain readable and unchanged.
