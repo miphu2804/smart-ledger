@@ -16,6 +16,7 @@ import {
   type BillingPlan,
   type PaymentRequest,
   type Subscription,
+  withFreeQuota,
 } from '../src/lib/billing.ts';
 
 const plans: BillingPlan[] = [
@@ -65,6 +66,12 @@ describe('catalog gói', () => {
     assert.equal(quotaText(plans[0].aiQuota), '300 lượt/tuần');
     assert.equal(monthlyPrice(plans[0]), 99000);
     assert.equal(monthlyPrice(plans[1]), null);
+  });
+
+  it('app hiện gói Miễn phí là 100 lượt/tuần, giữ nguyên gói trả phí', () => {
+    const shown = withFreeQuota(plans);
+    assert.equal(quotaText(shown[1].aiQuota), '100 lượt/tuần');
+    assert.deepEqual(shown[0], plans[0]);
   });
 });
 

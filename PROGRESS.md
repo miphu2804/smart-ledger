@@ -1,3 +1,13 @@
+### 2026-11-27 — Show Free as 100 questions a week and let owners cancel a payment request
+
+| Area | Change |
+|---|---|
+| Mobile | • `withFreeQuota` in `src/lib/billing.ts` shows the Free plan as 100 lượt/tuần on the plan screen and plan ads, so both plan kinds count by week; Core's catalog and quota stay 2 per day<br>• Plan ads count Bobi answers per week from Monday (`weekKey`), still at most once a day; the quota popup reads "Hết lượt hỏi Bobi tuần này"<br>• The payment screen gets "Huỷ yêu cầu" with a confirmation sheet; it stops tracking the request on the device and returns to the plan screen, since Core has no cancel API and the request still accepts money until it expires |
+| Web | • Landing plans, the fee FAQ and `/chinh-sach` show Free as 100 lượt/tuần resetting at 00:00 Monday; the policy date moves to 27/11/2026 |
+| Docs | • PRD: the FE-only Free display decision, the cancel button and the weekly ad rule; user flow notes follow |
+
+Check: mobile `npx tsc --noEmit` passes and `npm test` 224 of 224; web typecheck, lint and build pass. Not verified: Core still enforces 2 per day when `AI_QUOTA_ENABLED` is on. Commit: the one that adds this entry.
+
 ### 2026-11-25 — Show the plans on the landing page and refresh its screenshots
 
 | Area | Change |
@@ -185,12 +195,3 @@ Check: source inspected at staging `9613e47e`; Mobile typecheck, 205 unit tests 
 | Docs | • ADR-0003 is superseded by ADR-0010, and ADR-0010 records the removal |
 
 Check: `scripts/infra/lint.sh` and `okf_sync.py --check` passed; a local Grafana 13.3.0 with fake `probe_success` metrics showed only the Infra folder, one Health and Services row per environment and no environment picker on Overview or Resources. Not verified on the VPS; `check-templates.sh` needs Dopbase and will flag `GRAFANA_PG_*` until those keys are deleted there. Commit: the commit that adds this entry.
-
-### 2026-11-08 — Verify Core–AI integration and hand off billing/quota to FE
-
-| Area | Change |
-|---|---|
-| Integration tests | • Explicit CoreAiQuotaIT uses real loopback Core HTTP → Python AI HTTP and disposable PostgreSQL, retaining production router/receipt/save/cancel logic<br>• Nine cases cover JSON/SSE replay, done-after-debit, pending/last slot, rollback/restart, fenced cancellation, failure, deletion, unavailable protocol and paid expiry |
-| Handoff/docs | • Add client payment/fulfillment state handling, stable chat attempts/202/429/410, quota display, rollout compatibility and rerun instructions<br>• Sync implementation/FR status, metadata and remaining phase-six descriptions; no FE/runtime behavior or migration changes |
-
-Check: explicit integration suite passed 9/9 without skips; Firebase verification/preliminary shop lookup, model and cache are fixtures. Restart recreates the Core context/facade and the AI process, not a separate Core JVM; paid activation is a SQL fixture, not SePay acceptance. Full Core verify passed (1,591 tests, no failures/errors/skips), all 21 required PostgreSQL suites and 13 gate self-tests passed. Linux AI Ruff lint/format passed (141 files); pytest passed (625 passed, 14 optional skips: 13 live-model and 1 Redis case). Local links/traceability, OKF (52 concepts) and diff checks passed. Dopbase CLI is missing, so credential-map generation remains blocked; only the nonsecret test-interpreter source entry was added. No shared DB/configuration, provider/real transfer, deployed FE acceptance, commit or push was performed.

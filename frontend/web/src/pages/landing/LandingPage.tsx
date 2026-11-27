@@ -553,7 +553,7 @@ function Compare() {
  * Không quảng cáo "không giới hạn" và không ngụ ý gói 3 tháng có quota tuần lớn hơn (billing-ai-client-handoff.md).
  */
 const PLANS: { name: string; price: string; per?: string; quota: string; cta: string; badge?: string }[] = [
-  { name: 'Miễn phí', price: '0đ', quota: '2 lượt/ngày hỏi Bobi', cta: 'Dùng miễn phí' },
+  { name: 'Miễn phí', price: '0đ', quota: '100 lượt/tuần hỏi Bobi', cta: 'Dùng miễn phí' },
   { name: '1 tháng', price: '99.000đ', per: 'mỗi tháng', quota: '300 lượt/tuần hỏi Bobi', cta: 'Mua trong ứng dụng', badge: 'Phổ biến nhất' },
   { name: '3 tháng', price: '297.000đ', per: '99.000đ/tháng', quota: '300 lượt/tuần hỏi Bobi', cta: 'Mua trong ứng dụng' },
 ]
@@ -683,7 +683,7 @@ const FAQS: { q: string; a: ReactNode }[] = [
   },
   {
     q: 'Dùng có mất phí không?',
-    a: 'Sổ và mọi chức năng bán hàng dùng miễn phí, kèm 2 lượt hỏi Bobi mỗi ngày. Khi cần hỏi Bobi nhiều hơn, bạn mua gói 1 tháng 99.000đ hoặc 3 tháng 297.000đ, mỗi gói 300 lượt mỗi tuần, trong mục Quản lý → Mua gói. Thanh toán bằng chuyển khoản qua mã QR và gói không tự gia hạn.',
+    a: 'Sổ và mọi chức năng bán hàng dùng miễn phí, kèm 100 lượt hỏi Bobi mỗi tuần. Khi cần hỏi Bobi nhiều hơn, bạn mua gói 1 tháng 99.000đ hoặc 3 tháng 297.000đ, mỗi gói 300 lượt mỗi tuần, trong mục Quản lý → Mua gói. Thanh toán bằng chuyển khoản qua mã QR và gói không tự gia hạn.',
   },
 ]
 

@@ -1,4 +1,5 @@
 import { expect, test, type Page } from '@playwright/test';
+import { weekKey } from '../src/lib/format';
 import { collectPageErrors, enterSampleShop } from './helpers';
 
 // Popup lúc mở app chờ 2,5 giây sau khi vào các tab (PlanPromo.tsx)
@@ -42,11 +43,12 @@ test('nút Xem các gói mở màn mua gói', async ({ page }) => {
   await expect(page.getByText('Thanh toán 99.000đ', { exact: true })).toBeVisible();
 });
 
-test('hỏi Bobi đủ lượt Miễn phí trong ngày thì gợi ý mua gói một lần', async ({ page }) => {
+test('hỏi Bobi đủ lượt Miễn phí trong tuần thì gợi ý mua gói một lần', async ({ page }) => {
   test.setTimeout(90_000);
   // Đã quảng cáo lúc mở app 2 tiếng trước: lần này không hiện lại, nhưng đã qua khoảng cách 1 tiếng giữa hai quảng cáo
   const shownAt = Date.now() - 2 * HOUR;
-  await seedPromoState(page, { sessions: 4, launchShownAt: shownAt, lastShownAt: shownAt });
+  // Tuần này đã hỏi 98 câu: còn 2 câu nữa là chạm 100 lượt/tuần của gói Miễn phí
+  await seedPromoState(page, { sessions: 4, launchShownAt: shownAt, lastShownAt: shownAt, aiWeek: weekKey(new Date()), aiAnswers: 98 });
   await enterSampleShop(page);
   await page.getByRole('tab', { name: 'Trợ lý Bobi' }).click();
   await expect(page).toHaveURL(/ai/);
@@ -62,7 +64,7 @@ test('hỏi Bobi đủ lượt Miễn phí trong ngày thì gợi ý mua gói m�
 
   await ask('Món nào bán chạy nhất?');
   await expect(page.getByText('Cần hỏi Bobi nhiều hơn?', { exact: true })).toBeVisible({ timeout: 20_000 });
-  await expect(page.getByText('Hôm nay bạn đã hỏi Bobi 2 câu. Gói Miễn phí có 2 lượt/ngày, gói trả phí có 300 lượt/tuần.', { exact: true })).toBeVisible();
+  await expect(page.getByText('Tuần này bạn đã hỏi Bobi 100 câu. Gói Miễn phí có 100 lượt/tuần, gói trả phí có 300 lượt/tuần.', { exact: true })).toBeVisible();
   // Popup khi dùng Bobi không có ô tick; một lần mỗi ngày
   await expect(page.getByRole('checkbox', { name: 'Không hiện lại hôm nay' })).toHaveCount(0);
   await page.getByRole('button', { name: 'Đóng', exact: true }).click();
