@@ -11,7 +11,7 @@
 
 export interface AiQuotaPolicy {
   limit: number;
-  /** DAY (Miễn phí, reset 00:00 giờ Việt Nam) hoặc WEEK (gói trả phí, 7 ngày từ lúc kích hoạt) */
+  /** Core trả DAY (Miễn phí) hoặc WEEK (gói trả phí, 7 ngày từ lúc kích hoạt); app hiện Miễn phí theo `FREE_AI_QUOTA` */
   period: string;
   scope: string;
 }
@@ -74,7 +74,18 @@ export function planName(plan: Pick<BillingPlan, 'planCode' | 'durationMonths'>)
   return `${plan.durationMonths} tháng`;
 }
 
-/** "2 lượt/ngày", "300 lượt/tuần" */
+/**
+ * Lượt hỏi Bobi của gói Miễn phí mà app hiện: 100 lượt mỗi tuần, tuần bắt đầu 00:00 thứ Hai (quyết định ngày 2026-11-27).
+ * ponytail: Core mới trả đúng giá trị này; ghi đè giữ cho Core cũ (2 lượt/ngày) còn chạy. Bỏ khi mọi môi trường đã deploy Core mới.
+ */
+export const FREE_AI_QUOTA: AiQuotaPolicy = { limit: 100, period: 'WEEK', scope: 'OWNER' };
+
+/** Catalog của Core với lượt Miễn phí thay bằng `FREE_AI_QUOTA`. */
+export function withFreeQuota(plans: BillingPlan[]): BillingPlan[] {
+  return plans.map((p) => (isPaidPlan(p) ? p : { ...p, aiQuota: FREE_AI_QUOTA }));
+}
+
+/** "100 lượt/tuần", "300 lượt/tuần" */
 export function quotaText(quota: AiQuotaPolicy): string {
   const per = quota.period === 'DAY' ? '/ngày' : quota.period === 'WEEK' ? '/tuần' : '';
   return `${quota.limit} lượt${per}`;

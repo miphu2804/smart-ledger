@@ -4,13 +4,13 @@ import { router, useSegments } from 'expo-router';
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { Image, Modal, Platform, Pressable, StyleSheet, useWindowDimensions, View } from 'react-native';
 import { IN_APP_PURCHASE } from '../config';
-import { isPaidPlan, keepStoredPayment, planName, quotaText, sortPlans, subscriptionSummary, type BillingPlan } from '../lib/billing';
+import { FREE_AI_QUOTA, isPaidPlan, keepStoredPayment, planName, quotaText, sortPlans, subscriptionSummary, type BillingPlan } from '../lib/billing';
 import { getPaymentRequest, getPlans, getSubscription } from '../lib/billingApi';
 import { loadStoredPayment } from '../lib/billingStorage';
-import { dayKey, vnd } from '../lib/format';
+import { dayKey, vnd, weekKey } from '../lib/format';
 import {
   aiPromoAllowed,
-  freeDailyLimit,
+  freeWeeklyLimit,
   launchPromoAllowed,
   markPromoShown,
   quotaPromoAllowed,
@@ -28,6 +28,9 @@ import { PlanHeroDecor } from './PlanArt';
 import { Button, T } from './ui';
 
 const bobi = require('../../assets/voice/agent-happy.png');
+
+/** Mốc thời gian cho luật quảng cáo: ngày và tuần theo giờ máy. */
+const moment = (now: number) => ({ now, today: dayKey(new Date(now)), week: weekKey(new Date(now)) });
 
 /** Chờ sau khi vào các tab rồi mới hiện, để Tổng quan kịp tải và không chen ngang lúc vừa mở app. */
 const LAUNCH_DELAY_MS = 2500;
@@ -153,7 +156,7 @@ export function PlanPromoProvider({ children }: { children: React.ReactNode }) {
         const now = Date.now();
         const cur = state.current;
         if (!snap || !cur || cur.owner !== owner) return;
-        if (launchPromoAllowed(cur.value, { now, today: dayKey(new Date(now)), free: snap.free, pendingPayment: snap.pendingPayment })) {
+        if (launchPromoAllowed(cur.value, { ...moment(now), free: snap.free, pendingPayment: snap.pendingPayment })) {
           show('launch', snap.plans);
         }
       } finally {
@@ -166,19 +169,17 @@ export function PlanPromoProvider({ children }: { children: React.ReactNode }) {
   const aiAnswered = useCallback(
     (canShow = true) => {
       if (!owner || state.current?.owner !== owner) return;
-      const now = Date.now();
-      const today = dayKey(new Date(now));
-      const s = update((v) => recordAiAnswer(v, today));
-      // Kiểm tra trước bằng luật trên máy (lượt Miễn phí theo catalog đã đọc, mặc định 2) rồi mới hỏi Core
-      const limit = freeDailyLimit(snapshot.current?.owner === owner ? snapshot.current.value.plans : null);
-      if (!s || !canShow || shown || busy.current || !aiPromoAllowed(s, { now, today, free: true, pendingPayment: false }, limit)) return;
+      const at = moment(Date.now());
+      const s = update((v) => recordAiAnswer(v, at.week));
+      // Kiểm tra trước bằng luật trên máy (lượt Miễn phí mỗi tuần theo catalog đã đọc) rồi mới hỏi Core
+      const limit = freeWeeklyLimit(snapshot.current?.owner === owner ? snapshot.current.value.plans : null);
+      if (!s || !canShow || shown || busy.current || !aiPromoAllowed(s, { ...at, free: true, pendingPayment: false }, limit)) return;
       busy.current = true;
       void readSnapshot(owner, false)
         .then((snap) => {
           const cur = state.current;
           if (!snap || !cur || cur.owner !== owner) return;
-          const at = Date.now();
-          if (!aiPromoAllowed(cur.value, { now: at, today: dayKey(new Date(at)), free: snap.free, pendingPayment: snap.pendingPayment }, freeDailyLimit(snap.plans))) return;
+          if (!aiPromoAllowed(cur.value, { ...moment(Date.now()), free: snap.free, pendingPayment: snap.pendingPayment }, freeWeeklyLimit(snap.plans))) return;
           setTimeout(() => show('ai', snap.plans), AI_DELAY_MS);
         })
         .finally(() => {
@@ -238,10 +239,10 @@ const COPY: Record<PromoKind, { title: string; sub: (free: string, paid: string,
   },
   ai: {
     title: 'Cần hỏi Bobi nhiều hơn?',
-    sub: (free, paid, answers) => `Hôm nay bạn đã hỏi Bobi ${answers} câu. Gói Miễn phí có ${free}, gói trả phí có ${paid}.`,
+    sub: (free, paid, answers) => `Tuần này bạn đã hỏi Bobi ${answers} câu. Gói Miễn phí có ${free}, gói trả phí có ${paid}.`,
   },
   quota: {
-    title: 'Hết lượt hỏi Bobi hôm nay',
+    title: 'Hết lượt hỏi Bobi tuần này',
     sub: (free, paid) => `Bạn đã dùng hết ${free} của gói Miễn phí. Nâng cấp để có ${paid}, hỏi tiếp ngay khi gói được kích hoạt.`,
   },
 };
@@ -264,7 +265,7 @@ export function PlanPromoModal({
   const [snooze, setSnooze] = useState(false);
   const free = plans.find((p) => !isPaidPlan(p));
   const paid = plans.filter(isPaidPlan);
-  const freeQuota = free ? quotaText(free.aiQuota) : '2 lượt/ngày';
+  const freeQuota = quotaText(free?.aiQuota ?? FREE_AI_QUOTA);
   const paidQuota = paid[0] ? quotaText(paid[0].aiQuota) : 'nhiều lượt hơn';
   const copy = COPY[kind];
   const canSnooze = kind === 'launch';

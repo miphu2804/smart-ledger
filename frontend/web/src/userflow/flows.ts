@@ -336,11 +336,11 @@ export const FLOWS: Flow[] = [
       },
       { kind: 'screen', id: 'products', x: 1520, y: 0, title: 'Hàng hoá', caption: 'Món sắp hết, nhập hàng', image: 'dashboard-products', file: 'app/products.tsx', refs: ['FR-009', 'FR-030'] },
       {
-        kind: 'screen', id: 'plan-promo-ai', x: 1840, y: 620, title: 'Gợi ý mua gói', caption: 'Khi hỏi đủ lượt Miễn phí trong ngày', image: 'plan-promo-ai', file: 'src/components/PlanPromo.tsx', refs: ['FR-042', 'FR-043'],
+        kind: 'screen', id: 'plan-promo-ai', x: 1840, y: 620, title: 'Gợi ý mua gói', caption: 'Khi hỏi đủ lượt Miễn phí trong tuần', image: 'plan-promo-ai', file: 'src/components/PlanPromo.tsx', refs: ['FR-042', 'FR-043'],
         notes: [
           'Chỉ gói Miễn phí, chỉ bản web và APK ngoài Google Play; một lần mỗi ngày, cách quảng cáo trước ít nhất 1 tiếng, không hiện ở lần mở app đầu tiên trên máy.',
           'Bảng hỏi nhanh ở Đơn hàng chỉ đếm câu hỏi, không mở popup đè lên bảng.',
-          'Core trả 429 ai_quota_exhausted thì popup đổi thành "Hết lượt hỏi Bobi hôm nay", một lần mỗi ngày.',
+          'Core trả 429 ai_quota_exhausted thì popup đổi thành "Hết lượt hỏi Bobi tuần này", một lần mỗi ngày.',
           'Ảnh chụp trên bản web mock.',
         ],
       },
@@ -358,7 +358,7 @@ export const FLOWS: Flow[] = [
       { from: 'agent', to: 'chat-ask', label: 'AI lỗi: thông báo, hỏi lại', fail: true, sides: 'tt', via: [[990, 560], [690, 560]], labelSeg: 1 },
       { from: 'chat-answer', to: 'products', label: 'Mở Hàng hoá', sides: 'tl' },
       { from: 'chat-answer', to: 'analytics', label: 'Mở Báo cáo', sides: 'bl' },
-      { from: 'chat-answer', to: 'plan-promo-ai', label: 'Đủ lượt Miễn phí hôm nay' },
+      { from: 'chat-answer', to: 'plan-promo-ai', label: 'Đủ lượt Miễn phí tuần này' },
       { from: 'plan-promo-ai', to: 'promo-plans', label: 'Xem các gói' },
     ],
   },
@@ -406,7 +406,7 @@ export const FLOWS: Flow[] = [
         kind: 'screen', id: 'plans', x: 2700, y: 620, title: 'Mua gói', caption: 'Chọn gói, bảng quyền lợi', image: 'plans', file: 'app/plans.tsx', refs: ['FR-041', 'FR-042'],
         notes: [
           'Chỉ có ở web và APK ngoài Google Play (EXPO_PUBLIC_IN_APP_PURCHASE); bản Play không có card và màn này.',
-          'Giá, thời hạn và lượt hỏi Bobi lấy từ catalog của Core; gói 1 tháng được chọn sẵn và có nhãn "Phổ biến nhất".',
+          'Giá, thời hạn và lượt hỏi Bobi của gói trả phí lấy từ catalog của Core; gói Miễn phí app hiện 100 lượt/tuần; gói 1 tháng được chọn sẵn và có nhãn "Phổ biến nhất".',
           'Có yêu cầu đang chờ thì hiện dải tiếp tục ở đầu danh sách.',
           'Ảnh chụp trên bản web mock vì staging chưa bật billing.',
         ],
@@ -416,6 +416,7 @@ export const FLOWS: Flow[] = [
         notes: [
           'QR, số tiền, tài khoản nhận và nội dung SLP… lấy từ yêu cầu Core đã lưu; hạn 30 phút theo expiresAt.',
           'Màn tự đọc lại trạng thái mỗi 4 giây tới khi gói kích hoạt; mở lại app thì tiếp tục yêu cầu cũ, không tạo yêu cầu thứ hai.',
+          'Nút "Huỷ yêu cầu" hỏi lại rồi bỏ theo dõi yêu cầu trên máy và về màn chọn gói; Core chưa có API huỷ nên yêu cầu vẫn nhận tiền tới hạn.',
           'Mã QR trong ảnh là QR giả của bản mock.',
         ],
       },

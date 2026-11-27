@@ -4,7 +4,7 @@ import { describe, it } from 'node:test';
 import {
   aiPromoAllowed,
   EMPTY_PROMO_STATE,
-  freeDailyLimit,
+  freeWeeklyLimit,
   LAUNCH_GAP_MS,
   launchPromoAllowed,
   markPromoShown,
@@ -20,7 +20,9 @@ import {
 
 const NOW = Date.parse('2026-11-23T09:00:00+07:00');
 const TODAY = '2026-11-23';
-const ctx = (over: Partial<PromoContext> = {}): PromoContext => ({ now: NOW, today: TODAY, free: true, pendingPayment: false, ...over });
+/** 23/11/2026 là thứ Hai */
+const WEEK = '2026-11-23';
+const ctx = (over: Partial<PromoContext> = {}): PromoContext => ({ now: NOW, today: TODAY, week: WEEK, free: true, pendingPayment: false, ...over });
 /** Đã mở app vài lần trước đó, đây là lần thứ ba */
 const returning: PromoState = { ...EMPTY_PROMO_STATE, sessions: 3 };
 
@@ -50,23 +52,25 @@ describe('quảng cáo lúc mở app', () => {
 });
 
 describe('quảng cáo khi dùng Bobi', () => {
-  it('hiện khi số câu trong ngày chạm lượt Miễn phí, một lần mỗi ngày', () => {
-    let s = recordAiAnswer(returning, TODAY);
+  it('hiện khi số câu trong tuần chạm lượt Miễn phí, tối đa một lần mỗi ngày', () => {
+    let s = recordAiAnswer(returning, WEEK);
     assert.equal(aiPromoAllowed(s, ctx(), 2), false);
-    s = recordAiAnswer(s, TODAY);
+    s = recordAiAnswer(s, WEEK);
     assert.equal(aiPromoAllowed(s, ctx(), 2), true);
     s = markPromoShown(s, 'ai', NOW, TODAY);
-    s = recordAiAnswer(s, TODAY);
+    s = recordAiAnswer(s, WEEK);
     assert.equal(aiPromoAllowed(s, ctx({ now: NOW + 2 * PROMO_GAP_MS }), 2), false);
+    const tomorrow = NOW + 24 * 3600 * 1000;
+    assert.equal(aiPromoAllowed(s, ctx({ now: tomorrow, today: '2026-11-24' }), 2), true);
   });
 
-  it('sang ngày mới thì đếm lại', () => {
-    const s = recordAiAnswer({ ...returning, aiDay: '2026-11-22', aiAnswers: 5 }, TODAY);
+  it('sang tuần mới thì đếm lại', () => {
+    const s = recordAiAnswer({ ...returning, aiWeek: '2026-11-16', aiAnswers: 5 }, WEEK);
     assert.equal(s.aiAnswers, 1);
   });
 
   it('cách quảng cáo trước ít nhất 1 tiếng và nghỉ khi đã tick', () => {
-    const s = recordAiAnswer(recordAiAnswer(returning, TODAY), TODAY);
+    const s = recordAiAnswer(recordAiAnswer(returning, WEEK), WEEK);
     const afterLaunch = markPromoShown(s, 'launch', NOW - PROMO_GAP_MS + 1, TODAY);
     assert.equal(aiPromoAllowed(afterLaunch, ctx(), 2), false);
     assert.equal(aiPromoAllowed(snoozeToday(s, TODAY), ctx(), 2), false);
@@ -91,10 +95,10 @@ describe('đọc trạng thái đã lưu', () => {
 });
 
 describe('lượt Miễn phí theo catalog', () => {
-  it('lấy lượt theo ngày của gói Miễn phí, thiếu thì dùng 2', () => {
-    const free = { planCode: 'FREE', version: 1, amountVnd: 0, currency: 'VND', durationMonths: null, featureScope: 'EXISTING_FEATURES', aiQuota: { limit: 3, period: 'DAY', scope: 'OWNER' } };
-    assert.equal(freeDailyLimit([free]), 3);
-    assert.equal(freeDailyLimit([{ ...free, aiQuota: { ...free.aiQuota, period: 'WEEK' } }]), 2);
-    assert.equal(freeDailyLimit(null), 2);
+  it('lấy lượt theo tuần của gói Miễn phí, thiếu thì dùng 100', () => {
+    const free = { planCode: 'FREE', version: 1, amountVnd: 0, currency: 'VND', durationMonths: null, featureScope: 'EXISTING_FEATURES', aiQuota: { limit: 80, period: 'WEEK', scope: 'OWNER' } };
+    assert.equal(freeWeeklyLimit([free]), 80);
+    assert.equal(freeWeeklyLimit([{ ...free, aiQuota: { ...free.aiQuota, period: 'DAY' } }]), 100);
+    assert.equal(freeWeeklyLimit(null), 100);
   });
 });

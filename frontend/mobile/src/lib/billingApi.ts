@@ -1,5 +1,5 @@
 import { apiRequest } from './api';
-import type { BillingPlan, PaymentRequest, Subscription } from './billing';
+import { withFreeQuota, type BillingPlan, type PaymentRequest, type Subscription } from './billing';
 import { createIdempotentSender } from './idempotency';
 
 /**
@@ -8,7 +8,7 @@ import { createIdempotentSender } from './idempotency';
  */
 
 export function getPlans(): Promise<BillingPlan[]> {
-  return apiRequest<BillingPlan[]>('/billing/plans');
+  return apiRequest<BillingPlan[]>('/billing/plans').then(withFreeQuota);
 }
 
 export function getSubscription(): Promise<Subscription> {

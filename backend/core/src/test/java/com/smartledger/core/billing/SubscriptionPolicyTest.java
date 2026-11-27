@@ -19,4 +19,23 @@ class SubscriptionPolicyTest {
     void originalAnchorHandlesLeapYearEndAndVietnamCalendar(String start, int months, String expected) {
         assertThat(SubscriptionPolicy.expiry(OffsetDateTime.parse(start), months)).isEqualTo(OffsetDateTime.parse(expected));
     }
+
+    @ParameterizedTest
+    @CsvSource({
+        "2026-11-23T00:00:00+07:00,2026-11-23T00:00:00+07:00",
+        "2026-11-27T21:30:00+07:00,2026-11-23T00:00:00+07:00",
+        "2026-11-29T23:59:59.999999+07:00,2026-11-23T00:00:00+07:00",
+        "2026-11-29T17:00:00Z,2026-11-30T00:00:00+07:00",
+        "2026-12-31T10:00:00+07:00,2026-12-28T00:00:00+07:00"
+    })
+    void freeWindowIsOneHundredTurnsFromMondayVietnamTime(String now, String monday) {
+        var window = SubscriptionPolicy.free(OffsetDateTime.parse(now));
+        var start = OffsetDateTime.parse(monday);
+        assertThat(window.start()).isEqualTo(start);
+        assertThat(window.nominalEnd()).isEqualTo(start.plusWeeks(1));
+        assertThat(window.end()).isEqualTo(start.plusWeeks(1));
+        assertThat(window.nextReset()).isEqualTo(start.plusWeeks(1));
+        assertThat(window.limit()).isEqualTo(100);
+        assertThat(window.kind()).isEqualTo("FREE_DAILY");
+    }
 }
