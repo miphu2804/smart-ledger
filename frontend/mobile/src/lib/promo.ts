@@ -5,13 +5,13 @@
  * - Không hiện ở lần mở app đầu tiên trên máy, khi còn hướng dẫn, khi đang chờ thanh toán, khi đã có gói trả phí hoặc
  *   khi chưa đọc được gói đang dùng.
  * - Mở app: tối đa một lần mỗi lần mở, cách lần trước ít nhất 6 tiếng. Tick "Không hiện lại hôm nay" thì nghỉ tới hết ngày.
- * - Dùng Bobi: một lần mỗi ngày, khi số câu đã hỏi trong ngày chạm lượt của gói Miễn phí; cũng nghỉ khi đã tick.
+ * - Dùng Bobi: tối đa một lần mỗi ngày, khi số câu đã hỏi trong tuần (từ thứ Hai) chạm lượt của gói Miễn phí; cũng nghỉ khi đã tick.
  * - Hai quảng cáo cách nhau ít nhất 1 tiếng.
  * - Hết lượt hỏi Bobi (Core trả 429 `ai_quota_exhausted`) là lời giải thích, không phải quảng cáo: hiện một lần mỗi ngày,
  *   bỏ qua các luật trên trừ gói đang dùng.
  */
 
-import type { BillingPlan } from './billing';
+import { FREE_AI_QUOTA, type BillingPlan } from './billing.ts';
 
 export type PromoKind = 'launch' | 'ai' | 'quota';
 
@@ -24,8 +24,8 @@ export interface PromoState {
   launchShownAt: number | null;
   /** Ngày (yyyy-mm-dd) người dùng tick "Không hiện lại hôm nay" */
   snoozedDay: string | null;
-  /** Ngày đang đếm câu hỏi Bobi và số câu đã có trả lời trong ngày đó */
-  aiDay: string | null;
+  /** Tuần đang đếm câu hỏi Bobi (ngày thứ Hai, yyyy-mm-dd) và số câu đã có trả lời trong tuần đó */
+  aiWeek: string | null;
   aiAnswers: number;
   aiShownDay: string | null;
   quotaShownDay: string | null;
@@ -36,7 +36,7 @@ export const EMPTY_PROMO_STATE: PromoState = {
   lastShownAt: null,
   launchShownAt: null,
   snoozedDay: null,
-  aiDay: null,
+  aiWeek: null,
   aiAnswers: 0,
   aiShownDay: null,
   quotaShownDay: null,
@@ -44,8 +44,6 @@ export const EMPTY_PROMO_STATE: PromoState = {
 
 export const LAUNCH_GAP_MS = 6 * 60 * 60 * 1000;
 export const PROMO_GAP_MS = 60 * 60 * 1000;
-/** Lượt Miễn phí mặc định khi chưa đọc được catalog (BR-029: 2 lượt/ngày) */
-export const DEFAULT_FREE_DAILY_LIMIT = 2;
 
 /** Đọc lại trạng thái đã lưu; giá trị hỏng thì dùng mặc định thay vì lỗi. */
 export function parsePromoState(raw: unknown): PromoState {
@@ -58,7 +56,7 @@ export function parsePromoState(raw: unknown): PromoState {
     lastShownAt: num(r.lastShownAt),
     launchShownAt: num(r.launchShownAt),
     snoozedDay: str(r.snoozedDay),
-    aiDay: str(r.aiDay),
+    aiWeek: str(r.aiWeek),
     aiAnswers: num(r.aiAnswers) ?? 0,
     aiShownDay: str(r.aiShownDay),
     quotaShownDay: str(r.quotaShownDay),
@@ -73,6 +71,8 @@ export interface PromoContext {
   now: number;
   /** Ngày theo giờ máy, yyyy-mm-dd */
   today: string;
+  /** Thứ Hai của tuần này theo giờ máy, yyyy-mm-dd */
+  week: string;
   /** true chỉ khi đọc được gói đang dùng và đó là Miễn phí */
   free: boolean;
   pendingPayment: boolean;
@@ -91,14 +91,14 @@ export function launchPromoAllowed(state: PromoState, ctx: PromoContext): boolea
   return state.launchShownAt === null || ctx.now - state.launchShownAt >= LAUNCH_GAP_MS;
 }
 
-/** Ghi một câu hỏi Bobi đã có trả lời; sang ngày mới thì đếm lại. */
-export function recordAiAnswer(state: PromoState, today: string): PromoState {
-  return state.aiDay === today ? { ...state, aiAnswers: state.aiAnswers + 1 } : { ...state, aiDay: today, aiAnswers: 1 };
+/** Ghi một câu hỏi Bobi đã có trả lời; sang tuần mới thì đếm lại. */
+export function recordAiAnswer(state: PromoState, week: string): PromoState {
+  return state.aiWeek === week ? { ...state, aiAnswers: state.aiAnswers + 1 } : { ...state, aiWeek: week, aiAnswers: 1 };
 }
 
-export function aiPromoAllowed(state: PromoState, ctx: PromoContext, freeDailyLimit: number): boolean {
+export function aiPromoAllowed(state: PromoState, ctx: PromoContext, freeWeeklyLimit: number): boolean {
   if (quietPromo(state, ctx) || state.aiShownDay === ctx.today) return false;
-  return state.aiDay === ctx.today && state.aiAnswers >= freeDailyLimit;
+  return state.aiWeek === ctx.week && state.aiAnswers >= freeWeeklyLimit;
 }
 
 export function quotaPromoAllowed(state: PromoState, ctx: Pick<PromoContext, 'today' | 'free'>): boolean {
@@ -115,8 +115,8 @@ export function snoozeToday(state: PromoState, today: string): PromoState {
   return { ...state, snoozedDay: today };
 }
 
-/** Lượt hỏi Bobi mỗi ngày của gói Miễn phí theo catalog Core; catalog không nói theo ngày thì dùng mặc định. */
-export function freeDailyLimit(plans: BillingPlan[] | null): number {
+/** Lượt hỏi Bobi mỗi tuần của gói Miễn phí theo catalog; catalog không nói theo tuần thì dùng `FREE_AI_QUOTA`. */
+export function freeWeeklyLimit(plans: BillingPlan[] | null): number {
   const free = plans?.find((p) => p.planCode === 'FREE' || p.durationMonths === null);
-  return free && free.aiQuota.period === 'DAY' && free.aiQuota.limit > 0 ? free.aiQuota.limit : DEFAULT_FREE_DAILY_LIMIT;
+  return free && free.aiQuota.period === 'WEEK' && free.aiQuota.limit > 0 ? free.aiQuota.limit : FREE_AI_QUOTA.limit;
 }

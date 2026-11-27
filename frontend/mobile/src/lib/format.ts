@@ -53,6 +53,11 @@ export function dayKey(d: Date) {
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
 }
 
+/** Thứ Hai của tuần chứa `d` theo giờ máy, dạng `dayKey`. */
+export function weekKey(d: Date) {
+  return dayKey(new Date(d.getFullYear(), d.getMonth(), d.getDate() - ((d.getDay() + 6) % 7)));
+}
+
 /** Ngược của `dayKey`: 0 giờ của ngày đó theo giờ máy. */
 export function parseDayKey(key: string) {
   const [year, month, day] = key.split('-').map(Number);
