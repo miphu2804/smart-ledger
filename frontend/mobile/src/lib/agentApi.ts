@@ -36,6 +36,7 @@ export function agentErrorMessage(err: unknown): string {
     if (err.code === 'answer_timeout') return 'Trợ lý trả lời quá lâu nên đã dừng chờ.';
     if (err.code === 'ai_unavailable' || err.status === 503) return 'Trợ lý AI đang tạm lỗi hoặc quá tải.';
     if (err.code === 'conversation_not_found') return 'Cuộc trò chuyện cũ không còn. Gửi lại để bắt đầu cuộc mới.';
+    if (err.code === 'ai_quota_exhausted') return 'Bạn đã dùng hết lượt hỏi Bobi lúc này. Câu hỏi vẫn được giữ để gửi lại khi có lượt mới.';
   }
   return 'Chưa gửi được tin nhắn cho trợ lý.';
 }

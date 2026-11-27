@@ -4,6 +4,7 @@ import { Image, KeyboardAvoidingView, Modal, Pressable, ScrollView, StyleSheet, 
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import type { ChatMessage, ThoughtStep } from '../data/types';
 import { agentApi, agentErrorMessage } from '../lib/agentApi';
+import { usePlanPromo } from './PlanPromo';
 import { followUpSuggestions, revenueSuggestions } from '../lib/aiSuggestions';
 import { ApiError } from '../lib/api';
 import { withoutActions } from '../lib/chatMarkdown';
@@ -50,6 +51,7 @@ export function AiSuggestions({ onAsk }: { onAsk: (question: string) => void }) 
  * ở Trợ lý → Lịch sử. Lỗi AI hiện câu báo và trả câu hỏi về ô nhập (FR-021). `question` null là đóng.
  */
 export function AiAskSheet({ question, onClose }: { question: string | null; onClose: () => void }) {
+  const promo = usePlanPromo();
   const insets = useSafeAreaInsets();
   const scroll = useRef<ScrollView>(null);
   // Mỗi lần mở là một phiên; câu trả lời của phiên đã đóng về muộn thì bỏ.
@@ -82,6 +84,8 @@ export function AiAskSheet({ question, onClose }: { question: string | null; onC
       if (mine !== session.current) return;
       setConversationId(reply.conversation_id);
       setMsgs((m) => [...m, { id: `a${reply.message_id}`, from: 'ai', text: reply.answer }]);
+      // Chỉ đếm câu hỏi: không mở quảng cáo đè lên bảng hỏi nhanh
+      promo.aiAnswered(false);
     } catch (err) {
       if (mine !== session.current) return;
       if (err instanceof ApiError && err.code === 'conversation_not_found') setConversationId(null);

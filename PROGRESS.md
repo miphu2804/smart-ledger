@@ -1,3 +1,12 @@
+### 2026-11-23 — Plan ads on app open and in the Bobi chat
+
+| Area | Change |
+|---|---|
+| Mobile | • `PlanPromo.tsx` shows a plan ad when the app opens (with "Không hiện lại hôm nay") and a "Cần hỏi Bobi nhiều hơn?" popup in the assistant once a day when today's answered questions reach the Free limit from the catalog; a 429 `ai_quota_exhausted` turns it into "Hết lượt hỏi Bobi hôm nay"<br>• Frequency rules in `src/lib/promo.ts`, saved per account (`promoStorage*.ts`): Free accounts only, never on the first app open on a device, during the guide or with a pending payment; at most once per open and 6 hours apart; ads at least 1 hour apart<br>• Same `EXPO_PUBLIC_IN_APP_PURCHASE` gate as the plan screens, so Play builds show no ads; the quick-ask sheet only counts questions<br>• `agentErrorMessage` explains `ai_quota_exhausted` |
+| Docs | • PRD: the ad rules next to the mobile checkout note<br>• User flow: "Quảng cáo gói" above Tổng quan in the Quản lý flow and "Gợi ý mua gói" after Câu trả lời in the Bobi flow, captured on the mock web build |
+
+Check: `npx tsc --noEmit` passes; `node --test` 223 of 223 including 10 new promo tests; Playwright e2e 28 of 28 including first open without an ad, the snooze tick, the plans link and the Bobi popup. Not verified: Android, a real 429 from Core (quota enforcement is off). Commit: the one that adds this entry.
+
 ### 2026-11-21 — Buy a plan from the Quản lý tab
 
 | Area | Change |
@@ -185,13 +194,4 @@ Check: explicit integration suite passed 9/9 without skips; Firebase verificatio
 | Recovery/docs | • Fenced restart/lease reconciliation never regenerates or releases an unknown outcome; cancellation tombstones preserve late-save safety<br>• Reuse approved V21 without new migrations; sync contracts, FR status, Core/AI guides, ERD, CoreQuota model/chart and nonsecret gates/templates |
 
 Check: full Maven verify passed (1,591 tests, no failures/errors/skips); affected HTTP/controller/transaction/Swagger suites passed again after final hardening. The required PostgreSQL report gate passed all 21 suites including 17 ChatQuotaPostgresTest cases, and its 13 self-tests passed. TLC checked CoreQuota separately (1,786 distinct states, no invariant errors); Pele SVG was rendered and inspected. DBML parsing, dummy Compose config, 105 added local links, traceability, OKF (51 concepts) and diff checks passed. Core uses a fake durable AI transport for transaction races plus scoped HTTP adapter tests; full deployed Core–AI/FE/provider acceptance and latency remain unverified. AI runtime was unchanged from phase five, whose Linux test evidence is retained below. Dopbase CLI is missing, so credential-map generation remains blocked. No shared migration/configuration, real transfer, commit or push was executed.
-
-### 2026-11-08 — Add opt-in durable AI turn receipts and cancellation
-
-| Area | Change |
-|---|---|
-| AI | • Default-off internal turn/fence protocol, one durable claim across JSON/SSE, scoped result/restart replay, 202 pending and terminal cancellation/tombstones<br>• Atomic exchange/success receipt, original model metadata and deletion-safe 410; no second generation, replay cache or Core quota accounting |
-| Schema/docs | • Owner-approved separate metadata-only AI migration; original receipt migration and V21 remain intact<br>• Update contract, FR status, runtime/rollback guide, ERD and chat/receipt models/charts; synchronize the nonsecret gate/templates |
-
-Check: Linux AI Ruff lint/format and pytest passed (625 passed, 14 skipped: 13 opt-in live model cases and 1 optional real Redis case); all 16 new real-PostgreSQL receipt/migration cases executed. Windows full pytest had 623 passed/14 skipped and two unchanged cache/Redis timing failures; both pass on Linux. Core Maven verify passed (1,564 tests, 0 failures/errors/skips), required PostgreSQL report gate and 13 gate self-tests passed. TLC checked AgentTurn (340 distinct states) and DurableTurn (49), separately from runtime tests; Pele-rendered SVGs were inspected. DBML parsing, Compose dummy config, local links/traceability, OKF and diff checks passed. Dopbase CLI is missing, so credential-map generation remains blocked. No shared migration/configuration, live provider call, FE acceptance or Core quota enforcement was executed. Commit: not created.
 
