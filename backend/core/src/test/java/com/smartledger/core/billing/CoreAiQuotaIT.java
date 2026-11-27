@@ -80,6 +80,7 @@ class CoreAiQuotaIT {
     private int aiPort;
     private int corePort;
     private long owner;
+    private int prefilled;
     private long shopId;
     private Shop shop;
     private ShopService shops;
@@ -199,6 +200,7 @@ class CoreAiQuotaIT {
     }
 
     @Test void jsonAndRealSseReplayShareOneReceiptAndDebitBeforeDone() throws Exception {
+        usedFree(98);
         var first = chat("a", false); assertThat(first.statusCode()).isEqualTo(200);
         var replay = chat("a", true); assertThat(replay.statusCode()).isEqualTo(200);
         assertThat(replay.headers().firstValue("Content-Type").orElse("")).startsWith("text/event-stream");
@@ -224,6 +226,7 @@ class CoreAiQuotaIT {
     }
 
     @Test void pendingReplayAndConcurrentLastSlotDoNotGenerateTwice() throws Exception {
+        usedFree(98);
         assertThat(chat("used", false).statusCode()).isEqualTo(200); control("WAIT");
         try (var workers = Executors.newSingleThreadExecutor()) {
             var running = workers.submit(() -> chat("waiting", false));
@@ -311,6 +314,7 @@ class CoreAiQuotaIT {
     }
 
     @Test void paidAllowanceAndExactExpiryMatchThePublicQuotaProjection() throws Exception {
+        usedFree(98);
         assertThat(chat("free-a", false).statusCode()).isEqualTo(200);
         assertThat(chat("free-b", false).statusCode()).isEqualTo(200);
         assertThat(chat("free-full", false).statusCode()).isEqualTo(429);
@@ -330,7 +334,7 @@ class CoreAiQuotaIT {
         clock.current.set(expiry.toInstant());
         assertThat(chat("expired-free", false).statusCode()).isEqualTo(200);
         assertThat(quota().path("effectiveTier").asText()).isEqualTo("FREE");
-        assertThat(quota().path("remaining").asInt()).isEqualTo(1);
+        assertThat(quota().path("remaining").asInt()).isEqualTo(99);
         counts(4, 0); assertThat(stats().path("calls").asInt()).isEqualTo(4);
     }
 
@@ -362,8 +366,17 @@ class CoreAiQuotaIT {
     }
     private static JsonNode json(HttpResponse<String> response) throws Exception { return JSON.readTree(response.body()); }
     private int rows(String table) { return sql.queryForObject("SELECT count(*) FROM " + table, Integer.class); }
+    /** Pre-fills this week's Free window so a test reaches the 100-turn limit with a few real chats; counts() excludes it. */
+    private void usedFree(int committed) {
+        var free = SubscriptionPolicy.free(SubscriptionPolicy.now(clock.instant()));
+        sql.update("""
+                INSERT INTO ai_quota_windows(id,user_id,kind,period_id,policy_version,window_start,nominal_end,
+                    limit_count,committed_count) VALUES (?,?,'FREE_DAILY',NULL,1,?,?,100,?)
+                """, UUID.randomUUID(), owner, free.start(), free.nominalEnd(), committed);
+        prefilled = committed;
+    }
     private void counts(int committed, int reserved) {
-        assertThat(sql.queryForObject("SELECT coalesce(sum(committed_count),0) FROM ai_quota_windows", Integer.class)).isEqualTo(committed);
+        assertThat(sql.queryForObject("SELECT coalesce(sum(committed_count),0) FROM ai_quota_windows", Integer.class)).isEqualTo(committed + prefilled);
         assertThat(sql.queryForObject("SELECT coalesce(sum(reserved_count),0) FROM ai_quota_windows", Integer.class)).isEqualTo(reserved);
     }
     private static VerifiedFirebaseToken token() { return new VerifiedFirebaseToken("it-owner", null, false, null, null, null); }

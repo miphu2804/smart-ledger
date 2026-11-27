@@ -33,7 +33,7 @@ REQUIRED = {
         "disabledPayerKeepsPaidMoneyPendingUntilActualActivation",
         "rollbackAndSkippedGrantOrAppliedWritesLeavePendingMoneyAndRetryOnce",
         "countersStayInSameFinalWindowWhenRenewalExtendsItsClippedEnd",
-        "freeCountersResetAtVietnamMidnightAndPaidActivationDoesNotStackAllowances",
+        "freeCountersResetAtMondayVietnamMidnightAndPaidActivationDoesNotStackAllowances",
         "reviewUnpaidUnsupportedSnapshotsAndWrongRolesNeverReceiveAutomaticGrant",
         "missingSubscriptionStoreFailsClosedInsteadOfReportingFree",
         "backwardClockCannotReplaceCurrentEpochWithAnOverlappingTerm",
