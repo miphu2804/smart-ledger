@@ -52,6 +52,12 @@ REQUIRED = {
         "disabledCreationOrPayerDoesNotDiscardAlreadyIssuedMoney",
         "distinctSimultaneousTransfersCannotBothPayOneRequest",
         "silentSkippedWritesCannotProduceAnAcceptedUnpaidReceipt",
+        "cancellationRetriesPreserveSnapshotAndWorkWithCollectionDisabled",
+        "cancellationGuardsHideOtherOwnersAndPreservePaidAndExpiredRequests",
+        "webhookAfterCancellationIsDurableReviewAndNeverGrants",
+        "cancellationWinsRequestLockBeforeWaitingWebhook",
+        "webhookWinsRequestLockBeforeWaitingCancellation",
+        "silentSkippedCancellationFailsClosedWithoutSuccessResponse",
     },
     "com.smartledger.core.config.BillingSchemaPostgresTest": {
         "upgradePreservesV20DataAndAddsSixEmptyPrivateTables",
@@ -63,6 +69,8 @@ REQUIRED = {
         "independentDatabaseWritersCannotReserveTheSameLastSlot",
         "aiMigrationPreservesChatDeletionAndKeepsSuccessfulReceiptWithoutContent",
         "migrationRevokesInheritedDefaultClientAndAiReaderGrants",
+        "cancellationUpgradePreservesV21EvidenceAndEnforcesCancelledState",
+        "cancellationConstraintCollisionRollsBackAndKeepsV21Usable",
     },
     "com.smartledger.core.ratelimit.UserRateLimitPostgresTest": {
         "migrationPreservesV19AndAddsPrivateConstrainedTables",

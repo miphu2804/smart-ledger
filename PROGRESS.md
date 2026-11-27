@@ -1,3 +1,12 @@
+### 2026-11-28 — Cancel owned payment requests durably in Core
+
+| Area | Change |
+|---|---|
+| Core | • Add retry-safe OWNER payment cancellation, CANCELLED/cancelledAt and paid-request conflict handling on approved V22<br>• Serialize cancellation with webhook acceptance; retain later transfers for reconciliation without automatic grants |
+| Docs | • Update BR-027, FR-041/AC-151, the API contract, schema and FE handoff; document V22-before-binary rollout and retained-schema rollback |
+
+Check: Core Maven verify passed 1,609 tests with no failures, errors or skips on disposable PostgreSQL 17 with pgvector. V21-to-V22 preservation, cancellation retry/authorization, both webhook races, no-grant review and failed-write rollback are covered. The strengthened 11-test schema suite passed again, including rollback after the first ALTER succeeds. All 21 required PostgreSQL suites, 13 report-gate self-tests, OKF and diff checks passed. No shared migration, configuration change or deployment was performed. Commit: the one that adds this entry.
+
 ### 2026-11-27 — Keep the Vercel token out of process arguments
 
 | Area | Change |
@@ -187,12 +196,3 @@ Check: AI Ruff lint and format passed; pytest passed 630 tests with 14 skipped, 
 | Integration | • Include both review fixes and integrate staging `2ba4f80`, preserving both sets of progress entries |
 
 Check: Core Maven verify passed 1,595 tests with no failures, errors, or skips. All 21 required PostgreSQL suites and 13 report gate self-tests passed. AI Ruff lint and format passed, and Linux pytest passed 627 tests with 14 optional skips. OKF and diff checks passed. The AI container image built, while the Core image build was stopped when the Windows system drive fell below 300 MB free. Commit: `b685202`.
-
-### 2026-11-09 — Prepare SePay, subscription and AI quota for staging review
-
-| Area | Change |
-|---|---|
-| Billing/AI | • Consolidate the seven approved phases on feat/sepay-payment-design and fast-forward the latest staging revision 9613e47 without conflicts<br>• Retain default-off collection, webhook, grant, receipt, quota admission and recovery gates; no shared migration or deployment |
-| Docs | • Correct the AI protocol guide to describe the implemented Core turn/fence integration<br>• Prepare the staging PR with migration/rollback boundaries, FE handoff and explicit remaining provider/FE acceptance |
-
-Check: retained reports confirm Core verify 1,591 tests and explicit Core–AI integration 9 tests, all without failures/errors/skips; Linux AI has 625 passed and 14 optional skips. Runtime sources did not change after those checks; the three fetched staging commits affect only Mobile and the eval workflow. Fresh Ruff lint/format, 21-suite PostgreSQL report gate, 13 gate self-tests, 123 added-document links, traceability, OKF (52 concepts, Linux read-only checker), proposed-file credential-pattern and diff checks passed. Exact Compose image builds were attempted twice but blocked by auth.docker.io connection resets before compilation; CI image-build verification remains required. Dopbase CLI is unavailable, so private credential-map regeneration was attempted but not completed. No live provider, transfer, FE acceptance, shared DB/configuration or deployment was exercised. Commit: included in this change.

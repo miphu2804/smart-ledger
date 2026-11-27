@@ -28,7 +28,8 @@ Existing `users`, `shops`, shop financial tables and AI chat tables retain their
 | `payment_code` | VARCHAR(15) | Exactly SLP plus twelve uppercase alphanumeric characters; generated with collision retry |
 | `idempotency_key`, `request_hash`, `hash_version` | VARCHAR(255), VARCHAR(64), INTEGER | Nonblank key; SHA-256 semantic input hash with explicit canonicalization version |
 | `original_response` | JSONB | Complete original public creation response; object only; no token, raw webhook or signature |
-| `status`, `fulfillment_status` | VARCHAR(16), VARCHAR(16) | PENDING/EXPIRED/PAID; NOT_STARTED/PENDING/APPLIED |
+| `status`, `fulfillment_status` | VARCHAR(16), VARCHAR(16) | PENDING/EXPIRED/PAID/CANCELLED; NOT_STARTED/PENDING/APPLIED |
+| `cancelled_at` | TIMESTAMPTZ, nullable | Added by V22. Present exactly for CANCELLED, within the request collection window. |
 | `created_at`, `expires_at`, `paid_at` | TIMESTAMPTZ; last nullable | Deadline exactly 30 minutes after creation; PAID iff paid_at present |
 | `fulfilled_grant_id` | BIGINT nullable | Same request/payer's applied grant; present iff fulfillment is APPLIED |
 
