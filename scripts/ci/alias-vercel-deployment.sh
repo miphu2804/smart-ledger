@@ -11,13 +11,13 @@ alias="${2:-}"
 alias="${alias#https://}"
 [ -n "$alias" ] || { ci_error "the staging alias is not set for this environment"; exit 1; }
 api=https://api.vercel.com
-auth="Authorization: Bearer $VERCEL_TOKEN"
 
 # curl -f prints nothing of the response, so a rejected alias showed only "curl: (22)". Print the status and Vercel's own
-# message, which names the cause (a domain missing from the project, say).
+# message, which names the cause (a domain missing from the project, say). The token header reaches curl through a file
+# descriptor, not its arguments, which every process on the machine can read with ps.
 vercel_api() {
   local response status body
-  response=$(curl -sS -w '\n%{http_code}' "$@") || return 1
+  response=$(curl -sS -w '\n%{http_code}' -H @<(printf 'Authorization: Bearer %s\n' "$VERCEL_TOKEN") "$@") || return 1
   status=${response##*$'\n'}
   body=${response%$'\n'*}
   if [ "${status#2}" = "$status" ]; then
@@ -27,8 +27,8 @@ vercel_api() {
   printf '%s\n' "$body"
 }
 
-id=$(vercel_api -H "$auth" "$api/v13/deployments/${deployment#https://}?teamId=$VERCEL_ORG_ID" | jq -r .id)
-vercel_api -X POST -H "$auth" -H "Content-Type: application/json" \
+id=$(vercel_api "$api/v13/deployments/${deployment#https://}?teamId=$VERCEL_ORG_ID" | jq -r .id)
+vercel_api -X POST -H "Content-Type: application/json" \
   -d "$(jq -n --arg alias "$alias" '{alias: $alias}')" \
   "$api/v2/deployments/$id/aliases?teamId=$VERCEL_ORG_ID"
 ci_output url "https://$alias"

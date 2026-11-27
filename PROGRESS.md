@@ -1,3 +1,12 @@
+### 2026-11-27 — Keep the Vercel token out of process arguments
+
+| Area | Change |
+|---|---|
+| CI | • `vercel pull`, `vercel-build.sh` and `vercel-deploy.sh` drop `--token`: Vercel CLI 62.2.0 reads `VERCEL_TOKEN` from the job env, so another job on the same self-hosted Mac cannot read the token with `ps`<br>• `alias-vercel-deployment.sh` hands curl the `Authorization` header through a file descriptor instead of a `-H` argument |
+| Docs | • CI runners in `ci-cd.md` records that the Vercel token never goes in a command argument |
+
+Check: shims that log argv show no token in any `vercel` or curl argument for preview and production under macOS `/bin/bash` 3.2; CLI 62.2.0 with a fake `VERCEL_TOKEN` reports the env token invalid; the alias script with a fake token gets Vercel's `invalidToken` (`missingToken` when empty); actionlint, shellcheck, provider coupling and `okf_sync.py --check` pass. Not verified: a real deploy run. Commit: the one that adds this entry.
+
 ### 2026-11-27 — Give the Free plan 100 AI questions a week in Core
 
 | Area | Change |
@@ -187,11 +196,3 @@ Check: Core Maven verify passed 1,595 tests with no failures, errors, or skips. 
 | Docs | • Correct the AI protocol guide to describe the implemented Core turn/fence integration<br>• Prepare the staging PR with migration/rollback boundaries, FE handoff and explicit remaining provider/FE acceptance |
 
 Check: retained reports confirm Core verify 1,591 tests and explicit Core–AI integration 9 tests, all without failures/errors/skips; Linux AI has 625 passed and 14 optional skips. Runtime sources did not change after those checks; the three fetched staging commits affect only Mobile and the eval workflow. Fresh Ruff lint/format, 21-suite PostgreSQL report gate, 13 gate self-tests, 123 added-document links, traceability, OKF (52 concepts, Linux read-only checker), proposed-file credential-pattern and diff checks passed. Exact Compose image builds were attempted twice but blocked by auth.docker.io connection resets before compilation; CI image-build verification remains required. Dopbase CLI is unavailable, so private credential-map regeneration was attempted but not completed. No live provider, transfer, FE acceptance, shared DB/configuration or deployment was exercised. Commit: included in this change.
-
-### 2026-11-09 — Define GA4 system boundaries and native verification
-
-| Area | Change |
-|---|---|
-| Docs | • Extend ADR-0010 with verified event semantics and proposed consent, reporting and rollout safeguards; link the native verification matrix<br>• Add GA4 system boundaries and separate staging validation from production insights; rebalance logical architecture around business capabilities, rename the combined runtime/delivery diagram to system design, and add SVG-renderer-compatible labels and PNG preview |
-
-Check: source inspected at staging `9613e47e`; Mobile typecheck, 205 unit tests and mock web export passed; OKF/link and diff checks passed. Three SVGs render white in light/dark; logical SVG text renders in librsvg, but Zed is not independently verified. GA4 validator: 0 warnings; system design: 0 errors/crossings, with existing warnings. Native delivery, Console settings and product/legal acceptance remain unverified; no runtime changes. Commit: the commits that add this entry.

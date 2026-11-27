@@ -66,6 +66,7 @@ drawio -x -f svg -e --embed-svg-images --svg-theme light -b ffffff -o docs/archi
 - Pull requests from forks always run on `ubuntu-24.04`, so a fork never runs code on a self-hosted machine.
 - A newer push to a pull request cancels the older CI run of that pull request; push runs on `staging` and `main` are never cancelled.
 - Tests start PostgreSQL with `docker run` on a free port, so jobs on one machine do not collide.
+- Every process on a self-hosted machine, another job included, can read command arguments with `ps`, so the Vercel token never goes in one: the Vercel CLI reads `VERCEL_TOKEN` from the job environment, and `alias-vercel-deployment.sh` hands curl its header through a file descriptor.
 
 ## Path filtering
 
