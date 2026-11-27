@@ -7,6 +7,8 @@ and its `resource` field points back to it. Run it without arguments after addin
 replace any `description: TODO`. `--check` writes nothing and exits 1 when the bundle drifts; CI runs it.
 """
 
+from __future__ import annotations
+
 import argparse
 import json
 import os
