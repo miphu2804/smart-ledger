@@ -21,6 +21,7 @@ from src.drafts import matching
 from src.drafts.catalog import CatalogProduct, ProductCatalogRepository
 from src.drafts.errors import CatalogUnavailableError, DraftUnavailableError
 from src.drafts.matching import DraftItem, ProposedLine
+from src.llm.session_settings import session_settings
 from src.prompt_templates import (
     DRAFT_EMPTY_CATALOG,
     DRAFT_EXPENSE_INPUT,
@@ -28,7 +29,6 @@ from src.prompt_templates import (
     DRAFT_SALE_INPUT,
     DRAFT_SALE_PROMPT,
 )
-from src.providers.session_settings import session_settings
 
 logger = logging.getLogger(__name__)
 

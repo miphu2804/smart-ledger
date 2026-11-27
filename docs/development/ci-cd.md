@@ -21,12 +21,13 @@ Branch and review rules are in [CONTRIBUTING](../../CONTRIBUTING.md). Workflow d
 
 ## Delivery and runtime topology
 
-![CI/CD flow](../architecture/diagrams/images/ci-cd.svg)
+![System design: runtime, external services and delivery](../architecture/diagrams/images/system-design.svg)
 
-Green numbers are the deploy, purple the VPS setup with Ansible, from `infra.yml` or `scripts/infra/run.sh`, and orange the runtime requests. Gray dashed arrows are secrets: the deploy exports `core` and `ai` from Dopbase with runner tokens kept in the GitHub environment, and `scripts/infra/run.sh` exports the VPS files for Ansible. The application icons depict a stack template, not shared containers: staging and production each run as an isolated Compose project with their own Core, AI, Bifrost and Redis instances and separate Supabase databases. The VPS network diagram below shows these environment boundaries. The diagram shows the target setup; [technical design §1](../architecture/technical-design.md#1-scope) records what is implemented. Edit [`ci-cd.drawio`](../architecture/diagrams/src/ci-cd.drawio) and re-export:
+Green numbers are the deploy, purple the VPS setup with Ansible, from `infra.yml` or `scripts/infra/run.sh`, and orange the runtime requests. Gray dashed arrows are secrets: the deploy exports `core` and `ai` from Dopbase with runner tokens kept in the GitHub environment, and `scripts/infra/run.sh` exports the VPS files for Ansible. The application icons depict a stack template, not shared containers: staging and production each run as an isolated Compose project with their own Core, AI, Bifrost and Redis instances and separate Supabase databases. The VPS network diagram below shows these environment boundaries. The direct Mobile → Google Analytics 4 path in External represents consented native app usage, not business transactions or server telemetry; it bypasses Caddy/Core. Separate staging and production destinations are proposed, not verified ([ADR-0010](../architecture/adr/0010-mobile-usage-analytics-ga4.md)). The diagram shows the target setup; [technical design §1](../architecture/technical-design.md#1-scope) records what is implemented. Edit [`system-design.drawio`](../architecture/diagrams/src/system-design.drawio) and re-export:
 
 ```bash
-drawio -x -f svg -e --embed-svg-images --svg-theme light -b ffffff -o docs/architecture/diagrams/images/ci-cd.svg docs/architecture/diagrams/src/ci-cd.drawio
+drawio -x -f svg -e --embed-svg-images --svg-theme light -b ffffff -o docs/architecture/diagrams/images/system-design.svg docs/architecture/diagrams/src/system-design.drawio
+drawio -x -f png --width 2400 -o docs/architecture/diagrams/images/system-design.png docs/architecture/diagrams/src/system-design.drawio
 ```
 
 ![VPS Docker networks and ports](../architecture/diagrams/images/vps-network.svg)
@@ -63,11 +64,13 @@ drawio -x -f svg -e --embed-svg-images --svg-theme light -b ffffff -o docs/archi
 
 - While GitHub-hosted runners cannot start, set `CI_RUNNER=self-hosted` and clear `CD_RUNNER`. `auto` cannot help, because its own pick runs on GitHub-hosted.
 - Pull requests from forks always run on `ubuntu-24.04`, so a fork never runs code on a self-hosted machine.
+- A newer push to a pull request cancels the older CI run of that pull request; push runs on `staging` and `main` are never cancelled.
 - Tests start PostgreSQL with `docker run` on a free port, so jobs on one machine do not collide.
 
 ## Path filtering
 
 Area checks are selected by changed paths in [`scripts/ci/changes.sh`](../../scripts/ci/changes.sh), not by workflow `on.paths`, so every check still reports a result. Read the definitions when changing dependencies or shared files; do not infer coverage from the PR's overall green status. The required-check policy is in [CONTRIBUTING](../../CONTRIBUTING.md#required-checks-and-deployment). The `docs` area (`*.md`, `.okf/`, `scripts/docs/`) runs the `docs` job, which runs `python3 scripts/docs/okf_sync.py --check` to fail when the [`.okf/` metadata bundle](../README.md#conventions) drifts from the documents, a human document starts with frontmatter or a relative link breaks.
+After a push, CD deploys AI only when the extra `ai_image` flag is true: a change to the shared CI files, `deploy-backend.yml`, `supabase/` or an input of the AI image (`backend/ai/src/`, `pyproject.toml`, `uv.lock`, `Dockerfile`, `.dockerignore`), so a change to only AI docs, tests or evaluation runs the `ai` tests without redeploying; a re-run still deploys every passing area.
 
 ## Service variables
 

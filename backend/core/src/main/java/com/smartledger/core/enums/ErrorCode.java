@@ -101,9 +101,20 @@ public enum ErrorCode {
     INVALID_AUDIT_QUERY(HttpStatus.BAD_REQUEST, "invalid_audit_query", "Use a nonnegative page, size 1-100, positive entity ID and an increasing time range."),
     CONVERSATION_NOT_FOUND(HttpStatus.NOT_FOUND, "conversation_not_found", "This conversation is unavailable."),
     AI_UNAVAILABLE(HttpStatus.SERVICE_UNAVAILABLE, "ai_unavailable", "The assistant is unavailable. Please try again."),
+    AI_TURN_KEY_INVALID(HttpStatus.BAD_REQUEST, "ai_turn_key_invalid", "Use one nonblank Idempotency-Key of at most 255 characters."),
+    AI_TURN_CONFLICT(HttpStatus.CONFLICT, "ai_turn_conflict", "This key already belongs to another question or shop."),
+    AI_QUOTA_EXHAUSTED(HttpStatus.TOO_MANY_REQUESTS, "ai_quota_exhausted", "The assistant allowance is exhausted for this window."),
+    AI_QUOTA_UNAVAILABLE(HttpStatus.SERVICE_UNAVAILABLE, "ai_quota_unavailable", "The assistant quota outcome is unavailable. Retry the same key."),
+    AI_TURN_RESULT_REMOVED(HttpStatus.GONE, "ai_turn_result_removed", "The saved answer was removed. This completed turn cannot be generated again."),
+    AI_TURN_CANCELLED(HttpStatus.CONFLICT, "ai_turn_cancelled", "This question was cancelled. A deliberate new question needs a new key."),
     AGENT_INPUT_TOO_LONG(HttpStatus.UNPROCESSABLE_ENTITY, "input_too_long", "The message is too long. Shorten it and send it again."),
     AGENT_ANSWER_UNAVAILABLE(HttpStatus.UNPROCESSABLE_ENTITY, "answer_unavailable", "The assistant could not answer this question."),
-    AGENT_ANSWER_TIMEOUT(HttpStatus.UNPROCESSABLE_ENTITY, "answer_timeout", "The assistant took too long to answer.");
+    AGENT_ANSWER_TIMEOUT(HttpStatus.UNPROCESSABLE_ENTITY, "answer_timeout", "The assistant took too long to answer."),
+    INVALID_BILLING_REQUEST(HttpStatus.BAD_REQUEST, "invalid_billing_request", "Use a valid plan, version, request ID and idempotency key."),
+    BILLING_UNAVAILABLE(HttpStatus.SERVICE_UNAVAILABLE, "billing_unavailable", "Billing is unavailable. Please try again later."),
+    BILLING_IDEMPOTENCY_CONFLICT(HttpStatus.CONFLICT, "billing_idempotency_conflict", "This key already belongs to another payment request."),
+    BILLING_OFFER_UNAVAILABLE(HttpStatus.CONFLICT, "billing_offer_unavailable", "This plan version is unavailable."),
+    BILLING_REQUEST_NOT_FOUND(HttpStatus.NOT_FOUND, "billing_request_not_found", "This payment request is unavailable.");
 
     private final HttpStatus httpStatus;
     private final String code;

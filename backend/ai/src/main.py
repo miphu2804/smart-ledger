@@ -1,38 +1,52 @@
-import asyncio
 import logging
 import sys
 from contextlib import asynccontextmanager
-from pathlib import Path
 
 import httpx
 import pydantic_ai
 from fastapi import APIRouter, Depends, FastAPI, Request
 from fastapi.responses import JSONResponse
 from prometheus_fastapi_instrumentator import Instrumentator
-from pydantic_ai import Embedder
 
-from src.agent.errors import ConversationNotFoundError, GuardrailError
+from src.agent.conversation_repository import AgentConversationRepository
+from src.agent.errors import (
+    CONVERSATION_NOT_FOUND_STATUS,
+    GUARDRAIL_STATUS,
+    ConversationNotFoundError,
+    GuardrailError,
+    TurnProtocolError,
+)
 from src.agent.guardrails import GuardrailLimits
-from src.agent.repository import AgentConversationRepository
 from src.agent.router import router as agent_router
 from src.agent.service import AgentService
+from src.agent.tools import (
+    MEMORY_CAPABILITY,
+    AgentCapability,
+    calculation_capability,
+    restock_capability,
+    sandbox_capability,
+    shop_data_capability,
+)
+from src.agent.turn_repository import AgentTurnRepository
+from src.agent.turn_service import AgentTurnService
 from src.app_config import app_config
 from src.calculation.service import CalculationLimits, CalculationService
-from src.infra.postgre_db_client import PostgreDBClient
+from src.embedding.factory import build_embedder
+from src.infra.postgres_client import PostgresClient
 from src.infra.redis_client import RedisClient
-from src.llm_router.bifrost_tier_classifier import BifrostTierClassifier
-from src.llm_router.service import LLMRouterService
-from src.llm_router.tier import Tier
+from src.llm.bifrost_tier_classifier import BifrostTierClassifier
+from src.llm.model_factory import LLMFactory
+from src.llm.service import LLMService
+from src.llm.tier import Tier
+from src.llm.tier_router import TierRouter
 from src.log_formatter import LevelColorFormatter
-from src.memory.onnx_embedding import OnnxEmbeddingModel
 from src.memory.repository import EMBEDDING_DIMENSIONS, AgentMemoryRepository
+from src.memory.router import router as memory_router
 from src.memory.service import AgentMemoryService
-from src.memory.workers_ai_embedding import WorkersAIEmbeddingModel
 from src.observability import Observability
 from src.prompt_templates import TIER_CLASSIFIER_PROMPT, TIER_DESCRIPTIONS
-from src.providers.llm_factory import LLMFactory
 from src.restock.service import RestockService
-from src.sandbox.wrapper import Sandbox, SandboxLimits
+from src.sandbox.code_mode import Sandbox, SandboxLimits
 from src.security import require_internal_token
 from src.sql.repository import ShopDataRepository
 
@@ -53,7 +67,7 @@ logger = logging.getLogger(__name__)
 pydantic_ai.BANNER_ENABLED = False
 
 
-def build_shop_data(reader: PostgreDBClient) -> ShopDataRepository | None:
+def build_shop_data(reader: PostgresClient) -> ShopDataRepository | None:
     url = app_config.AI_SQL_READER_URL
     if url is None or not url.strip():
         logger.info("sql reader unconfigured; shop-data tool off")
@@ -117,9 +131,30 @@ def build_sandbox() -> Sandbox | None:
         return None
 
 
-def build_llm_router(
+def build_capabilities(
+    shop_data: ShopDataRepository | None, memory: AgentMemoryService | None
+) -> list[AgentCapability]:
+    """The optional agent capabilities in prompt order; one that is off is left out."""
+    calculation = build_calculation()
+    sandbox = build_sandbox()
+    return [
+        *(
+            [
+                shop_data_capability(shop_data),
+                restock_capability(RestockService(shop_data)),
+            ]
+            if shop_data is not None
+            else []
+        ),
+        *([calculation_capability(calculation)] if calculation is not None else []),
+        *([MEMORY_CAPABILITY] if memory is not None else []),
+        *([sandbox_capability(sandbox)] if sandbox is not None else []),
+    ]
+
+
+def build_tier_router(
     factory: LLMFactory, decisions: httpx.AsyncClient, observability: Observability
-) -> LLMRouterService | None:
+) -> TierRouter | None:
     url = app_config.TIER_CLASSIFIER_URL
     models = {
         tier: factory.create_model(alias) for tier, alias in CHAT_TIER_ALIASES.items()
@@ -139,7 +174,7 @@ def build_llm_router(
         descriptions=TIER_DESCRIPTIONS,
         observability=observability,
     )
-    return LLMRouterService(
+    return TierRouter(
         classifier,
         models,
         CHAT_TIER_ALIASES,
@@ -148,14 +183,20 @@ def build_llm_router(
 
 
 def build_memory_service(
-    chat_model, postgres: PostgreDBClient, observability: Observability
+    chat_model, postgres: PostgresClient, observability: Observability
 ) -> AgentMemoryService | None:
     if not app_config.AGENT_MEMORY_ENABLED:
         return None
     if chat_model is None or postgres.sessions is None:
         logger.warning("memory enabled without a chat model or postgres; memory off")
         return None
-    embedder = build_memory_embedder()
+    embedder = build_embedder(
+        app_config.AGENT_MEMORY_EMBEDDING_PROVIDER,
+        app_config.AGENT_MEMORY_EMBEDDING_MODEL,
+        EMBEDDING_DIMENSIONS,
+        app_config.CLOUDFLARE_ACCOUNT_ID,
+        app_config.CLOUDFLARE_API_TOKEN,
+    )
     if embedder is None:
         return None
     return AgentMemoryService(
@@ -171,62 +212,17 @@ def build_memory_service(
     )
 
 
-def build_memory_embedder() -> Embedder | None:
-    provider = app_config.AGENT_MEMORY_EMBEDDING_PROVIDER
-    model = app_config.AGENT_MEMORY_EMBEDDING_MODEL
-    if provider == "cloudflare":
-        account_id = app_config.CLOUDFLARE_ACCOUNT_ID
-        api_token = app_config.CLOUDFLARE_API_TOKEN
-        if not account_id or not api_token:
-            logger.error("cloudflare embeddings need an account id and token")
-            return None
-        return Embedder(
-            WorkersAIEmbeddingModel(
-                model,
-                account_id=account_id,
-                api_token=api_token,
-                dimensions=EMBEDDING_DIMENSIONS,
-            )
-        )
-    if provider == "onnx":
-        try:
-            return Embedder(
-                OnnxEmbeddingModel(Path(model), dimensions=EMBEDDING_DIMENSIONS)
-            )
-        except Exception as error:
-            # Missing or unreadable model files turn memory off; chat still works.
-            logger.error("onnx embedding model at %r failed to load: %s", model, error)
-            return None
-    if provider != "sentence-transformers":
-        logger.error("unknown memory embedding provider %r; memory off", provider)
-        return None
-    try:
-        # Resolved now, so a missing `memory` dependency group shows at startup rather
-        # than on the first chat; the weights still load on first use.
-        return Embedder(
-            f"sentence-transformers:{model}",
-            settings={
-                "sentence_transformers_normalize_embeddings": True,
-                "dimensions": EMBEDDING_DIMENSIONS,
-            },
-            defer_model_check=False,
-        )
-    except ImportError:
-        logger.error("memory enabled but the memory dependency group is missing")
-        return None
-
-
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # Here, not at import, so importing the app (as the tests do) sends no traces;
     # still before any agent runs, so every run is traced when a key is set.
     observability = Observability.start(app_config)
-    postgres = PostgreDBClient(
+    postgres = PostgresClient(
         app_config.POSTGRES_URL, pool_size=app_config.POSTGRES_POOL_MAX_SIZE
     )
     cache = RedisClient(app_config.REDIS_URL)
     # Model-written SQL runs as the read-only login, so it gets its own pool.
-    reader = PostgreDBClient(
+    reader = PostgresClient(
         app_config.AI_SQL_READER_URL, pool_size=app_config.SQL_POOL_MAX_SIZE
     )
     factory = LLMFactory(app_config)
@@ -241,8 +237,8 @@ async def lifespan(app: FastAPI):
         if app_config.MODEL_TIERING_ENABLED and chat_model is not None
         else None
     )
-    llm_router = (
-        build_llm_router(factory, decisions, observability)
+    tier_router = (
+        build_tier_router(factory, decisions, observability)
         if decisions is not None
         else None
     )
@@ -251,8 +247,8 @@ async def lifespan(app: FastAPI):
     shop_data = build_shop_data(reader)
     memory = build_memory_service(chat_model, postgres, observability)
     app.state.memory = memory
-    app.state.agent = AgentService(
-        chat_model,
+    agent = AgentService(
+        LLMService(chat_model, tier_router),
         conversations,
         observability=observability,
         guardrail_limits=GuardrailLimits(
@@ -265,30 +261,24 @@ async def lifespan(app: FastAPI):
             turn_token_limit=app_config.AGENT_TURN_TOKEN_LIMIT,
             turn_timeout_seconds=app_config.AGENT_TURN_TIMEOUT_SECONDS,
         ),
-        shop_data=shop_data,
-        restock=RestockService(shop_data) if shop_data else None,
+        capabilities=build_capabilities(shop_data, memory),
         memory=memory,
-        calculation=build_calculation(),
-        sandbox=build_sandbox(),
         history_turns=app_config.AGENT_HISTORY_TURNS,
-        llm_router=llm_router,
+    )
+    app.state.agent = agent
+    app.state.turns = AgentTurnService(
+        AgentTurnRepository(postgres),
+        conversations,
+        agent,
+        app_config.AGENT_TURN_RECEIPTS_ENABLED,
     )
     try:
         yield
     finally:
         # Memory writes still running would be lost on restart, and their spans
         # belong to the turn's session, so they finish before the flush.
-        memory_writes = app.state.agent.memory_writes
-        if memory_writes:
-            _, unfinished = await asyncio.wait(memory_writes, timeout=10)
-            # Cancelled and awaited, so none is still writing when the pool closes.
-            for task in unfinished:
-                task.cancel()
-            if unfinished:
-                logger.warning(
-                    "memory writes cancelled at shutdown: %d", len(unfinished)
-                )
-                await asyncio.gather(*unfinished, return_exceptions=True)
+        if memory is not None:
+            await memory.finish_writes(timeout=10)
         if decisions is not None:
             await decisions.aclose()
         await observability.flush()
@@ -301,12 +291,15 @@ async def lifespan(app: FastAPI):
 async def conversation_not_found(
     request: Request, exc: ConversationNotFoundError
 ) -> JSONResponse:
-    return JSONResponse(status_code=404, content={"detail": "conversation_not_found"})
+    return JSONResponse(
+        status_code=CONVERSATION_NOT_FOUND_STATUS,
+        content={"detail": "conversation_not_found"},
+    )
 
 
 async def guardrail_blocked(request: Request, exc: GuardrailError) -> JSONResponse:
     # The code is the whole message: the app maps it to the owner's language.
-    return JSONResponse(status_code=422, content={"detail": exc.code})
+    return JSONResponse(status_code=GUARDRAIL_STATUS, content={"detail": exc.code})
 
 
 async def ai_unavailable(request: Request, exc: Exception) -> JSONResponse:
@@ -315,17 +308,27 @@ async def ai_unavailable(request: Request, exc: Exception) -> JSONResponse:
     return JSONResponse(status_code=503, content={"detail": "ai_unavailable"})
 
 
+async def turn_protocol_error(request: Request, exc: TurnProtocolError) -> JSONResponse:
+    return JSONResponse(
+        status_code=exc.status,
+        content={"detail": exc.code},
+        headers={"Cache-Control": "no-store"},
+    )
+
+
 # Each flow's router is mounted here and inherits the internal-token check, so a new
 # flow cannot reach Core's callers without it.
 internal_router = APIRouter(
     prefix="/internal/v1", dependencies=[Depends(require_internal_token)]
 )
 internal_router.include_router(agent_router)
+internal_router.include_router(memory_router)
 
 app = FastAPI(title=app_config.APP_TITLE, version="0.1.0", lifespan=lifespan)
 app.include_router(internal_router)
 app.add_exception_handler(ConversationNotFoundError, conversation_not_found)
 app.add_exception_handler(GuardrailError, guardrail_blocked)
+app.add_exception_handler(TurnProtocolError, turn_protocol_error)
 app.add_exception_handler(Exception, ai_unavailable)
 # Request rate, status class and latency per route for Grafana (deploy/monitoring/),
 # timed to the last streamed byte. /metrics skips the internal token: AI publishes no

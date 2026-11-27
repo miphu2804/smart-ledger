@@ -1,3 +1,5 @@
+import { Platform } from 'react-native';
+
 /**
  * Environment configuration for the mobile app.
  * Expo exposes only variables prefixed with EXPO_PUBLIC_ in the bundle (see .env.example).
@@ -46,6 +48,14 @@ export const STT_MODEL_URL = process.env.EXPO_PUBLIC_STT_MODEL_URL ?? '';
 export const APP_UPDATE_URL = (process.env.EXPO_PUBLIC_UPDATE_URL ?? '').trim();
 
 /**
+ * Shows plan purchase (the "Mua gói" card and the SePay checkout). Google Play requires Play Billing for paid plans that
+ * unlock app features and forbids leading users to another payment method, so a Play build must leave this off.
+ * `EXPO_PUBLIC_IN_APP_PURCHASE=true` or `false` decides explicitly; when empty, it is on for web and for the self-updating
+ * APK from the landing page (a build with EXPO_PUBLIC_UPDATE_URL, which Play builds never have) and off elsewhere.
+ */
+export const IN_APP_PURCHASE = purchaseFlag(process.env.EXPO_PUBLIC_IN_APP_PURCHASE);
+
+/**
  * Enables the Zalo button on web (sign-in through the Zalo window, contract Zalo CORE-015). Set `true` only when
  * that environment has Core `ZALO_ENABLED` and the web origin in `ZALO_CLIENT_ORIGINS`; otherwise the button says
  * "Sắp có". Android uses the native client ID below instead.
@@ -70,6 +80,13 @@ export const SUPPORT_EMAIL = (process.env.EXPO_PUBLIC_SUPPORT_EMAIL ?? '').trim(
 function requiredEnv(name: string, value: string | undefined): string {
   if (!value?.trim()) throw new Error(`${name} chưa đặt (xem frontend/mobile/.env.example)`);
   return value;
+}
+
+function purchaseFlag(value: string | undefined): boolean {
+  if (value === 'true') return true;
+  if (value === 'false') return false;
+  if (value?.trim()) throw new Error(`EXPO_PUBLIC_IN_APP_PURCHASE phải là true, false hoặc để trống, đang là ${JSON.stringify(value)}`);
+  return Platform.OS === 'web' || APP_UPDATE_URL !== '';
 }
 
 function envFlag(name: string, value: string | undefined): boolean {

@@ -162,7 +162,7 @@ export default function Invoices() {
     }, [refreshTop, loadReport]),
   );
 
-  // Câu đang hỏi trợ lý ở bảng hỏi nhanh; null là đóng. Rời màn hình (nút mở màn từ câu trả lời, mở Trợ lý) thì đóng bảng.
+  // Câu đang hỏi trợ lý ở bảng hỏi nhanh; null là đóng. Rời màn hình (như mở Trợ lý) thì đóng bảng.
   const [aiQuestion, setAiQuestion] = useState<string | null>(null);
   useFocusEffect(useCallback(() => () => setAiQuestion(null), []));
 

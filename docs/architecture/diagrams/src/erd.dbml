@@ -5,7 +5,7 @@
 // ID: BIGINT IDENTITY → Java Long
 // Money: BIGINT VND
 // Time: TIMESTAMPTZ, UTC internally; Core JSON displays +07:00
-// Core schema: Flyway V1-V20, 25 Core tables; reviewed against staging a2766ee.
+// Core schema: Flyway V1-V21, 31 Core tables; V21 owner-approved 2026-11-07 on staging 0cc94ec base.
 // Core schema re-checked against feat/admin-dashboard-growth at 3e93dd1, 2026-10-26; this is not shared-DB deployment evidence.
 // AI tables come from the checked-in Supabase migrations; source presence is not product approval.
 // AI schema: supabase/migrations AI baseline (chat_conversations, chat_messages, vector extension, ai_read views, ai_sql_reader role),
@@ -960,6 +960,7 @@ TableGroup ai_and_chat {
   chat_messages
   agent_memories
   agent_memory_settings
+  agent_turn_receipts
 }
 
 TableGroup notification {
@@ -1006,3 +1007,183 @@ Table user_rate_limit_reservations {
 
 Ref: user_rate_limit_windows.user_id > users.id [delete: cascade]
 Ref: user_rate_limit_reservations.window_id > user_rate_limit_windows.id [delete: cascade]
+
+// Owner-approved phase-two storage; phase-three payment and phase-four grant writers are default-off.
+// Phase-five AI receipts and phase-six Core quota writers/recovery are separately default-off.
+
+Table billing_payment_requests {
+  id bigint [pk, increment]
+  payer_user_id bigint [not null]
+  integration_key varchar(64) [not null]
+  plan_code varchar(32) [not null]
+  plan_version integer [not null]
+  duration_months integer [not null]
+  quota_policy_version integer [not null]
+  amount_vnd bigint [not null]
+  currency varchar(3) [not null]
+  recipient_bank_code varchar(32) [not null]
+  recipient_account_number varchar(64) [not null]
+  recipient_account_name varchar(255) [not null]
+  payment_code varchar(15) [not null]
+  idempotency_key varchar(255) [not null]
+  request_hash varchar(64) [not null]
+  hash_version integer [not null]
+  original_response jsonb [not null]
+  status varchar(16) [not null]
+  fulfillment_status varchar(16) [not null]
+  created_at timestamptz [not null]
+  expires_at timestamptz [not null]
+  paid_at timestamptz
+  fulfilled_grant_id bigint
+  indexes {
+    (integration_key, payment_code) [unique]
+    (payer_user_id, idempotency_key) [unique]
+    (id, payer_user_id, integration_key) [unique]
+  }
+  Note: 'V21; default-off payment/grant writers. Immutable offer/recipient and original response; 30-minute expiry. Scoped grant FK binds phase-four atomic fulfillment.'
+}
+
+Table billing_bank_transactions {
+  id bigint [pk, increment]
+  integration_key varchar(64) [not null]
+  provider_transaction_id varchar(64) [not null]
+  first_received_at timestamptz [not null]
+  bank_occurred_at timestamptz
+  direction varchar(3) [not null]
+  amount_vnd bigint [not null]
+  bank_code varchar(32) [not null]
+  account_number varchar(64) [not null]
+  sub_account varchar(64)
+  payment_code varchar(15)
+  matched_request_id bigint
+  payer_user_id bigint
+  disposition varchar(32) [not null]
+  reason varchar(40) [not null]
+  financial_hash varchar(64) [not null]
+  hash_version integer [not null]
+  indexes {
+    (integration_key, provider_transaction_id) [unique]
+    (id, matched_request_id, payer_user_id, integration_key, disposition) [unique]
+  }
+  Note: 'V21; private RLS and append-only triggers. Partial UNIQUE matched_request_id WHERE ACCEPTED; SQL owns exact disposition checks.'
+}
+
+Table billing_subscription_periods {
+  id bigint [pk, increment]
+  user_id bigint [not null]
+  activated_at timestamptz [not null]
+  purchased_months integer [not null]
+  quota_policy_version integer [not null]
+  expires_at timestamptz [not null]
+  is_current boolean [not null]
+  version bigint [not null]
+  indexes {
+    (id, user_id) [unique]
+  }
+  Note: 'V21; partial UNIQUE user_id WHERE is_current. Calendar/month arithmetic remains an application invariant; is_current is not proof of unexpired access.'
+}
+
+Table billing_subscription_grants {
+  id bigint [pk, increment]
+  payment_request_id bigint [not null, unique]
+  accepted_transaction_id bigint [not null, unique]
+  user_id bigint [not null]
+  integration_key varchar(64) [not null]
+  accepted_disposition varchar(32) [not null]
+  period_id bigint [not null]
+  period_version bigint [not null]
+  duration_months integer [not null]
+  previous_expires_at timestamptz
+  resulting_expires_at timestamptz [not null]
+  applied_at timestamptz [not null]
+  indexes {
+    (id, payment_request_id, user_id) [unique]
+    (period_id, period_version) [unique]
+  }
+  Note: 'V21; append-only evidence. Accepted-only composite transaction FK prevents a review transaction granting access.'
+}
+
+Table ai_quota_windows {
+  id uuid [pk]
+  user_id bigint [not null]
+  kind varchar(16) [not null]
+  period_id bigint
+  policy_version integer [not null]
+  window_start timestamptz [not null]
+  nominal_end timestamptz [not null]
+  limit_count integer [not null]
+  committed_count integer [not null]
+  reserved_count integer [not null]
+  indexes {
+    (id, user_id) [unique]
+  }
+  Note: 'V21; partial unique user/start for Free and user/period/start for Paid. Policy version never creates another bucket. Nonnegative reserved+committed <= limit.'
+}
+
+Table ai_turn_usages {
+  id uuid [pk]
+  user_id bigint [not null]
+  shop_id bigint [not null]
+  operation varchar(16) [not null]
+  idempotency_key varchar(255) [not null]
+  request_hash varchar(64) [not null]
+  hash_version integer [not null]
+  input_conversation_id bigint
+  window_id uuid [not null]
+  state varchar(16) [not null]
+  execution_fence bigint [not null]
+  lease_owner uuid [not null]
+  lease_expires_at timestamptz [not null]
+  admitted_at timestamptz [not null]
+  completed_at timestamptz
+  failure_code varchar(64)
+  indexes {
+    (user_id, operation, idempotency_key) [unique]
+  }
+  Note: 'V21; phase-six quota writer is default-off. Owned-shop guards, captured-window accounting and fenced recovery are implemented; no Core FK to AI-owned tables.'
+}
+
+Table agent_turn_receipts {
+  turn_id uuid [pk]
+  user_id bigint [not null]
+  shop_id bigint [not null]
+  request_hash varchar(64)
+  hash_version integer
+  input_conversation_id bigint
+  state varchar(16) [not null]
+  execution_fence bigint [not null]
+  created_at timestamptz [not null]
+  completed_at timestamptz
+  result_conversation_id bigint
+  result_message_id bigint
+  result_model varchar(512)
+  result_model_version varchar(512)
+  failure_code varchar(64)
+  Note: 'AI migration 20261107000000; private RLS. Same UUID as Core usage is an application link, not a FK. Successful result references may become NULL after owner chat deletion; phase-five receipt writer is default-off. Metadata migration 20261108000000 preserves model/version without copied answers.'
+}
+
+Ref: billing_payment_requests.payer_user_id > users.id [delete: restrict]
+Ref: billing_bank_transactions.(matched_request_id, payer_user_id, integration_key) > billing_payment_requests.(id, payer_user_id, integration_key) [delete: restrict]
+Ref: billing_subscription_periods.user_id > users.id [delete: restrict]
+Ref: billing_subscription_grants.(payment_request_id, user_id, integration_key) > billing_payment_requests.(id, payer_user_id, integration_key) [delete: restrict]
+Ref: billing_subscription_grants.(accepted_transaction_id, payment_request_id, user_id, integration_key, accepted_disposition) > billing_bank_transactions.(id, matched_request_id, payer_user_id, integration_key, disposition) [delete: restrict]
+Ref: billing_subscription_grants.(period_id, user_id) > billing_subscription_periods.(id, user_id) [delete: restrict]
+Ref: billing_payment_requests.(fulfilled_grant_id, id, payer_user_id) > billing_subscription_grants.(id, payment_request_id, user_id) [delete: restrict]
+Ref: ai_quota_windows.user_id > users.id [delete: restrict]
+Ref: ai_quota_windows.(period_id, user_id) > billing_subscription_periods.(id, user_id) [delete: restrict]
+Ref: ai_turn_usages.user_id > users.id [delete: restrict]
+Ref: ai_turn_usages.shop_id > shops.id [delete: restrict]
+Ref: ai_turn_usages.(window_id, user_id) > ai_quota_windows.(id, user_id) [delete: restrict]
+Ref: agent_turn_receipts.user_id > users.id [delete: restrict]
+Ref: agent_turn_receipts.shop_id > shops.id [delete: restrict]
+Ref: agent_turn_receipts.result_conversation_id > chat_conversations.id [delete: set null]
+Ref: agent_turn_receipts.result_message_id > chat_messages.id [delete: set null]
+
+TableGroup billing_and_ai_quota {
+  billing_payment_requests
+  billing_bank_transactions
+  billing_subscription_periods
+  billing_subscription_grants
+  ai_quota_windows
+  ai_turn_usages
+}

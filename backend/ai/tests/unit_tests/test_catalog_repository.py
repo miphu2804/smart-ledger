@@ -8,7 +8,7 @@ from tests.support import CORE_MIGRATIONS
 from src.drafts.catalog import CatalogProduct, Product, ProductCatalogRepository
 from src.drafts.errors import CatalogUnavailableError
 from src.drafts.matching import DraftItem
-from src.infra.postgre_db_client import PostgreDBClient
+from src.infra.postgres_client import PostgresClient
 
 
 class FakeSession:
@@ -25,7 +25,7 @@ class FakeSession:
 
 
 class FakePostgres:
-    """Stands in for PostgreDBClient; records the SQL and params a repository sends."""
+    """Stands in for PostgresClient; records the SQL and params a repository sends."""
 
     def __init__(self, rows: list[tuple]) -> None:
         self.fake_session = FakeSession(rows)
@@ -81,9 +81,9 @@ def test_missing_ids_fail_closed_without_querying() -> None:
 @pytest.mark.parametrize(
     "postgres",
     [
-        PostgreDBClient(None),
+        PostgresClient(None),
         # Nothing listens on port 1, so the connection is refused at once.
-        PostgreDBClient("postgresql://reader@127.0.0.1:1/db"),
+        PostgresClient("postgresql://reader@127.0.0.1:1/db"),
     ],
     ids=["unconfigured", "unreachable"],
 )

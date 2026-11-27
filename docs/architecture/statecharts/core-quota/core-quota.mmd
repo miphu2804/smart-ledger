@@ -1,0 +1,22 @@
+stateDiagram-v2
+    direction TB
+    [*] --> Admission
+    Admission --> Reserved: Atomic capacity check
+    Admission --> Rejected: Guard or quota
+    Reserved --> Awaiting: Dispatch stable turn once
+    Reserved --> Recovering: Crash before dispatch
+    Awaiting --> SuccessReceipt: AI saves answer and receipt
+    Awaiting --> FailureReceipt: Definitive AI failure
+    Awaiting --> Recovering: Disconnect, timeout or restart
+    Recovering --> Recovering: Outcome unavailable, keep slot
+    Recovering --> SuccessReceipt: Saved answer found
+    Recovering --> FailureReceipt: Cancel tombstone committed
+    SuccessReceipt --> Debited: Commit captured window once
+    FailureReceipt --> Released: Release captured window once
+    Debited --> Delivered: Result or replay
+    Debited --> Removed: Deleted answer, keep debit
+    Released --> TerminalError: Same key cannot restart
+    Delivered --> [*]
+    Removed --> [*]
+    TerminalError --> [*]
+    Rejected --> [*]

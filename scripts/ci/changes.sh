@@ -2,6 +2,7 @@
 # Prints which areas the change touches as name=true|false lines (a step output on GitHub), from the files that differ
 # between SMARTLEDGER_BASE (a commit; empty or unknown means the commit before HEAD) and HEAD. Needs the full history.
 # The areas and their paths are in docs/development/ci-cd.md#path-filtering; ci.yml runs the jobs of an area on `true`.
+# ai_image is not an area of jobs: it is true when an input of the AI image changed, and start-cd.sh deploys AI on it.
 set -euo pipefail
 . "$(dirname "$0")/lib.sh"
 
@@ -11,6 +12,8 @@ area_patterns() {
   local common='.github/workflows/ci.yml .github/workflows/select-runner.yml .github/workflows/cd.yml scripts/ci/*'
   case "$1" in
     ai) echo "$common .github/workflows/deploy-backend.yml backend/ai/* supabase/*" ;;
+    ai_image) echo "$common .github/workflows/deploy-backend.yml backend/ai/src/* backend/ai/pyproject.toml backend/ai/uv.lock
+      backend/ai/Dockerfile backend/ai/.dockerignore supabase/*" ;;
     core) echo "$common .github/workflows/deploy-backend.yml backend/core/*" ;;
     mobile) echo "$common .github/workflows/deploy-web.yml frontend/mobile/*" ;;
     landing) echo "$common .github/workflows/deploy-landing.yml frontend/web/*" ;;
@@ -31,7 +34,7 @@ echo "Changed files in $range:" >&2
 echo "$files" >&2
 
 set -f # the patterns are for `case`, not for the file system
-for area in ai core mobile landing containers shell docs; do
+for area in ai core mobile landing containers shell docs ai_image; do
   patterns="$(area_patterns "$area")"
   changed=false
   while IFS= read -r file; do

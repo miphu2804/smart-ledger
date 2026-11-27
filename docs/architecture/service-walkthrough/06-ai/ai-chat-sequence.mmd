@@ -46,18 +46,14 @@ sequenceDiagram
             R-->>Core: SSE delta or reset
             Core-->>App: relayed delta or reset
         end
-        alt query_shop_data(sql) or suggest_restock(period)
+        opt query_shop_data(sql) or suggest_restock(period)
             A->>T: data tool call
             T->>T: SqlGuard: one SELECT on ai_read views, LIMIT n+1
             T->>DB: read-only txn scoped by smartledger.shop_id
             T-->>A: JSON rows or Error[CODE] for the model to retry
-        else suggest_screen(screen)
-            A->>T: screen tool call
-            T-->>A: screen as metadata, no database read
         end
     end
     A->>G: OutputGuardrail: retry empty or leaking answers
-    A->>A: append an actions block for up to 2 suggest_screen calls
     alt POST /chat
         A->>DB: save_exchange(redacted user message, answer)
         opt memory on

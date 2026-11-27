@@ -5,14 +5,16 @@ from collections.abc import Iterator
 import psycopg
 import pytest
 from psycopg import sql
+from sqlalchemy import event
 from sqlalchemy import inspect as sa_inspect
 from sqlalchemy.engine import make_url
 from tests.support import REPO_ROOT, apply_ai_baseline, apply_core_migrations
 
-from src.agent.repository import AgentConversationRepository
-from src.infra.postgre_db_client import PostgreDBClient
+from src.agent.conversation_repository import AgentConversationRepository
+from src.infra.postgres_client import PostgresClient
 from src.infra.redis_client import RedisClient
-from src.memory.repository import AgentMemoryRepository, NewMemory
+from src.memory.models import NewMemory
+from src.memory.repository import AgentMemoryRepository
 
 MEMORY_MIGRATIONS = [
     REPO_ROOT / "supabase/migrations/20261014000000_agent_memories.sql",
@@ -30,7 +32,7 @@ def memory(content: str, *head: float, supersedes: int | None = None) -> NewMemo
 
 
 @pytest.fixture
-def memory_db() -> Iterator[tuple[psycopg.Connection, PostgreDBClient, dict]]:
+def memory_db() -> Iterator[tuple[psycopg.Connection, PostgresClient, dict]]:
     database_url = os.getenv("POSTGRES_TEST_URL")
     if not database_url:
         pytest.skip("set POSTGRES_TEST_URL to run PostgreSQL memory tests")
@@ -67,7 +69,7 @@ def memory_db() -> Iterator[tuple[psycopg.Connection, PostgreDBClient, dict]]:
         url = make_url(database_url).update_query_dict(
             {"options": f"-c search_path={search_path}"}
         )
-        postgres = PostgreDBClient(url.render_as_string(hide_password=False))
+        postgres = PostgresClient(url.render_as_string(hide_password=False))
         yield admin, postgres, ids
     finally:
         if postgres is not None:
@@ -83,7 +85,7 @@ def memory_db() -> Iterator[tuple[psycopg.Connection, PostgreDBClient, dict]]:
             admin.close()
 
 
-def new_conversation(postgres: PostgreDBClient, user_id: int, shop_id: int) -> int:
+def new_conversation(postgres: PostgresClient, user_id: int, shop_id: int) -> int:
     conversation_id, _ = AgentConversationRepository(
         postgres, RedisClient()
     ).save_exchange(
@@ -528,6 +530,66 @@ def test_similar_finds_close_live_memories_without_recording_a_use(
     ).fetchone() == (0,)
 
 
+def test_similar_checks_every_embedding_in_one_statement(memory_db) -> None:
+    _, postgres, ids = memory_db
+    memories = AgentMemoryRepository(postgres)
+    conversation = new_conversation(postgres, ids["user_a"], ids["shop_a"])
+    memories.add(
+        ids["shop_a"],
+        ids["user_a"],
+        conversation,
+        [
+            memory("gạo cô Ba", 1, 0.2),
+            memory("gạo chú Tư", 1, 0),
+            memory("nghỉ chủ nhật", 0.2, 1),
+            memory("đóng cửa 22h", 0, 1),
+        ],
+    )
+    statements: list[str] = []
+    event.listen(
+        postgres.engine,
+        "before_cursor_execute",
+        lambda connection, cursor, statement, *rest: statements.append(statement),
+    )
+
+    found = memories.similar(
+        ids["shop_a"], ids["user_a"], [vector(1, 0), vector(0, 1)], 0.7, 1, []
+    )
+
+    # The nearest one of each embedding, in the embeddings' order.
+    assert [item.content for item in found] == ["gạo chú Tư", "đóng cửa 22h"]
+    assert len(statements) == 1
+
+
+def test_similar_is_exact_when_other_owners_hold_closer_memories(memory_db) -> None:
+    admin, postgres, ids = memory_db
+    memories = AgentMemoryRepository(postgres)
+    conversation_a = new_conversation(postgres, ids["user_a"], ids["shop_a"])
+    conversation_b = new_conversation(postgres, ids["user_b"], ids["shop_b"])
+    # With one owner holding a large share of the rows, PostgreSQL orders by distance
+    # through the HNSW index, which hands back its 40 nearest of every owner: here all
+    # shop B's, so a search ordered in SQL finds none of shop A's.
+    insert = (
+        "INSERT INTO agent_memories (shop_id, user_id, source_conversation_id,"
+        " memory_type, content, embedding)"
+        " SELECT %s, %s, %s, 'semantic', 'gạo ' || number, %s::vector"
+        " FROM generate_series(1, %s) AS number"
+    )
+    admin.execute(
+        insert,
+        (ids["shop_b"], ids["user_b"], conversation_b, str(vector(1, 0)), 600),
+    )
+    admin.execute(
+        insert,
+        (ids["shop_a"], ids["user_a"], conversation_a, str(vector(1, 0.2)), 400),
+    )
+    admin.execute("ANALYZE agent_memories")
+
+    found = memories.similar(ids["shop_a"], ids["user_a"], [vector(1, 0)], 0.7, 3, [])
+
+    assert len(found) == 3
+
+
 def test_a_often_used_memory_does_not_outrank_a_closer_one(memory_db) -> None:
     admin, postgres, ids = memory_db
     memories = AgentMemoryRepository(postgres)
@@ -553,7 +615,7 @@ def test_read_session_is_autocommit_and_leaves_session_transactional(
 ) -> None:
     _, postgres, _ = memory_db
     # One pooled connection, so both sessions borrow the same one in turn.
-    client = PostgreDBClient(
+    client = PostgresClient(
         postgres.engine.url.render_as_string(hide_password=False), 1
     )
     try:

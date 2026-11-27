@@ -49,7 +49,7 @@ public class AgentServiceImpl implements AgentService {
     private final ShopService shopService;
     private final RestClient aiClient;
 
-    public AgentServiceImpl(ShopService shopService, RestClient aiRestClient) {
+    public AgentServiceImpl(ShopService shopService, @org.springframework.beans.factory.annotation.Qualifier("aiRestClient") RestClient aiRestClient) {
         this.shopService = shopService;
         this.aiClient = aiRestClient;
     }

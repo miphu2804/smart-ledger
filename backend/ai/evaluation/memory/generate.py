@@ -18,9 +18,10 @@ phrasings.
 
 import json
 import random
-import unicodedata
 from dataclasses import dataclass, field
 from pathlib import Path
+
+from src.memory.ranking import unaccented
 
 # --- lexicon, split A (dev) / B (test) -------------------------------------------
 
@@ -170,13 +171,6 @@ NO_MEMORY = {
 }
 
 
-def strip_accents(text: str) -> str:
-    text = text.replace("đ", "d").replace("Đ", "D")
-    return "".join(
-        c for c in unicodedata.normalize("NFD", text) if unicodedata.category(c) != "Mn"
-    )
-
-
 @dataclass
 class Memory:
     id: int
@@ -303,7 +297,7 @@ def make_query(
             p=memory.product or "", x=memory.person or ""
         )
         if form == "unacc":
-            text = strip_accents(text).lower()
+            text = unaccented(text).lower()
     gold = memory.newer if memory.newer is not None else memory.id
     stale = memory.id if memory.newer is not None else None
     return Query(text, form, gold, stale, memory.relation)

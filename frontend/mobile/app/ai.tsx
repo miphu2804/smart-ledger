@@ -14,7 +14,7 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { ChatComposer } from '../src/components/ChatComposer';
-import { ChatText, ScreenActions, StreamingChatText } from '../src/components/ChatText';
+import { ChatText, StreamingChatText } from '../src/components/ChatText';
 import { BusinessIcon } from '../src/components/icons';
 import { MemoryGraph } from '../src/components/MemoryGraph';
 import { MascotBadge } from '../src/components/MascotBadge';
@@ -32,9 +32,10 @@ import type {
   ThoughtStep,
 } from '../src/data/types';
 import { agentApi, agentErrorMessage } from '../src/lib/agentApi';
+import { usePlanPromo } from '../src/components/PlanPromo';
 import { track } from '../src/lib/analytics';
 import { ApiError } from '../src/lib/api';
-import { splitActions } from '../src/lib/chatMarkdown';
+import { withoutActions } from '../src/lib/chatMarkdown';
 import { hhmm, relDay } from '../src/lib/format';
 import { applyToolEvent } from '../src/lib/toolSteps';
 import { useApp } from '../src/store/AppStore';
@@ -81,6 +82,7 @@ function lastActive(iso: string): string {
 const HEADER_BTN = 40;
 
 export default function Ai() {
+  const promo = usePlanPromo();
   const reducedMotion = useReducedMotion();
   const welcomeProgress = useRef(new Animated.Value(1)).current;
   useEffect(() => {
@@ -192,8 +194,10 @@ export default function Ai() {
       track('ai_message_sent', { conversation: conversationId ? 'existing' : 'new' });
       setConversationId(reply.conversation_id);
       setMsgs((m) => [...m, { id: `a${reply.message_id}`, from: 'ai', text: reply.answer }]);
+      promo.aiAnswered();
     } catch (err) {
       if (err instanceof ApiError && err.code === 'conversation_not_found') setConversationId(null);
+      if (err instanceof ApiError && err.code === 'ai_quota_exhausted') promo.aiQuotaExhausted();
       // Không mất câu đã gõ: gỡ bong bóng chưa gửi được và trả câu về ô nhập (trừ khi đã gõ câu khác).
       setMsgs((m) => m.filter((x) => x.id !== userMessage.id));
       setText((current) => (current.trim() ? current : message));
@@ -237,23 +241,18 @@ export default function Ai() {
           ) : null}
           {msgs.filter((m) => !(msgs.length === 1 && m.id === 'hi')).map((m) => {
             const isUser = m.from === 'user';
-            // Nút mở màn hình nằm ở thẻ riêng dưới bong bóng; bong bóng chỉ giữ nội dung trả lời.
-            const reply = isUser ? null : splitActions(m.text);
             return (
-              <React.Fragment key={m.id}>
-                <View style={[styles.messageRow, isUser && styles.userMessageRow]}>
-                  <View style={[styles.bubble, isUser ? styles.userBubble : styles.assistantBubble]}>
-                    {isUser ? (
-                      <T size={14} color={colors.white} style={styles.messageText}>
-                        {m.text}
-                      </T>
-                    ) : (
-                      <ChatText text={reply?.text ?? m.text} />
-                    )}
-                  </View>
+              <View key={m.id} style={[styles.messageRow, isUser && styles.userMessageRow]}>
+                <View style={[styles.bubble, isUser ? styles.userBubble : styles.assistantBubble]}>
+                  {isUser ? (
+                    <T size={14} color={colors.white} style={styles.messageText}>
+                      {m.text}
+                    </T>
+                  ) : (
+                    <ChatText text={withoutActions(m.text)} />
+                  )}
                 </View>
-                {reply?.screens.length ? <ScreenActions screens={reply.screens} /> : null}
-              </React.Fragment>
+              </View>
             );
           })}
 
@@ -262,7 +261,7 @@ export default function Ai() {
             <View style={styles.messageRow}>
               {draft ? (
                 <View style={[styles.bubble, styles.assistantBubble]}>
-                  <StreamingChatText text={splitActions(draft, true).text} />
+                  <StreamingChatText text={withoutActions(draft, true)} />
                 </View>
               ) : (
                 <View style={styles.thinkingLine}>

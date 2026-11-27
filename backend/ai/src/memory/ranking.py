@@ -25,12 +25,16 @@ K1, B = 1.2, 0.75
 
 def terms(text: str) -> list[str]:
     """Lowercased unaccented syllables, then each adjacent pair joined by "_"."""
+    syllables = re.findall(r"\w+", unaccented(text).lower())
+    return syllables + [f"{a}_{b}" for a, b in zip(syllables, syllables[1:])]
+
+
+def unaccented(text: str) -> str:
+    """`text` with its Vietnamese diacritics removed and "đ"/"Đ" as "d"/"D"."""
     text = text.replace("đ", "d").replace("Đ", "D")
-    plain = "".join(
+    return "".join(
         c for c in unicodedata.normalize("NFD", text) if unicodedata.category(c) != "Mn"
     )
-    syllables = re.findall(r"\w+", plain.lower())
-    return syllables + [f"{a}_{b}" for a, b in zip(syllables, syllables[1:])]
 
 
 def bm25(text: str, memories: Iterable[tuple[int, str]]) -> dict[int, float]:

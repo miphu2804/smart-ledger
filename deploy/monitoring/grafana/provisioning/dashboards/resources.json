@@ -31,26 +31,7 @@
     }
   ],
   "templating": {
-    "list": [
-      {
-        "name": "env",
-        "label": "Environment",
-        "type": "query",
-        "datasource": {
-          "type": "prometheus",
-          "uid": "prometheus"
-        },
-        "query": {
-          "query": "label_values(probe_success, env)",
-          "refId": "env"
-        },
-        "definition": "label_values(probe_success, env)",
-        "refresh": 2,
-        "sort": 1,
-        "includeAll": false,
-        "multi": false
-      }
-    ]
+    "list": []
   },
   "panels": [
     {

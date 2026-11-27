@@ -1,5 +1,6 @@
 package com.smartledger.core.security;
 
+import com.smartledger.core.billing.SePayWebhookRoute;
 import com.smartledger.core.exception.RestAuthenticationEntryPoint;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
@@ -26,6 +27,11 @@ public class BearerTokenAuthenticationFilter extends OncePerRequestFilter {
             RestAuthenticationEntryPoint authenticationEntryPoint) {
         this.tokenVerifier = tokenVerifier;
         this.authenticationEntryPoint = authenticationEntryPoint;
+    }
+
+    @Override
+    protected boolean shouldNotFilter(HttpServletRequest request) {
+        return SePayWebhookRoute.matches(request);
     }
 
     @Override

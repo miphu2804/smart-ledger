@@ -11,7 +11,10 @@ from src.agent.guardrails.answer_screen import AnswerScreen
 from src.agent.guardrails.input_redaction import InputRedaction
 from src.agent.guardrails.tool_call_limit import ToolCallLimit
 from src.agent.service import AgentService
+from src.agent.tools import calculation_capability, shop_data_capability
 from src.calculation.service import CalculationLimits, CalculationService
+from src.llm.service import LLMService
+from src.phone_number import PHONE_NUMBER
 
 pytestmark = pytest.mark.anyio
 
@@ -57,7 +60,7 @@ def service(
     turn_timeout_seconds=TURN_TIMEOUT_SECONDS,
 ) -> AgentService:
     return AgentService(
-        model,
+        LLMService(model),
         conversations or Conversations(),
         GuardrailLimits(
             max_input_chars=MAX_INPUT_CHARS,
@@ -66,7 +69,7 @@ def service(
             turn_token_limit=turn_token_limit,
             turn_timeout_seconds=turn_timeout_seconds,
         ),
-        shop_data=shop_data,
+        capabilities=[shop_data_capability(shop_data)] if shop_data is not None else [],
     )
 
 
@@ -158,6 +161,33 @@ def test_a_secret_is_removed_whole_before_personal_data() -> None:
     key = "sk-ab-4111111111111111-cdefghijklmnopqrstu"
 
     assert InputRedaction.redact(key) == "[redacted:openai_key]"
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "Số của chú Tư là 0901234567.",
+        "Gọi 090 123 4567 nhé.",
+        "Liên hệ +84 901 234 567.",
+        "SĐT 0901.234.567",
+        "Zalo 84-901-234-567",
+    ],
+)
+def test_vietnamese_phone_numbers_are_detected(text: str) -> None:
+    assert PHONE_NUMBER.search(text)
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "Mỗi ngày bán khoảng 120.000đ tiền đá.",
+        "Nhập gạo 1.200.000đ một bao.",
+        "Vốn 150.000.000 đồng.",
+        "Chốt sổ lúc 22h30.",
+    ],
+)
+def test_money_and_times_are_not_phone_numbers(text: str) -> None:
+    assert PHONE_NUMBER.search(text) is None
 
 
 async def test_shop_phone_in_tool_results_is_not_redacted() -> None:
@@ -305,7 +335,7 @@ async def test_the_pure_calculate_tool_stays_callable_past_the_tool_limit() -> N
     )
 
     result = await AgentService(
-        model,
+        LLMService(model),
         Conversations(),
         GuardrailLimits(
             max_input_chars=MAX_INPUT_CHARS,
@@ -316,8 +346,10 @@ async def test_the_pure_calculate_tool_stays_callable_past_the_tool_limit() -> N
             turn_token_limit=TURN_TOKEN_LIMIT,
             turn_timeout_seconds=TURN_TIMEOUT_SECONDS,
         ),
-        shop_data=shop_data,
-        calculation=calculation,
+        capabilities=[
+            shop_data_capability(shop_data),
+            calculation_capability(calculation),
+        ],
     ).chat(user_id=3, shop_id=15, message="m")
 
     assert shop_data.calls == TOOL_CALL_LIMIT

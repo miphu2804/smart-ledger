@@ -19,7 +19,9 @@ from tests.support import (
 )
 
 from src.agent.service import AgentService
-from src.infra.postgre_db_client import PostgreDBClient
+from src.agent.tools import shop_data_capability
+from src.infra.postgres_client import PostgresClient
+from src.llm.service import LLMService
 from src.sql.repository import ShopDataRepository
 
 # Escaped so the source stays ASCII: an upper-case accented letter (lower() keeps it
@@ -45,12 +47,12 @@ class ReaderDatabase:
     view_schema: str
     shop_a: int
     shop_b: int
-    clients: list[PostgreDBClient] = field(default_factory=list)
+    clients: list[PostgresClient] = field(default_factory=list)
 
     def shop_data(
         self, timeout_ms: int = 3000, row_limit: int = 100, pool_size: int = 2
     ) -> ShopDataRepository:
-        client = PostgreDBClient(self.reader_pool_url, pool_size=pool_size)
+        client = PostgresClient(self.reader_pool_url, pool_size=pool_size)
         self.clients.append(client)
         return ShopDataRepository(
             client,
@@ -277,7 +279,7 @@ def reader_db() -> Iterator[ReaderDatabase]:
                 )
             )
         reader_url = make_conninfo(database_url, user=login_role, password=password)
-        # `PostgreDBClient` takes a URL; `POSTGRES_TEST_URL` must be one (see support).
+        # `PostgresClient` takes a URL; `POSTGRES_TEST_URL` must be one (see support).
         reader_pool_url = (
             make_url(database_url)
             .set(username=login_role, password=password)
@@ -707,9 +709,9 @@ async def test_chat_turn_answers_after_a_timed_out_query(
         tool_call("query_shop_data", {"sql": slow}), "No shop data right now."
     )
     agent = AgentService(
-        model,
+        LLMService(model),
         MemoryConversations(),
-        shop_data=reader_db.shop_data(timeout_ms=200),
+        capabilities=[shop_data_capability(reader_db.shop_data(timeout_ms=200))],
         guardrail_limits=TEST_GUARDRAIL_LIMITS,
     )
 

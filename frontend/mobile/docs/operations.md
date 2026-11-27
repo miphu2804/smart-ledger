@@ -55,7 +55,7 @@ For a Play release, rebuild the Android App Bundle with a higher version code an
 | `/profile` | Edit shop details (name, address, industry), saved to Core; full name, email, Facebook and bank account are stored only on the device |
 | `/settings` | Vibration; sound, read-back, auto-print and auto-backup are shown as coming soon |
 | `/notifications` | In-app notifications |
-| `/ai` | Q&A with the assistant through Core; conversation history. Streaming and stored answers render the same subset of Markdown: `**bold**`, `` `code` ``, headings, `-`/`1.` lists, tables, ```ui blocks (charts and cards, validated by `src/lib/chatUi.ts`), older ```chart blocks and ```actions blocks (buttons that open app screens, shown in a separate card under the bubble once the answer is complete); other markup shows as plain text. With mocks on, the app answers with fake data; ask with the word "biểu đồ" or "bảng" to see tables and charts, "mẫu chart" or "mẫu thẻ" to see every ui card type, and ask "sắp hết hàng" to see the screen button card under the bubble |
+| `/ai` | Q&A with the assistant through Core; conversation history. Streaming and stored answers render the same subset of Markdown: `**bold**`, `` `code` ``, headings, `-`/`1.` lists, tables, ```ui blocks (charts and cards, validated by `src/lib/chatUi.ts`) and older ```chart blocks; the ```actions block that ends answers saved before 2026-11-13, when chat had screen buttons, is hidden; other markup shows as plain text. With mocks on, the app answers with fake data; ask with the word "biểu đồ" or "bảng" to see tables and charts, "mẫu chart" or "mẫu thẻ" to see every ui card type |
 | `/printer` | K80/K58 printer settings screen; no device connection yet |
 | `/debug` | Connection diagnostics, dev builds only (see [Debug](#debug)) |
 
@@ -212,6 +212,53 @@ The Google button uses `@react-native-google-signin/google-signin` on phones: Go
 Use the private operations knowledge base for provider-project, signing-certificate and authorized-domain mappings. The build must target the intended Firebase project, whose Google provider and signing fingerprints must match; a mismatch can produce `DEVELOPER_ERROR`. Never authorize the repository's public debug key for production. Refresh the build's provider configuration after an authorized change and rebuild native code.
 
 The library has native code, so the APK must be rebuilt. The `@react-native-google-signin/google-signin` plugin in `app.json` attaches the iOS client from `GoogleService-Info.plist` on iOS prebuild; on iOS the library uses that client by itself, so the Web client ID is not required there (it is on Android). Not checked: iOS. The account-linking limitation described above applies to Google as well.
+
+## GA4 native verification
+
+[ADR-0010](../../../docs/architecture/adr/0010-mobile-usage-analytics-ga4.md) owns the system boundary, payload catalogue, metric definitions and proposed Console settings. This runbook validates native delivery, not legal approval or product acceptance. The matrix is unverified until executed on a configured build.
+
+Use an isolated test installation and synthetic business data on staging, with real Core calls and mocks disabled. Expo Go, Expo web and ADMIN web do not validate native GA4. Confirm the native Firebase configuration targets the staging stream/property before granting consent; obtain the approved mapping privately.
+
+From `frontend/mobile`, run the source checks:
+
+```bash
+node --test tests/analyticsEvents.test.ts
+npm run typecheck
+npm test
+```
+
+The focused test covers event names and route templates only. A full test pass does not prove consent, SDK error isolation, environment routing or delivery.
+
+For a connected Android staging device, enable Firebase Analytics debug mode using the actual application ID from the build:
+
+```bash
+adb shell setprop debug.firebase.analytics.app <staging-application-id>
+```
+
+Open Firebase/GA4 DebugView for the verified staging destination. Record build/commit, device/OS, native Firebase SDK presence, test time, consent state and sanitized event/parameter evidence; do not share actual User-IDs, customer data or private project identifiers.
+
+| Case | Action | Expected evidence |
+|---|---|---|
+| Fresh install, no consent | Open, sign in, decline or dismiss; visit screens and create a test record; restart | Prompt appears once; no app events or automatic Analytics delivery without consent; business actions still work |
+| Consent granted | Grant from prompt or Settings, then navigate and perform catalogue actions | `screen_view` uses route templates; each event has only the allowed parameters; no first-login replay |
+| Lifecycle and saved consent | Cold-start after grant and after decline/withdrawal; background/foreground; restart while offline, then reconnect | Saved choice respected; no unintended pre-consent upload, duplicate screen events or stale identity; inspect automatic events as well as custom events |
+| Identity transition | Sign out, sign in as another synthetic account, and switch shops | Future events have the intended Core User-ID or null while signed out; choice remains device-scoped; no shop IDs or cross-account stale identity |
+| Checkout recovery | Confirm normally, then exercise an already-confirmed/recovered submit through the existing checkout flow | Normal path emits once; recovered path emits no additional `sale_completed`; ledger stays correct regardless of analytics |
+| Voice and assistant semantics | Continue from voice screen using typed input; complete a chat turn, then exercise a failed/cancelled chat | `voice_order_reviewed` is not proof of microphone use; `ai_message_sent` follows successful stream completion, not every Send tap |
+| Withdrawal | Turn off “Gửi số liệu sử dụng”, act, restart, reconnect; optionally re-grant | Collection stops and local reset is requested; re-grant does not replay application events from the disabled interval; previously uploaded data is not presumed deleted |
+| SDK unavailable or failing | Use a build without the module or a controlled SDK-failure test fixture, if available | User action still succeeds; synchronous throws and rejected promises do not escape into the business workflow; mark blocked if no fixture is available |
+| Artifact and routing | Inspect the final AAB manifest and the actual property receiving staging test events | `com.google.android.gms.permission.AD_ID` absent; no staging traffic in production; record Console configuration separately |
+| Processed reports | After processing, inspect approved dimensions, metrics and saved explorations | Parameter breakdowns and filters match ADR-0010; DebugView alone is not a reporting pass |
+
+Inspect the complete Analytics event inventory after opt-in, including SDK-generated session/engagement events and device metadata, against Data safety and policy disclosures. Validate iOS separately on its configured native build before including it in release evidence.
+
+Disable debug mode after testing:
+
+```bash
+adb shell setprop debug.firebase.analytics.app .none.
+```
+
+If an event is missing, first check consent and stored settings, native module availability, the Firebase app/property mapping, debug-device selection and network connectivity. Then distinguish DebugView delivery from delayed report processing and missing custom definitions. Never enable collection by default or route test traffic to production to work around a diagnostic failure.
 
 ## UI tests with Playwright
 

@@ -3,7 +3,7 @@
 import json
 
 from src.agent.tools import build_calculation_tool
-from src.calculation.ops import CalculationStep
+from src.calculation.operations import CalculationStep
 from src.calculation.service import CalculationLimits, CalculationService
 from src.prompt_templates import CALC_RESULT_HEADER
 

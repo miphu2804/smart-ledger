@@ -1,0 +1,26 @@
+---
+title: "Durable logical AI turn"
+---
+stateDiagram-v2
+  [*] --> Empty
+  Empty: No receipt
+  Running: IN_PROGRESS
+  Pending: Awaiting recovery
+  Success: SUCCEEDED
+  Cancelled: CANCELLED
+  Failed: FAILED
+  Gone: Result removed
+  Empty --> Running: Unique claim
+  Empty --> Cancelled: Tombstone first
+  Running --> Pending: Disconnect or crash
+  Pending --> Pending: Retry returns 202
+  Running --> Running: Retry returns 202
+  Running --> Success: Atomic commit
+  Running --> Cancelled: Cancel wins
+  Pending --> Cancelled: Fence uncertain work
+  Running --> Failed: Definitive failure
+  Success --> Success: Replay same result
+  Success --> Gone: Delete owned result
+  Gone --> Gone: Retry returns 410
+  Cancelled --> Cancelled: Reject late work
+  Failed --> Failed: Replay failure

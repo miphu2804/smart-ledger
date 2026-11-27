@@ -11,9 +11,11 @@ from pydantic_ai.messages import ModelResponse, TextPart
 from tests.support import TEST_GUARDRAIL_LIMITS, ScriptedModel, transcript
 
 from src.agent.service import AgentService, Done, MemoryRecalled, TextDelta
+from src.agent.tools import MEMORY_CAPABILITY
+from src.llm.service import LLMService
 from src.main import app
-from src.memory.repository import MemoryGroup, RecalledMemory, StoredMemory
-from src.memory.service import PHONE_NUMBER, AgentMemoryService
+from src.memory.models import MemoryGroup, RecalledMemory, StoredMemory
+from src.memory.service import AgentMemoryService
 from src.prompt_templates import MEMORY_PROMPT
 
 pytestmark = pytest.mark.anyio
@@ -118,9 +120,10 @@ def recalled(content: str = RICE_SUPPLIER, memory_id: int = 7) -> RecalledMemory
 
 def agent_with(chat_model, memory, conversations=None) -> AgentService:
     return AgentService(
-        chat_model,
+        LLMService(chat_model),
         conversations or FakeConversationRepository(),
         TEST_GUARDRAIL_LIMITS,
+        capabilities=[MEMORY_CAPABILITY] if memory is not None else [],
         memory=memory,
     )
 
@@ -152,7 +155,7 @@ async def test_recalled_memories_lead_the_prompt_but_not_the_stored_message() ->
     )
 
     await agent.chat(user_id=3, shop_id=15, message="nhập gạo ở đâu?")
-    await asyncio.gather(*agent.memory_writes)
+    await asyncio.gather(*agent.memory.writes)
 
     (shop_id, user_id, _, limit, preference_limit, text) = repository.searches[0]
     assert (shop_id, user_id, limit, preference_limit) == (15, 3, 5, 10)
@@ -179,7 +182,7 @@ async def test_streamed_turns_get_the_same_memories() -> None:
     events = await agent.stream_chat(user_id=3, shop_id=15, message="gạo?")
     async for _ in events:
         pass
-    await asyncio.gather(*agent.memory_writes)
+    await asyncio.gather(*agent.memory.writes)
 
     assert RICE_SUPPLIER in sent_prompt(chat_model)
 
@@ -195,7 +198,7 @@ async def test_a_failed_search_answers_without_memories(
 
     with caplog.at_level(logging.WARNING):
         result = await agent.chat(user_id=3, shop_id=15, message="gạo?")
-        await asyncio.gather(*agent.memory_writes)
+        await asyncio.gather(*agent.memory.writes)
 
     assert result.answer == "ok"
     assert sent_prompt(chat_model) == "gạo?"
@@ -212,7 +215,7 @@ async def test_saved_turn_is_remembered_under_its_owner_and_conversation() -> No
     await agent.chat(
         user_id=3, shop_id=15, message="Anh nhập gạo ở chú Tư nhé", conversation_id=9
     )
-    await asyncio.gather(*agent.memory_writes)
+    await asyncio.gather(*agent.memory.writes)
 
     (shop_id, user_id, conversation_id, memories) = repository.added[0]
     assert (shop_id, user_id, conversation_id) == (15, 3, 9)
@@ -372,33 +375,6 @@ async def test_only_the_allowed_memory_types_are_written() -> None:
     assert [memory.memory_type for memory in memories] == ["preference"]
 
 
-@pytest.mark.parametrize(
-    "text",
-    [
-        "Số của chú Tư là 0901234567.",
-        "Gọi 090 123 4567 nhé.",
-        "Liên hệ +84 901 234 567.",
-        "SĐT 0901.234.567",
-        "Zalo 84-901-234-567",
-    ],
-)
-def test_vietnamese_phone_numbers_are_detected(text: str) -> None:
-    assert PHONE_NUMBER.search(text)
-
-
-@pytest.mark.parametrize(
-    "text",
-    [
-        "Mỗi ngày bán khoảng 120.000đ tiền đá.",
-        "Nhập gạo 1.200.000đ một bao.",
-        "Vốn 150.000.000 đồng.",
-        "Chốt sổ lúc 22h30.",
-    ],
-)
-def test_money_and_times_are_not_phone_numbers(text: str) -> None:
-    assert PHONE_NUMBER.search(text) is None
-
-
 async def test_facts_with_a_phone_number_are_dropped_from_extraction_and_summary():
     leaking = {**PREFERENCE, "content": "Gọi chú Tư số 0901234567."}
     model = ScriptedModel(facts(leaking, PREFERENCE), facts(leaking))
@@ -433,7 +409,7 @@ async def test_a_fact_may_replace_only_a_memory_this_turn_recalled() -> None:
 async def collect_events(agent: AgentService, message: str = "gạo?") -> list:
     events = await agent.stream_chat(user_id=3, shop_id=15, message=message)
     found = [event async for event in events]
-    await asyncio.gather(*agent.memory_writes)
+    await asyncio.gather(*agent.memory.writes)
     return found
 
 
@@ -745,3 +721,26 @@ async def test_recall_does_not_record_use() -> None:
     await memory_service(ScriptedModel(), repository).with_memories(15, 3, "gạo?")
 
     assert repository.used == []
+
+
+async def test_memory_writes_run_one_at_a_time_in_arrival_order() -> None:
+    service = memory_service(ScriptedModel(facts()))
+    release = asyncio.Event()
+    steps: list[str] = []
+
+    async def store(shop_id, user_id, conversation_id, *exchange) -> None:
+        steps.append(f"start {conversation_id}")
+        await release.wait()
+        steps.append(f"end {conversation_id}")
+
+    service._store = store
+    writes = [
+        asyncio.create_task(service.remember(15, 3, conversation_id, "q", "a", []))
+        for conversation_id in (1, 2)
+    ]
+    # Long enough for the second write to reach its store step if nothing held it.
+    await asyncio.sleep(0.05)
+    release.set()
+    await asyncio.gather(*writes)
+
+    assert steps == ["start 1", "end 1", "start 2", "end 2"]

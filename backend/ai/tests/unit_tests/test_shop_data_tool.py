@@ -14,8 +14,13 @@ from tests.support import (
 )
 
 from src.agent.service import AgentService
-from src.agent.tools import AgentContext, build_shop_data_tool
-from src.infra.postgre_db_client import PostgreDBClient
+from src.agent.tools import (
+    AgentContext,
+    build_shop_data_tool,
+    shop_data_capability,
+)
+from src.infra.postgres_client import PostgresClient
+from src.llm.service import LLMService
 from src.prompt_templates import (
     APP_GUIDE_PROMPT,
     QUERY_RESULT_HEADER,
@@ -64,9 +69,9 @@ def query_then_answer(args: dict, answer: str = "done") -> ScriptedModel:
 
 def build_agent(model, shop_data=None, conversations=None) -> AgentService:
     return AgentService(
-        model,
+        LLMService(model),
         conversations or FakeConversationRepository(),
-        shop_data=shop_data,
+        capabilities=[shop_data_capability(shop_data)] if shop_data is not None else [],
         guardrail_limits=TEST_GUARDRAIL_LIMITS,
     )
 
@@ -89,7 +94,7 @@ async def test_tools_sent_to_the_model_expose_only_sql() -> None:
 
     await build_agent(model, FakeShopData()).chat(user_id=3, shop_id=15, message="m")
 
-    spec, _ = model.requests[0][1].function_tools
+    (spec,) = model.requests[0][1].function_tools
     assert spec.name == "query_shop_data"
     assert list(spec.parameters_json_schema["properties"]) == ["sql"]
     assert spec.parameters_json_schema["required"] == ["sql"]
@@ -249,7 +254,7 @@ async def test_no_repository_means_no_shop_data_tool() -> None:
 
     await build_agent(model).chat(user_id=3, shop_id=15, message="m")
 
-    assert model.tool_names() == ["suggest_screen"]
+    assert model.tool_names() == []
 
 
 def test_result_payload_marks_truncation() -> None:
@@ -288,7 +293,7 @@ class FakeConnection:
 
 
 class FakeReader:
-    """A `PostgreDBClient` stand-in whose session fails the guarded query."""
+    """A `PostgresClient` stand-in whose session fails the guarded query."""
 
     def __init__(self, error: Exception | None = None) -> None:
         self.connection = FakeConnection(error)
@@ -349,7 +354,7 @@ def test_repository_lets_an_unreachable_database_propagate() -> None:
 
 def test_repository_lets_an_unconfigured_reader_propagate() -> None:
     with pytest.raises(RuntimeError, match="postgres unavailable"):
-        ShopDataRepository(PostgreDBClient(None)).run(15, "SELECT 1")
+        ShopDataRepository(PostgresClient(None)).run(15, "SELECT 1")
 
 
 @pytest.mark.parametrize("shop_id", [0, -1, True, "15"])

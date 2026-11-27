@@ -62,7 +62,7 @@ For local Core development, use the address reachable from the device (`http://1
 
 ### Google Analytics
 
-`@react-native-firebase/analytics` sends usage events to GA4 only after the user agrees in the one-time prompt after sign-in or in Settings ([ADR-0010](../../docs/architecture/adr/0010-mobile-usage-analytics-ga4.md)). Each Firebase project sends to its own GA4 property: `android-production` builds to the production property used for product metrics, `android-dev` and `android-staging` builds to the staging property used for testing; the event catalogue is `src/lib/analyticsEvents.ts`.
+`@react-native-firebase/analytics` sends usage events to GA4 only after the user agrees in the one-time prompt after sign-in or in Settings ([ADR-0010](../../docs/architecture/adr/0010-mobile-usage-analytics-ga4.md)). The design separates staging and production properties; actual native configuration and Console routing must be verified rather than inferred from a build-profile name. The event catalogue is `src/lib/analyticsEvents.ts`; Expo web sends nothing. Use the [native GA4 verification runbook](docs/operations.md#ga4-native-verification) for consent, identity, payload and delivery checks. Source presence does not establish native rollout, legal approval or product acceptance.
 
 ## Android speech recognition
 

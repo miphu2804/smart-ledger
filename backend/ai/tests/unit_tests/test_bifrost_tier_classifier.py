@@ -4,8 +4,8 @@ import httpx
 import pytest
 from tests.unit_tests.test_observability import RecordingTracer
 
-from src.llm_router.bifrost_tier_classifier import BifrostTierClassifier
-from src.llm_router.tier import Tier
+from src.llm.bifrost_tier_classifier import BifrostTierClassifier
+from src.llm.tier import Tier
 from src.observability import Observability
 
 pytestmark = pytest.mark.anyio

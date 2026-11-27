@@ -31,6 +31,8 @@ class AppConfig(BaseSettings):
 
     # service credential shared with Core; unset rejects every /internal/v1 route
     INTERNAL_API_TOKEN: str | None = None
+    # Additive internal turn protocol only; does not enable Core quota admission/debit.
+    AGENT_TURN_RECEIPTS_ENABLED: bool = False
 
     # postgres
     POSTGRES_URL: str | None = None
@@ -51,9 +53,8 @@ class AppConfig(BaseSettings):
     SQL_TIMEOUT_MS: int = Field(default=3000, gt=0)
     SQL_ROW_LIMIT: int = Field(default=100, gt=0)
 
-    # qdrant and litellm: kept for planned integrations, no feature reads them yet
+    # qdrant: kept for a planned integration, no feature reads it yet
     QDRANT_URL: str | None = None
-    LITELLM_URL: str | None = None
 
     # honeyhive: Pydantic AI traces with the redacted message content
     # (src/observability.py); an unset key or a source other than production sends
@@ -92,7 +93,7 @@ class AppConfig(BaseSettings):
     MODEL_TIMEOUT_SECONDS: float = 20.0
     # reasoning effort of an alias that sets no `effort` of its own
     MODEL_REASONING_EFFORT: str = "low"
-    # per-turn model tiers (src/llm_router/): a decision model rates
+    # per-turn model tiers (src/llm/): a decision model rates
     # each request SIMPLE, MEDIUM or COMPLEX through Bifrost and the turn runs on the
     # chat-simple, chat-medium or chat-complex alias of MODEL_ALIASES. Off, or with
     # any of those aliases or the URL missing, every turn runs on `chat`.
@@ -126,7 +127,7 @@ class AppConfig(BaseSettings):
     # integer range (2**53 ~ 9e15), so VND totals keep full precision
     CALC_MAX_OPERAND_VALUE: float = Field(default=1e15, gt=0)
 
-    # Code Mode sandbox (src/sandbox/wrapper.py): an agent option on its own, not
+    # Code Mode sandbox (src/sandbox/code_mode.py): an agent option on its own, not
     # tied to the calculation service. The model reaches it only by writing a
     # run_code snippet, so a turn without one never starts a sandbox. The memory
     # value is the Monty heap limit (a MemoryError becomes a model retry), not a

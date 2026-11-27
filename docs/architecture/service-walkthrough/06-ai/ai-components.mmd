@@ -8,7 +8,7 @@ flowchart LR
         SVC["AgentService<br/>chat() / stream_chat()"]
         GUARD["GuardrailService<br/>input check + redaction<br/>call, token, time limits<br/>answer screen"]
         MODEL["model gateway<br/>LLMFactory.create_model()<br/>FallbackModel when a MODEL_FALLBACKS entry builds"]
-        TOOLS["tools<br/>query_shop_data, suggest_restock<br/>suggest_screen (always)<br/>calculate, run_code"]
+        TOOLS["tools<br/>query_shop_data, suggest_restock<br/>calculate, run_code"]
         SANDBOX["Monty sandbox<br/>run_code only, calls no tool"]
         RESTOCK["RestockService<br/>suggest(shop_id, period)"]
         MEM["AgentMemoryService<br/>with_memories() / remember()<br/>only when AGENT_MEMORY_ENABLED"]

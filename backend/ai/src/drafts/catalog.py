@@ -5,7 +5,7 @@ from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Mapped, mapped_column
 
 from src.drafts.errors import CatalogUnavailableError
-from src.infra.postgre_db_client import Base, PostgreDBClient
+from src.infra.postgres_client import Base, PostgresClient
 
 
 class Product(Base):
@@ -45,7 +45,7 @@ class ProductCatalogRepository:
     to manual text or POS entry.
     """
 
-    def __init__(self, postgres: PostgreDBClient, timeout_ms: int = 3000) -> None:
+    def __init__(self, postgres: PostgresClient, timeout_ms: int = 3000) -> None:
         if timeout_ms < 1:
             raise ValueError("timeout_ms must be positive")
         self.postgres = postgres

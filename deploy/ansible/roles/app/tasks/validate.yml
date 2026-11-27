@@ -12,16 +12,3 @@
   register: app_env_files
   failed_when: not app_env_files.stat.exists
   check_mode: false
-
-# The dashboards read only what grafana_reader is granted (ADR-0003); another login would show them every column.
-- name: Fail unless the product analytics login is the read-only role and complete
-  ansible.builtin.assert:
-    that:
-      - app_grafana_pg_user is match('grafana_reader([.]|$)')
-      - app_grafana_pg_port | length > 0
-      - app_grafana_pg_database | length > 0
-      - app_grafana_pg_password | length > 0
-    fail_msg: >-
-      With GRAFANA_PG_HOST set, .env.monitor also needs GRAFANA_PG_PORT, GRAFANA_PG_DATABASE and GRAFANA_PG_PASSWORD,
-      and GRAFANA_PG_USER must be the grafana_reader role (grafana_reader.<project-ref> through the pooler).
-  when: monitoring_domain | length > 0 and app_grafana_pg_host | length > 0

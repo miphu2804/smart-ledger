@@ -2,7 +2,7 @@ import asyncio
 
 from pydantic_ai.embeddings.test import TestEmbeddingModel
 
-from src.memory.workers_ai_embedding import WorkersAIEmbeddingModel
+from src.embedding.workers_ai_embedding import WorkersAIEmbeddingModel
 
 
 def workers_ai(model_name: str, native_dimensions: int) -> WorkersAIEmbeddingModel:

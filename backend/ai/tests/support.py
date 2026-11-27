@@ -72,7 +72,7 @@ def apply_ai_baseline(connection: psycopg.Connection, view_schema: str) -> None:
 
 
 def schema_url(database_url: str, schema: str) -> str:
-    """`database_url` with `schema` first on the search path, for `PostgreDBClient`.
+    """`database_url` with `schema` first on the search path, for `PostgresClient`.
 
     `POSTGRES_TEST_URL` must be a `postgresql://` URL for this, not a libpq keyword
     string.

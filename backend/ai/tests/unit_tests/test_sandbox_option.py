@@ -8,14 +8,20 @@ from pydantic_ai.messages import ModelResponse, ToolCallPart, ToolReturnPart
 from tests.support import TEST_GUARDRAIL_LIMITS, ScriptedModel
 
 from src.agent.service import AgentService
+from src.agent.tools import (
+    calculation_capability,
+    sandbox_capability,
+    shop_data_capability,
+)
 from src.calculation.service import CalculationLimits, CalculationService
+from src.llm.service import LLMService
 from src.main import SANDBOX_TOOLS
 from src.prompt_templates import (
     CALC_PROMPT,
     RUN_CODE_PROMPT,
     SQL_AGENT_PROMPT,
 )
-from src.sandbox.wrapper import Sandbox, SandboxLimits
+from src.sandbox.code_mode import Sandbox, SandboxLimits
 
 pytestmark = pytest.mark.anyio
 
@@ -46,19 +52,22 @@ class FakeConversations:
 
 
 def service(model, **kwargs) -> AgentService:
-    return AgentService(model, FakeConversations(), **kwargs)
+    return AgentService(LLMService(model), FakeConversations(), **kwargs)
 
 
 def run_code_call(code: str) -> ModelResponse:
     return ModelResponse(parts=[ToolCallPart("run_code", {"code": code})])
 
 
-async def chat(model, **kwargs) -> str:
+async def chat(model, calculation=None, sandbox=None) -> str:
     agent = service(
         model,
         guardrail_limits=TEST_GUARDRAIL_LIMITS,
-        shop_data=FakeShopData(),
-        **kwargs,
+        capabilities=[
+            shop_data_capability(FakeShopData()),
+            *([calculation_capability(calculation)] if calculation is not None else []),
+            *([sandbox_capability(sandbox)] if sandbox is not None else []),
+        ],
     )
     return (await agent.chat(user_id=3, shop_id=15, message="compute")).answer
 

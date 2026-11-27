@@ -6,7 +6,7 @@ This document describes the responsibilities of the checked-in components of Sma
 
 - [BRD](../product/business-requirements.md) and [PRD](../product/product-requirements.md): source of `BO/BR → FR/NFR → AC`.
 - [Logical architecture](diagrams/README.md#logical-architecture): component and trust boundaries, not deployment topology.
-- [Target architecture](diagrams/images/architecture.svg) and [CI/CD and runtime topology](diagrams/images/ci-cd.svg): target components and delivery flow; the [diagram guide](diagrams/README.md) lists every diagram and its boundary.
+- [Target architecture](diagrams/images/architecture.svg) and [System design](diagrams/images/system-design.svg): runtime topology, external integrations and delivery flow; the [diagram guide](diagrams/README.md) lists every diagram and its boundary.
 - [API contracts](../contracts/api-contracts.md): FE ↔ Core and Core ↔ AI.
 - Current sources of evidence: [`frontend/mobile`](../../frontend/mobile/README.md), [`frontend/web`](../../frontend/web/README.md), [`backend/core`](../../backend/core/src/main/java/com/smartledger/core/controller/AuthController.java) and [`backend/ai`](../../backend/ai/src/agent/router.py). The EXE201 FE is the historical source used when the initial scope was drafted.
 
@@ -22,6 +22,10 @@ This document describes the responsibilities of the checked-in components of Sma
 | Web ADMIN | Firebase-to-Core ADMIN access and real support pages through `adminApi.ts`; legacy tasks/AI-support pages use a separate mock model |
 
 Core's checked-in Flyway set is V1–V20, with 25 tables. AI migrations separately own chat, read views and optional memory. Historical V19/23-table counts describe earlier revisions, not the current schema.
+
+### SePay fee payments — Core phase three, issue #570
+
+Phase one records approved SePay [payment rules/schema proposal](sepay-payment-design.md) (BR-027 → FR-041 → AC-128–136) and [subscription/quota design](subscription-quota-design.md) (BR-028/BR-029 → FR-042/FR-043 → AC-137–150). The catalog is Free with 2 AI turns/day, 99,000 VND/1 calendar month and 297,000 VND/3 calendar months with 300/week; all keep the same existing features. The owner-approved [phase-two schema](billing-schema-proposal.md) is implemented as Core V21 (six private tables) and an AI-owned receipt migration, with disposable-PostgreSQL constraint/rollback tests. Phase three implements the Core billing catalog/create/status routes and raw-JSON HMAC SePay ingress with independent default-off gates, immutable snapshots, advisory provider-ID plus row locks, durable dedupe and PAID/PENDING acceptance. See [Core setup/verification](../../backend/core/docs/sepay-payments.md). Phase four additionally implements the independent default-off durable grant worker and effective-subscription/read-only-quota GETs on V21, with calendar-anchor renewal, exact-expiry fallback, transactional rollback/recovery and no AI/ledger writes. Phase five implements the additive default-off AI turn receipt/cancel/replay protocol and an owner-approved two-column result-metadata migration. Phase six implements gated Core admission/debit/release and fenced receipt recovery for JSON/SSE on V21; keyless calls remain legacy while disabled; local tests do not prove shared deployment or provider acceptance. Phase seven adds explicit local Core–AI HTTP/SQL integration tests and a [FE handoff](../contracts/billing-ai-client-handoff.md), using fixture model/cache/Firebase verification and without FE or provider acceptance. Money acceptance, durable entitlement fulfillment and AI quota accounting remain distinct; existing shop transfer semantics are unchanged.
 
 ### CORE-019 — successful operation quotas
 
@@ -46,6 +50,12 @@ WEB authorize/callback/exchange and recent-authentication LINK are implemented w
 ### Zalo Android CORE-016
 
 ANDROID browser handoff and V18 are checked in, default-off. The service binds channel, client, request, purpose and verifier; it does not accept arbitrary return URLs. A checked-in sample does not prove shared-DB migration or native enablement. See the [contract](../contracts/api-contracts.md#zalo-android-core-016) and [Core verification guide](../../backend/core/docs/zalo-android-preparation.md).
+
+### Consent-based product analytics
+
+**Verified source addendum:** `staging` revision `9613e47eb8a8a3a134bb550966a666adfde4db80` includes Mobile's native Firebase Analytics adapter, default-off configuration, device-scoped consent, route-template screen views and seven interaction events. Expo web uses a no-op adapter. SDK errors are isolated from user actions; no Core/AI event-ingestion endpoint or migration is introduced by this client path.
+
+[ADR-0010](adr/0010-mobile-usage-analytics-ga4.md) owns the system-wide design and measurement limits; the [Mobile runbook](../../frontend/mobile/docs/operations.md#ga4-native-verification) owns native verification. Product/legal approval, actual Console settings, native delivery and `AC-119`–`AC-121` remain unverified. GA4 observes consenting clients; it does not replace Core business reports, CORE-018 activity, operational monitoring or AI traces.
 
 ### AI and client boundaries
 

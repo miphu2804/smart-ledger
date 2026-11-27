@@ -55,6 +55,14 @@ class AgentControllerWebTest {
     }
 
     @Test
+    void anOptedInKeyNeverFallsBackToLegacyWhenQuotaServiceIsUnavailable() throws Exception {
+        mvc.perform(post("/api/v1/agent/chat").header("Authorization", "Bearer valid-token").header("X-Shop-Id", "7")
+                        .header("Idempotency-Key", "durable-key").contentType(MediaType.APPLICATION_JSON).content("{\"message\":\"q\"}"))
+                .andExpect(status().isServiceUnavailable()).andExpect(jsonPath("$.code").value("ai_quota_unavailable"));
+        org.mockito.Mockito.verifyNoInteractions(agentService);
+    }
+
+    @Test
     void chatReadsSnakeCaseBodyAndAnswersInSnakeCase() throws Exception {
         when(agentService.chat(any(), eq("7"), any())).thenReturn(new AgentChatResponse(5, 9, "ok"));
         mvc.perform(post("/api/v1/agent/chat").header("Authorization", "Bearer valid-token").header("X-Shop-Id", "7")

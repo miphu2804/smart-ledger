@@ -5,66 +5,48 @@ import logging
 import re
 import time
 import uuid
-from collections.abc import AsyncGenerator, AsyncIterator
+from collections.abc import AsyncGenerator, AsyncIterator, Callable
 from contextlib import asynccontextmanager, suppress
 from dataclasses import asdict, dataclass
 
-from pydantic_ai import Agent, AgentRun, Tool
+from pydantic_ai import Agent, AgentRun
 from pydantic_ai.messages import (
     CachePoint,
     ModelMessage,
     ModelRequest,
     ModelResponse,
     TextPart,
-    ToolCallPart,
-    ToolReturnPart,
     UserPromptPart,
 )
-from pydantic_ai.models import Model
 
+from src.agent.conversation_repository import AgentConversationRepository
 from src.agent.errors import GuardrailError
 from src.agent.guardrails import GuardrailLimits, GuardrailService
-from src.agent.repository import AgentConversationRepository
 from src.agent.tool_events import (
     ToolFinished,
     ToolStarted,
     log_tool_event,
     tool_progress,
 )
-from src.agent.tools import (
-    AgentContext,
-    build_calculation_tool,
-    build_restock_tool,
-    build_shop_data_tool,
-    suggest_screen,
-)
-from src.calculation.service import CalculationService
-from src.llm_router.service import LLMRouterService, ModelSelection
-from src.memory.repository import RecalledMemory
+from src.agent.tools import AgentCapability, AgentContext
+from src.llm.service import LLMService
+from src.llm.session_settings import session_settings
+from src.llm.tier_router import ModelSelection
+from src.memory.models import RecalledMemory
 from src.memory.service import AgentMemoryService
 from src.observability import Observability
 from src.prompt_templates import (
     APP_GUIDE_PROMPT,
-    CALC_PROMPT,
     CURRENT_TIME,
-    MEMORY_PROMPT,
-    RESTOCK_PROMPT,
-    RUN_CODE_PROMPT,
     SHOP_AGENT_SYSTEM_PROMPT,
-    SQL_AGENT_PROMPT,
 )
-from src.providers.session_settings import session_settings
-from src.restock.service import RestockService
-from src.sandbox.wrapper import Sandbox
-from src.sql.repository import ShopDataRepository
 from src.utils import get_time
 
 logger = logging.getLogger(__name__)
 
-# A reply links to at most this many screens, so the buttons fit under it on a phone.
-MAX_SCREEN_BUTTONS = 2
-# The screen-button block _with_screen_buttons appends to a stored answer.
-SCREEN_BUTTONS = re.compile(r"\n*```actions\n.*?\n```\s*$", re.DOTALL)
+# Answers saved while chat had screen buttons end with this block; history replay
+# drops it, so the model never reads one back and learns to write it.
+STORED_SCREEN_BUTTONS = re.compile(r"\n*```actions\n.*?\n```\s*$", re.DOTALL)
 
 
 @dataclass(frozen=True)
@@ -102,25 +84,40 @@ AgentStreamEvent = (
     MemoryRecalled | ToolStarted | ToolFinished | TextDelta | Reset | Done
 )
 
+# Saves a turn in place of `AgentConversationRepository.save_exchange`: called with
+# (conversation_id, question, answer, model, version) in a worker thread, it returns
+# the saved conversation id and the answer's message id.
+SaveExchange = Callable[[int | None, str, str, str, str], tuple[int, int]]
+
+
+@dataclass(frozen=True)
+class TurnData:
+    """One turn's values once its question is checked and its model is picked."""
+
+    context: AgentContext
+    conversation_id: int | None
+    question: str
+    prompt: str
+    history: list[dict]
+    recalled: list[RecalledMemory]
+    selection: ModelSelection | None
+    save: SaveExchange | None
+
 
 class AgentService:
     """One chat turn: load recent history, run the agent, persist the reply."""
 
     def __init__(
         self,
-        model: Model | None,
+        llm: LLMService,
         conversations: AgentConversationRepository,
         guardrail_limits: GuardrailLimits,
-        shop_data: ShopDataRepository | None = None,
-        restock: RestockService | None = None,
+        capabilities: list[AgentCapability] | None = None,
         memory: AgentMemoryService | None = None,
-        calculation: CalculationService | None = None,
-        sandbox: Sandbox | None = None,
         history_turns: int = 100,
         observability: Observability | None = None,
-        llm_router: LLMRouterService | None = None,
     ) -> None:
-        self.model_name = model.model_name if model is not None else ""
+        self.llm = llm
         self.conversations = conversations
         self.observability = observability or Observability()
         self.guardrails = GuardrailService(guardrail_limits)
@@ -130,39 +127,20 @@ class AgentService:
         # arrives per request through AgentContext and never appears in the prompt.
         # The current time travels with the new message instead (_with_current_time),
         # so the instructions and the history both stay a cacheable prefix.
-        # Each optional capability adds its own tool and prompt section.
-        tools = []
-        prompt_parts = [SHOP_AGENT_SYSTEM_PROMPT, APP_GUIDE_PROMPT]
-        if shop_data is not None:
-            tools.append(build_shop_data_tool(shop_data))
-            prompt_parts.append(SQL_AGENT_PROMPT)
-        if restock is not None:
-            tools.append(build_restock_tool(restock))
-            prompt_parts.append(RESTOCK_PROMPT)
-        if calculation is not None:
-            tools.append(build_calculation_tool(calculation))
-            prompt_parts.append(CALC_PROMPT)
-        if memory is not None:
-            prompt_parts.append(MEMORY_PROMPT)
-        tools.append(Tool(suggest_screen))
-        # The sandbox option runs model-written code from one run_code tool; every
-        # registered tool stays native, so a read-only data question or a plain
-        # calculation never starts Monty. Its prompt section is appended only here,
-        # so a model never reads run_code guidance when the tool is not registered:
-        # an unusable sandbox (no codemode extra) or SANDBOX_ENABLED=false arrives
-        # as None, so it turns off without failing the service.
-        if sandbox is not None:
-            prompt_parts.append(RUN_CODE_PROMPT)
-        capabilities = [
+        # Each optional capability adds its prompt section, in list order, and its tool
+        # or Pydantic AI capability; one that is off is not in the list.
+        capabilities = capabilities or []
+        tools = [part.tool for part in capabilities if part.tool is not None]
+        prompt_parts = [
+            SHOP_AGENT_SYSTEM_PROMPT,
+            APP_GUIDE_PROMPT,
+            *(part.prompt for part in capabilities),
+        ]
+        agent_capabilities = [
             *self.guardrails.capabilities,
-            *([sandbox.capability] if sandbox is not None else []),
+            *(part.capability for part in capabilities if part.capability is not None),
         ]
         self.memory = memory
-        # None runs every turn on `model`; otherwise each turn picks a tier model.
-        self.llm_router = llm_router
-        # Memory writes run after the reply; held here so they are not garbage
-        # collected mid-run.
-        self.memory_writes: set[asyncio.Task] = set()
         instructions = "\n\n".join(prompt_parts)
         # Short and stable, so traces and evaluation runs can be grouped by prompt. The
         # tool definitions count too: the model reads their descriptions and schemas.
@@ -176,7 +154,7 @@ class AgentService:
         ).hexdigest()[:12]
         self.agent = (
             Agent(
-                model,
+                llm.model,
                 name="chat",
                 deps_type=AgentContext,
                 instructions=instructions,
@@ -184,11 +162,11 @@ class AgentService:
                 # The limits arrive from the composition root, so this module reads no
                 # global settings and guardrails cannot be switched off by a caller.
                 retries=self.guardrails.retries,
-                capabilities=capabilities,
+                capabilities=agent_capabilities,
                 # Tags the run's trace, so one shop's turns can be filtered (NFR-007).
                 metadata=lambda ctx: {"shop_id": ctx.deps.shop_id},
             )
-            if model is not None
+            if llm.model is not None
             else None
         )
 
@@ -198,19 +176,29 @@ class AgentService:
         shop_id: int,
         message: str,
         conversation_id: int | None = None,
+        save: SaveExchange | None = None,
     ) -> AgentChatResult:
+        """Run one turn and save it; `save` replaces the plain save of the exchange."""
         context = AgentContext(user_id=user_id, shop_id=shop_id)
         question, history = await self._prepare_turn(context, message, conversation_id)
         async with self._marks_failure():
             prompt, recalled, selection = await self._recall_and_select(
                 context, conversation_id, question, history
             )
+            turn = TurnData(
+                context,
+                conversation_id,
+                question,
+                prompt,
+                history,
+                recalled,
+                selection,
+                save,
+            )
             answer, version = await self._answer(
                 prompt, history, context, self._session_id(conversation_id), selection
             )
-            return await self._save_turn(
-                context, conversation_id, question, answer, version, recalled, selection
-            )
+            return await self._save_turn(turn, answer, version)
 
     async def stream_chat(
         self,
@@ -218,9 +206,10 @@ class AgentService:
         shop_id: int,
         message: str,
         conversation_id: int | None = None,
+        save: SaveExchange | None = None,
     ) -> AsyncGenerator[AgentStreamEvent]:
         """Refuse a turn now, so the caller can answer with a status code; the returned
-        iterator runs the model and yields the events."""
+        iterator runs the model and yields the events. `save` is as in `chat`."""
         started = time.monotonic()
         context = AgentContext(user_id=user_id, shop_id=shop_id)
         question, history = await self._prepare_turn(context, message, conversation_id)
@@ -229,13 +218,16 @@ class AgentService:
                 context, conversation_id, question, history
             )
         return self._stream_events(
-            question,
-            prompt,
-            recalled,
-            history,
-            context,
-            conversation_id,
-            selection,
+            TurnData(
+                context,
+                conversation_id,
+                question,
+                prompt,
+                history,
+                recalled,
+                selection,
+                save,
+            ),
             started,
         )
 
@@ -257,7 +249,7 @@ class AgentService:
             context.user_id,
             conversation_id,
             question,
-            {"model": self.model_name, "prompt_version": self.prompt_version},
+            {"model": self.llm.model_name(), "prompt_version": self.prompt_version},
         )
         async with self._marks_failure():
             # Read before any model call, so a conversation outside the owner's scope
@@ -323,7 +315,7 @@ class AgentService:
         self, conversation_id: int | None, question: str, history: list[dict]
     ) -> ModelSelection | None:
         """The tier model of this turn, or None to run on the default model."""
-        if self.llm_router is None:
+        if not self.llm.tiered:
             return None
         user_messages = self._user_messages(question, history)
         # The classifier calls Bifrost over plain HTTP, which no agent instrumentation
@@ -331,7 +323,7 @@ class AgentService:
         with self.observability.span(
             "llm router", inputs={"user_messages": user_messages}
         ):
-            selection = await self.llm_router.route(conversation_id, user_messages)
+            selection = await self.llm.select(conversation_id, user_messages)
             self.observability.enrich_span(
                 outputs={"tier": selection.tier.name, "alias": selection.alias},
                 metadata={"mechanism": str(selection.mechanism)},
@@ -377,53 +369,18 @@ class AgentService:
         """Run the agent; return the screened answer and the model version."""
         async with (
             self.guardrails.run_limits(),
-            self.agent.iter(
-                self._with_current_time(prompt),
-                message_history=self._model_messages(history),
-                deps=context,
-                usage_limits=self.guardrails.usage_limits,
-                model_settings=session_settings(session_id, context.shop_id),
-                # One model for every step of the turn, tool calls included.
-                model=selection.model if selection is not None else None,
-            ) as run,
+            self._iter(prompt, history, context, session_id, selection) as run,
         ):
-            answer = ""
-            returns = None
             async for node in run:
-                if answer:
-                    # The button calls have returned; see _stream_run.
-                    returns = node.request
-                    break
                 if Agent.is_call_tools_node(node):
                     await self._queue_tool_events(node, run, None)
-                    answer = self._kept_text(node.model_response)
-            return self._read_result(run, answer, returns)
+            return self._read_result(run)
 
     async def _stream_events(
-        self,
-        question: str,
-        prompt: str,
-        recalled: list[RecalledMemory],
-        history: list[dict],
-        context: AgentContext,
-        conversation_id: int | None,
-        selection: ModelSelection | None,
-        started: float,
+        self, turn: TurnData, started: float
     ) -> AsyncGenerator[AgentStreamEvent]:
         events: asyncio.Queue[AgentStreamEvent | Exception] = asyncio.Queue()
-        producer = asyncio.create_task(
-            self._produce_turn(
-                question,
-                prompt,
-                recalled,
-                history,
-                context,
-                conversation_id,
-                selection,
-                started,
-                events,
-            )
-        )
+        producer = asyncio.create_task(self._produce_turn(turn, started, events))
         try:
             while True:
                 event = await events.get()
@@ -440,13 +397,7 @@ class AgentService:
 
     async def _produce_turn(
         self,
-        question: str,
-        prompt: str,
-        recalled: list[RecalledMemory],
-        history: list[dict],
-        context: AgentContext,
-        conversation_id: int | None,
-        selection: ModelSelection | None,
+        turn: TurnData,
         started: float,
         events: asyncio.Queue[AgentStreamEvent | Exception],
     ) -> None:
@@ -454,14 +405,14 @@ class AgentService:
         # opened it, so a generator suspended mid-run cannot be closed from outside.
         try:
             async with self._marks_failure():
-                if recalled:
-                    events.put_nowait(MemoryRecalled(recalled))
+                if turn.recalled:
+                    events.put_nowait(MemoryRecalled(turn.recalled))
                 delivered, answer, version = await self._stream_run(
-                    prompt,
-                    history,
-                    context,
-                    self._session_id(conversation_id),
-                    selection,
+                    turn.prompt,
+                    turn.history,
+                    turn.context,
+                    self._session_id(turn.conversation_id),
+                    turn.selection,
                     started,
                     events,
                 )
@@ -470,15 +421,7 @@ class AgentService:
                     delivered = ""
                 if answer[len(delivered) :]:
                     events.put_nowait(TextDelta(answer[len(delivered) :]))
-                saved = await self._save_turn(
-                    context,
-                    conversation_id,
-                    question,
-                    answer,
-                    version,
-                    recalled,
-                    selection,
-                )
+                saved = await self._save_turn(turn, answer, version)
                 events.put_nowait(Done(saved))
         except Exception as error:
             # The consumer re-raises it, so the caller sees the same error as chat().
@@ -495,37 +438,19 @@ class AgentService:
         events: asyncio.Queue[AgentStreamEvent | Exception],
     ) -> tuple[str, str, str]:
         """Queue the text each model response releases; return the text the owner
-        was sent since the last Reset, the answer with its buttons, and the model
-        version."""
+        was sent since the last Reset, the answer and the model version."""
         delivered = ""
         # How long the owner waited for the first words since the turn arrived, memory
         # recall included: the latency they feel, even when a preamble is later reset.
         first_text_ms = None
         async with (
             self.guardrails.run_limits(),
-            self.agent.iter(
-                self._with_current_time(prompt),
-                message_history=self._model_messages(history),
-                deps=context,
-                usage_limits=self.guardrails.usage_limits,
-                model_settings=session_settings(session_id, context.shop_id),
-                # One model for every step of the turn, tool calls included.
-                model=selection.model if selection is not None else None,
-            ) as run,
+            self._iter(prompt, history, context, session_id, selection) as run,
         ):
-            # The answer a response wrote alongside screen-button calls only.
-            answer = ""
-            returns = None
             async for node in run:
                 if Agent.is_call_tools_node(node):
                     await self._queue_tool_events(node, run, events)
                     continue
-                if answer:
-                    # The button calls have returned, so the answer is complete. The
-                    # model is not asked again: it would write the answer a second
-                    # time, often reworded, and no text check tells the copy apart.
-                    returns = node.request
-                    break
                 if not Agent.is_model_request_node(node):
                     continue
                 response_text = ""
@@ -549,15 +474,30 @@ class AgentService:
                         delivered += fresh
                         events.put_nowait(TextDelta(fresh))
                         released = safe
-                    answer = self._kept_text(stream.response)
             if first_text_ms is None:
                 # Nothing passed the screen while streaming; the caller sends the answer
                 # as soon as this returns.
                 first_text_ms = round(1000 * (time.monotonic() - started))
-            return (
-                delivered,
-                *self._read_result(run, answer, returns, first_text_ms),
-            )
+            return (delivered, *self._read_result(run, first_text_ms))
+
+    def _iter(
+        self,
+        prompt: str,
+        history: list[dict],
+        context: AgentContext,
+        session_id: str,
+        selection: ModelSelection | None,
+    ):
+        """Open the turn's agent run; the JSON and streaming routes share it."""
+        return self.agent.iter(
+            self._with_current_time(prompt),
+            message_history=self._model_messages(history),
+            deps=context,
+            usage_limits=self.guardrails.usage_limits,
+            model_settings=session_settings(session_id, context.shop_id),
+            # One model for every step of the turn, tool calls included.
+            model=selection.model if selection is not None else None,
+        )
 
     @staticmethod
     async def _queue_tool_events(
@@ -574,19 +514,9 @@ class AgentService:
                     events.put_nowait(progress)
 
     def _read_result(
-        self,
-        run: AgentRun,
-        answer: str,
-        returns: ModelRequest | None,
-        first_text_ms: int | None = None,
+        self, run: AgentRun, first_text_ms: int | None = None
     ) -> tuple[str, str]:
-        """Log the turn's token use; return the answer, with its screen buttons, and
-        the model version.
-
-        `answer` is the text a response wrote alongside screen-button calls only, which
-        ended the run early; empty when the run ended on its final output. `returns`
-        is the request the early end never sent, which holds those calls' returns.
-        """
+        """Log the turn's token use; return the answer and the model version."""
         # Token counts per turn, to size AGENT_TURN_TOKEN_LIMIT from real traffic and
         # to see how much of the prompt the provider served from its cache.
         usage = run.usage
@@ -597,122 +527,56 @@ class AgentService:
             usage.cache_write_tokens,
             100 * usage.cache_hit_ratio,
         )
-        messages = run.new_messages()
-        if not answer:
-            answer = run.result.output
+        answer = run.result.output
         model_name = next(
             message.model_name
-            for message in reversed(messages)
+            for message in reversed(run.new_messages())
             if isinstance(message, ModelResponse)
         )
-        if returns is not None:
-            messages = [*messages, returns]
-        answer = self._with_screen_buttons(answer, self._screens(messages))
         self.observability.finish_turn(answer, usage, first_text_ms)
-        return answer, model_name or self.model_name
-
-    @staticmethod
-    def _calls(response: ModelResponse) -> set[str]:
-        """The names of the tools a model response calls."""
-        return {
-            part.tool_name for part in response.parts if isinstance(part, ToolCallPart)
-        }
-
-    def _kept_text(self, response: ModelResponse) -> str:
-        """The answer text of a response that only adds screen buttons, if the screen
-        passes it; otherwise empty.
-
-        A model often writes the whole answer and calls suggest_screen in one response.
-        That text is the answer, and the run ends once the calls return. Text before a
-        data tool call is a preamble and is dropped. The Harness screens only the final
-        output, so this text is screened here.
-        """
-        if self._calls(response) != {suggest_screen.__name__}:
-            return ""
-        text = "".join(
-            part.content for part in response.parts if isinstance(part, TextPart)
-        ).rstrip()
-        return text if self.guardrails.allows_answer(text) else ""
-
-    @staticmethod
-    def _screens(messages: list[ModelMessage]) -> list[str]:
-        """The screens suggest_screen accepted this run, in order, without repeats."""
-        screens = []
-        for message in messages:
-            for part in message.parts:
-                if (
-                    isinstance(part, ToolReturnPart)
-                    and part.tool_name == suggest_screen.__name__
-                    and part.metadata["screen"] not in screens
-                ):
-                    screens.append(part.metadata["screen"])
-        return screens[:MAX_SCREEN_BUTTONS]
-
-    @staticmethod
-    def _with_screen_buttons(answer: str, screens: list[str]) -> str:
-        # Stored with the answer, so the buttons come back with the conversation;
-        # the app renders the block as buttons, like a ```ui block as charts and cards.
-        if not screens:
-            return answer
-        return f"{answer}\n\n```actions\n{json.dumps(screens)}\n```"
+        return answer, model_name or self.llm.model_name()
 
     async def _save_turn(
-        self,
-        context: AgentContext,
-        conversation_id: int | None,
-        question: str,
-        answer: str,
-        version: str,
-        recalled: list[RecalledMemory],
-        selection: ModelSelection | None,
+        self, turn: TurnData, answer: str, version: str
     ) -> AgentChatResult:
+        context = turn.context
+        conversation_id = turn.conversation_id
+        question = turn.question
+        model = self.llm.model_name(turn.selection)
         with self.observability.span("save turn"):
-            saved_conversation_id, message_id = await asyncio.to_thread(
-                self.conversations.save_exchange,
-                user_id=context.user_id,
-                shop_id=context.shop_id,
-                conversation_id=conversation_id,
-                user_message=question,
-                assistant_message=answer,
-            )
+            if turn.save is None:
+                saved_conversation_id, message_id = await asyncio.to_thread(
+                    self.conversations.save_exchange,
+                    user_id=context.user_id,
+                    shop_id=context.shop_id,
+                    conversation_id=conversation_id,
+                    user_message=question,
+                    assistant_message=answer,
+                )
+            else:
+                saved_conversation_id, message_id = await asyncio.to_thread(
+                    turn.save, conversation_id, question, answer, model, version
+                )
         if conversation_id is None:
             self.observability.link_conversation(saved_conversation_id)
         if self.memory is not None:
-            self._remember(context, saved_conversation_id, question, answer, recalled)
-        if selection is not None:
-            # After the save, so a new conversation keeps its tier under its new id.
-            self.llm_router.remember(saved_conversation_id, selection)
+            self.memory.remember_in_background(
+                context.shop_id,
+                context.user_id,
+                saved_conversation_id,
+                question,
+                answer,
+                turn.recalled,
+            )
+        # After the save, so a new conversation keeps its tier under its new id.
+        self.llm.remember(saved_conversation_id, turn.selection)
         return AgentChatResult(
             conversation_id=saved_conversation_id,
             message_id=message_id,
             answer=answer,
-            model=(
-                selection.model.model_name if selection is not None else self.model_name
-            ),
+            model=model,
             model_version=version,
         )
-
-    def _remember(
-        self,
-        context: AgentContext,
-        conversation_id: int,
-        question: str,
-        answer: str,
-        recalled: list[RecalledMemory],
-    ) -> None:
-        """Store what the turn taught without making the owner wait for it."""
-        task = asyncio.create_task(
-            self.memory.remember(
-                context.shop_id,
-                context.user_id,
-                conversation_id,
-                question,
-                answer,
-                recalled,
-            )
-        )
-        self.memory_writes.add(task)
-        task.add_done_callback(self.memory_writes.discard)
 
     @staticmethod
     def _current_time() -> str:
@@ -732,12 +596,11 @@ class AgentService:
     @staticmethod
     def _model_messages(history: list[dict]) -> list[ModelMessage]:
         # History follows verbatim; the agent adds the instructions to the new request.
-        # Stored buttons are dropped, so the model does not learn to write them itself.
         return [
             ModelRequest(parts=[UserPromptPart(entry["content"])])
             if entry["role"] == "USER"
             else ModelResponse(
-                parts=[TextPart(SCREEN_BUTTONS.sub("", entry["content"]))]
+                parts=[TextPart(STORED_SCREEN_BUTTONS.sub("", entry["content"]))]
             )
             for entry in history
         ]

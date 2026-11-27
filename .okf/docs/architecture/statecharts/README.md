@@ -1,7 +1,7 @@
 ---
 type: Reference
 title: "AI statecharts"
-description: "TLC-checked statecharts of the agent chat turn and the agent memory, with the span or log each state leaves."
+description: "TLC-checked Core quota, AI chat, durable-turn receipt/cancellation and memory models, with diagrams and separate runtime verification boundaries."
 owner: Technical owner
 status: stable
 generated: { by: human:miphu2804, at: 2026-11-05T10:09:47+07:00 }

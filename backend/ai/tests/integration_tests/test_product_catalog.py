@@ -10,7 +10,7 @@ from tests.support import apply_core_migrations, schema_url
 
 from src.drafts.catalog import ProductCatalogRepository
 from src.drafts.errors import CatalogUnavailableError
-from src.infra.postgre_db_client import PostgreDBClient
+from src.infra.postgres_client import PostgresClient
 
 
 @dataclass
@@ -18,7 +18,7 @@ class CatalogDatabase:
     admin: psycopg.Connection
     database_url: str
     schema: str
-    postgres: PostgreDBClient
+    postgres: PostgresClient
     repository: ProductCatalogRepository
     shop_a: int
     shop_b: int
@@ -84,7 +84,7 @@ def catalog_db() -> Iterator[CatalogDatabase]:
             (shop_b,),
         ).fetchone()[0]
 
-        postgres = PostgreDBClient(schema_url(database_url, schema))
+        postgres = PostgresClient(schema_url(database_url, schema))
         yield CatalogDatabase(
             admin=admin,
             database_url=database_url,
@@ -157,7 +157,7 @@ def test_missing_or_unknown_shop_returns_nothing(catalog_db: CatalogDatabase) ->
 def test_unavailable_database_raises_and_writes_nothing(
     catalog_db: CatalogDatabase,
 ) -> None:
-    offline = ProductCatalogRepository(PostgreDBClient())
+    offline = ProductCatalogRepository(PostgresClient())
 
     with pytest.raises(CatalogUnavailableError):
         offline.list_active_products(catalog_db.shop_a)

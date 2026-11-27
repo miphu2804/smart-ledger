@@ -16,4 +16,5 @@ docker rm -f "$name" > /dev/null 2>&1 || true
 docker run -d --name "$name" -p 127.0.0.1::5432 \
   -e POSTGRES_DB="$database" -e POSTGRES_USER=smartledger -e POSTGRES_PASSWORD=smartledger "$image" >&2
 until docker exec "$name" pg_isready -h 127.0.0.1 -U smartledger -d "$database" > /dev/null 2>&1; do sleep 1; done
+ci_env PG_CONTAINER "$name"
 ci_env PG_PORT "$(docker port "$name" 5432/tcp | head -1 | sed 's/.*://')"

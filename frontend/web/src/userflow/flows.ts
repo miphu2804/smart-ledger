@@ -335,6 +335,16 @@ export const FLOWS: Flow[] = [
         notes: ['Câu trả lời trong ảnh là câu trả lời thật của Agent trên staging, dựa trên đơn của tiệm thử.'],
       },
       { kind: 'screen', id: 'products', x: 1520, y: 0, title: 'Hàng hoá', caption: 'Món sắp hết, nhập hàng', image: 'dashboard-products', file: 'app/products.tsx', refs: ['FR-009', 'FR-030'] },
+      {
+        kind: 'screen', id: 'plan-promo-ai', x: 1840, y: 620, title: 'Gợi ý mua gói', caption: 'Khi hỏi đủ lượt Miễn phí trong ngày', image: 'plan-promo-ai', file: 'src/components/PlanPromo.tsx', refs: ['FR-042', 'FR-043'],
+        notes: [
+          'Chỉ gói Miễn phí, chỉ bản web và APK ngoài Google Play; một lần mỗi ngày, cách quảng cáo trước ít nhất 1 tiếng, không hiện ở lần mở app đầu tiên trên máy.',
+          'Bảng hỏi nhanh ở Đơn hàng chỉ đếm câu hỏi, không mở popup đè lên bảng.',
+          'Core trả 429 ai_quota_exhausted thì popup đổi thành "Hết lượt hỏi Bobi hôm nay", một lần mỗi ngày.',
+          'Ảnh chụp trên bản web mock.',
+        ],
+      },
+      { kind: 'step', id: 'promo-plans', x: 2140, y: 843, title: 'Mua gói', caption: 'Mở màn chọn gói', link: { flow: 'manage', node: 'plans' } },
       { kind: 'screen', id: 'analytics', x: 1520, y: 1240, title: 'Báo cáo', caption: 'Doanh thu, thu chi, lãi gộp', image: 'dashboard-revenue-report', file: 'app/analytics.tsx', refs: ['FR-006'] },
     ],
     edges: [
@@ -348,17 +358,30 @@ export const FLOWS: Flow[] = [
       { from: 'agent', to: 'chat-ask', label: 'AI lỗi: thông báo, hỏi lại', fail: true, sides: 'tt', via: [[990, 560], [690, 560]], labelSeg: 1 },
       { from: 'chat-answer', to: 'products', label: 'Mở Hàng hoá', sides: 'tl' },
       { from: 'chat-answer', to: 'analytics', label: 'Mở Báo cáo', sides: 'bl' },
+      { from: 'chat-answer', to: 'plan-promo-ai', label: 'Đủ lượt Miễn phí hôm nay' },
+      { from: 'plan-promo-ai', to: 'promo-plans', label: 'Xem các gói' },
     ],
   },
   {
     id: 'manage',
     title: 'Quản lý tiệm',
-    summary: 'Tab Quản lý mở thông tin tiệm, báo cáo, hàng hoá, công nợ, chi phí, cài đặt và các mục tài khoản; đăng xuất về màn Đăng nhập.',
+    summary: 'Tab Quản lý mở thông tin tiệm, mua gói, báo cáo, hàng hoá, công nợ, chi phí, cài đặt và các mục tài khoản; đăng xuất về màn Đăng nhập.',
     nodes: [
       { kind: 'screen', id: 'home', x: 0, y: 0, title: 'Tổng quan', caption: 'Thanh tab dưới cùng', image: 'dashboard-overview', file: 'app/(tabs)/index.tsx', refs: ['FR-006'] },
       {
+        kind: 'screen', id: 'plan-promo', x: 0, y: -620, title: 'Quảng cáo gói', caption: 'Lúc mở app, có ô tick nghỉ hôm nay', image: 'plan-promo', file: 'src/components/PlanPromo.tsx', refs: ['FR-042'],
+        notes: [
+          'Chỉ gói Miễn phí, chỉ bản web và APK ngoài Google Play; không hiện ở lần mở app đầu tiên trên máy, khi còn hướng dẫn hoặc đang chờ thanh toán.',
+          'Mỗi lần mở app tối đa một lần, cách lần trước ít nhất 6 tiếng; tick "Không hiện lại hôm nay" thì nghỉ tới hết ngày, kể cả gợi ý ở Trợ lý.',
+          'Ảnh chụp trên bản web mock.',
+        ],
+      },
+      {
         kind: 'screen', id: 'manage', x: 300, y: 0, title: 'Quản lý', caption: 'Kinh doanh, tài khoản và ứng dụng', image: 'manage', file: 'app/(tabs)/more.tsx', refs: ['FR-035'],
-        notes: ['Cuộn xuống là nhóm Tài khoản và ứng dụng.'],
+        notes: [
+          'Cuộn xuống là nhóm Tài khoản và ứng dụng.',
+          'Dưới thẻ tiệm có card "Mua gói" (gói đang dùng, nút Nâng cấp/Gia hạn/Tiếp tục); ảnh này chụp trước khi có card.',
+        ],
       },
       { kind: 'screen', id: 'profile', x: 600, y: 620, title: 'Thông tin tiệm', caption: 'Hồ sơ chủ tiệm và tiệm', image: 'profile', file: 'app/profile.tsx', refs: ['FR-011'] },
       { kind: 'screen', id: 'analytics', x: 900, y: 620, title: 'Báo cáo', caption: 'Doanh thu, chi phí, bán chạy', image: 'dashboard-revenue-report', file: 'app/analytics.tsx', refs: ['FR-006'] },
@@ -379,6 +402,27 @@ export const FLOWS: Flow[] = [
         kind: 'screen', id: 'change-password', x: 2400, y: 620, title: 'Đổi mật khẩu', caption: 'Không cần đăng xuất', image: 'change-password', file: 'app/change-password.tsx', refs: ['FR-010'],
         notes: ['Chỉ hiện khi tài khoản có mật khẩu; tài khoản Google đổi mật khẩu ở Google.', 'Quên mật khẩu hiện tại thì gửi thư đặt lại ngay từ màn này.'],
       },
+      {
+        kind: 'screen', id: 'plans', x: 2700, y: 620, title: 'Mua gói', caption: 'Chọn gói, bảng quyền lợi', image: 'plans', file: 'app/plans.tsx', refs: ['FR-041', 'FR-042'],
+        notes: [
+          'Chỉ có ở web và APK ngoài Google Play (EXPO_PUBLIC_IN_APP_PURCHASE); bản Play không có card và màn này.',
+          'Giá, thời hạn và lượt hỏi Bobi lấy từ catalog của Core; gói 1 tháng được chọn sẵn và có nhãn "Phổ biến nhất".',
+          'Có yêu cầu đang chờ thì hiện dải tiếp tục ở đầu danh sách.',
+          'Ảnh chụp trên bản web mock vì staging chưa bật billing.',
+        ],
+      },
+      {
+        kind: 'screen', id: 'plan-payment', x: 2700, y: 1240, title: 'Chuyển khoản', caption: 'QR, tài khoản, nội dung, đếm ngược', image: 'plan-payment', file: 'app/plan-payment.tsx', refs: ['FR-041'],
+        notes: [
+          'QR, số tiền, tài khoản nhận và nội dung SLP… lấy từ yêu cầu Core đã lưu; hạn 30 phút theo expiresAt.',
+          'Màn tự đọc lại trạng thái mỗi 4 giây tới khi gói kích hoạt; mở lại app thì tiếp tục yêu cầu cũ, không tạo yêu cầu thứ hai.',
+          'Mã QR trong ảnh là QR giả của bản mock.',
+        ],
+      },
+      {
+        kind: 'screen', id: 'plan-active', x: 2700, y: 1860, title: 'Gói đã kích hoạt', caption: 'Hạn dùng mới của gói', image: 'plan-active', file: 'app/plan-payment.tsx', refs: ['FR-042'],
+        notes: ['Đã nhận tiền mà chưa kích hoạt thì hiện "Đã nhận thanh toán — đang kích hoạt gói", không bảo chuyển lại.'],
+      },
       { kind: 'step', id: 'guide', x: 0, y: 620, title: 'Xem lại hướng dẫn', caption: 'Mở lại 7 thẻ ở Tổng quan', link: { flow: 'onboarding', node: 'home' } },
       { kind: 'step', id: 'policy', x: 0, y: 740, title: 'Chính sách và điều khoản', caption: 'Mở trang /chinh-sach', file: 'app/(tabs)/more.tsx', notes: ['Mở trang web bằng trình duyệt, không phải màn trong app.'] },
       { kind: 'step', id: 'delete-account', x: 0, y: 860, title: 'Xoá tài khoản', caption: 'Mở trang /delete-account', file: 'app/(tabs)/more.tsx', notes: ['Mở trang web bằng trình duyệt, không phải màn trong app.'] },
@@ -386,6 +430,8 @@ export const FLOWS: Flow[] = [
     ],
     edges: [
       { from: 'home', to: 'manage', label: 'Quản lý' },
+      { from: 'home', to: 'plan-promo', label: 'Mở app, 2,5 giây', sides: 'tb' },
+      { from: 'plan-promo', to: 'plans', label: 'Xem các gói', sides: 'rt', toShift: 30, labelSeg: 0 },
       { from: 'manage', to: 'profile', label: 'Thẻ tiệm', sides: 'rt', labelSeg: 1 },
       { from: 'manage', to: 'analytics', label: 'Báo cáo', sides: 'rt', labelSeg: 1 },
       { from: 'manage', to: 'products', label: 'Hàng hoá', sides: 'rt', labelSeg: 1 },
@@ -399,6 +445,10 @@ export const FLOWS: Flow[] = [
       { from: 'expenses', to: 'expense-add', label: 'Thêm chi phí', sides: 'bt' },
       { from: 'settings', to: 'notification-settings', label: 'Thông báo', sides: 'bt' },
       { from: 'manage', to: 'change-password', label: 'Đổi mật khẩu', sides: 'rt', labelSeg: 1 },
+      { from: 'manage', to: 'plans', label: 'Mua gói', sides: 'rt', labelSeg: 1 },
+      { from: 'plans', to: 'plan-payment', label: 'Thanh toán', sides: 'bt' },
+      { from: 'plan-payment', to: 'plan-active', label: 'Core nhận tiền', sides: 'bt' },
+      { from: 'plan-payment', to: 'plans', label: 'Quá 30 phút: tạo yêu cầu mới', fail: true, sides: 'rr', via: [[2940, 1499], [2940, 879]], labelSeg: 1 },
       { from: 'manage', to: 'guide', sides: 'br' },
       { from: 'manage', to: 'policy', sides: 'br' },
       { from: 'manage', to: 'delete-account', sides: 'br' },

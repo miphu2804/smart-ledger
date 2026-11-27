@@ -4,22 +4,29 @@ import re
 from dataclasses import asdict, dataclass
 from typing import Literal
 
-from pydantic_ai import RunContext, Tool, ToolReturn
+from pydantic_ai import RunContext, Tool
+from pydantic_ai.capabilities import AbstractCapability
 
-from src.calculation.ops import CalculationStep
+from src.calculation.operations import CalculationStep
 from src.calculation.service import CalculationService
 from src.prompt_templates import (
+    CALC_PROMPT,
     CALC_RESULT_HEADER,
+    MEMORY_PROMPT,
     QUERY_RESULT_HEADER,
+    RESTOCK_PROMPT,
     RESTOCK_RESULT_HEADER,
+    RUN_CODE_PROMPT,
+    SQL_AGENT_PROMPT,
 )
 from src.restock.service import RestockService
+from src.sandbox.code_mode import Sandbox
 from src.sql.repository import ShopDataRepository
+
+logger = logging.getLogger(__name__)
 
 # The guard and the repository raise ValueError("CODE: reason") for a query the model
 # can fix. Any other ValueError is a bug and must not reach the model.
-logger = logging.getLogger(__name__)
-
 MODEL_ERROR = re.compile(r"([A-Z][A-Z_]*): (.*)", re.DOTALL)
 
 
@@ -43,20 +50,40 @@ class AgentContext:
     shop_id: int
 
 
-# App screens a reply can link to; the mobile app maps each to its route and label.
-Screen = Literal[
-    "sales", "voice_order", "orders", "products", "debts", "expenses", "reports"
-]
+@dataclass(frozen=True)
+class AgentCapability:
+    """One optional part of the agent: its prompt section and what the section governs.
+
+    The composition root lists only the capabilities that are on, so a capability that
+    is off contributes neither a tool nor prompt text the model could act on.
+    """
+
+    prompt: str
+    tool: Tool[AgentContext] | None = None
+    capability: AbstractCapability[AgentContext] | None = None
 
 
-def suggest_screen(screen: Screen) -> ToolReturn:
-    """Add a button under the reply that opens this app screen; the reply still says
-    where the screen is in the app."""
-    # The screen travels as metadata, which the model never reads back; the service
-    # turns it into the button after the run, so no model text reaches the button.
-    return ToolReturn(
-        return_value=f"Button to {screen} added.", metadata={"screen": screen}
-    )
+def shop_data_capability(shop_data: ShopDataRepository) -> AgentCapability:
+    return AgentCapability(SQL_AGENT_PROMPT, tool=build_shop_data_tool(shop_data))
+
+
+def restock_capability(restock: RestockService) -> AgentCapability:
+    return AgentCapability(RESTOCK_PROMPT, tool=build_restock_tool(restock))
+
+
+def calculation_capability(calculation: CalculationService) -> AgentCapability:
+    return AgentCapability(CALC_PROMPT, tool=build_calculation_tool(calculation))
+
+
+# Memory recalls and remembers around the turn, outside the model's tool list, so the
+# model only needs its prompt section.
+MEMORY_CAPABILITY = AgentCapability(MEMORY_PROMPT)
+
+
+def sandbox_capability(sandbox: Sandbox) -> AgentCapability:
+    """The run_code capability; every registered tool stays native, so a data question
+    or a plain calculation never starts Monty."""
+    return AgentCapability(RUN_CODE_PROMPT, capability=sandbox.capability)
 
 
 def build_shop_data_tool(shop_data: ShopDataRepository) -> Tool[AgentContext]:
@@ -123,7 +150,7 @@ def build_restock_tool(restock: RestockService) -> Tool[AgentContext]:
     return Tool(suggest_restock, takes_ctx=True)
 
 
-def build_calculation_tool(calc: CalculationService) -> Tool[AgentContext]:
+def build_calculation_tool(calculation: CalculationService) -> Tool[AgentContext]:
     """Arithmetic tool; the service is injected here, so the plan limits live in it.
 
     The steps are a Pydantic model list with extra keys forbidden, so the model sees
@@ -139,7 +166,7 @@ def build_calculation_tool(calc: CalculationService) -> Tool[AgentContext]:
         # A rejected plan goes back to the model as text so it can fix the steps,
         # like query_shop_data. Nothing else can raise here: the service is pure.
         try:
-            outcome = calc.calculate(operations)
+            outcome = calculation.calculate(operations)
         except ValueError as error:
             return f"{_model_error(error)} Fix the steps and retry."
         payload = {

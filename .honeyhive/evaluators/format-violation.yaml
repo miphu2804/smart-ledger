@@ -18,8 +18,8 @@ criteria: |
   import re
 
   # Rule 10 of SHOP_AGENT_SYSTEM_PROMPT allows only **bold**, numbered lists, small
-  # tables and the ui block (rule 11; old answers may hold a chart block); the service itself appends the ```actions block.
-  ALLOWED_BLOCK = re.compile(r"^[ \t]*```(chart|ui|actions)[ \t]*\n.*?^[ \t]*```[ \t]*$", re.DOTALL | re.MULTILINE)
+  # tables and the ui block (rule 11; old answers may hold a chart block).
+  ALLOWED_BLOCK = re.compile(r"^[ \t]*```(chart|ui)[ \t]*\n.*?^[ \t]*```[ \t]*$", re.DOTALL | re.MULTILINE)
   FORBIDDEN = re.compile(r"^[ \t]*([-•*+][ \t]|#{1,6}[ \t]|>[ \t]?)|```", re.MULTILINE)
 
   answer = ALLOWED_BLOCK.sub("", outputs.get("answer") or "")

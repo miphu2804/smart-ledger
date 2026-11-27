@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # Starts the CD workflow for the areas of a pushed commit whose CI checks passed or were skipped (needs GH_TOKEN).
-# Reads CHANGED_AI, CHANGED_CORE, CHANGED_MOBILE and CHANGED_LANDING (true|false, from changes.sh), one *_RESULT of
+# Reads CHANGED_AI_IMAGE, CHANGED_CORE, CHANGED_MOBILE and CHANGED_LANDING (true|false, from changes.sh; AI deploys
+# only when an input of its image changed, not on every backend/ai change), one *_RESULT of
 # each job (AI, CORE, CONTAINERS, MOBILE, LANDING) and RERUN. A re-run (RERUN=true) hands off every area whose checks
 # pass, so a changed environment variable can be picked up by re-running all jobs.
 set -euo pipefail
@@ -10,7 +11,7 @@ ok() { local r; for r in "$@"; do [ "$r" = success ] || [ "$r" = skipped ] || re
 want() { [ "$RERUN" = true ] || [ "$1" = true ]; }
 backend_ok=false; ok "$AI_RESULT" "$CORE_RESULT" "$CONTAINERS_RESULT" && backend_ok=true
 ai=false; core=false; web=false; landing=false
-[ "$backend_ok" = true ] && want "$CHANGED_AI" && ai=true
+[ "$backend_ok" = true ] && want "$CHANGED_AI_IMAGE" && ai=true
 [ "$backend_ok" = true ] && want "$CHANGED_CORE" && core=true
 ok "$MOBILE_RESULT" && want "$CHANGED_MOBILE" && web=true
 ok "$LANDING_RESULT" && want "$CHANGED_LANDING" && landing=true

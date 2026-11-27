@@ -10,7 +10,13 @@ from tests.support import (
 )
 
 from src.agent.service import AgentService
-from src.agent.tools import AgentContext, build_restock_tool
+from src.agent.tools import (
+    AgentContext,
+    build_restock_tool,
+    restock_capability,
+    shop_data_capability,
+)
+from src.llm.service import LLMService
 from src.prompt_templates import (
     APP_GUIDE_PROMPT,
     RESTOCK_PROMPT,
@@ -85,10 +91,12 @@ def build_agent(
     conversations: FakeConversationRepository | None = None,
 ) -> AgentService:
     return AgentService(
-        model,
+        LLMService(model),
         conversations or FakeConversationRepository(),
-        shop_data=shop_data,
-        restock=restock,
+        capabilities=[
+            *([shop_data_capability(shop_data)] if shop_data is not None else []),
+            *([restock_capability(restock)] if restock is not None else []),
+        ],
         guardrail_limits=TEST_GUARDRAIL_LIMITS,
     )
 
@@ -110,7 +118,7 @@ async def test_tools_sent_to_the_model_expose_only_period() -> None:
         user_id=3, shop_id=15, message="m"
     )
 
-    spec, _ = model.requests[0][1].function_tools
+    (spec,) = model.requests[0][1].function_tools
     assert spec.name == "suggest_restock"
     assert list(spec.parameters_json_schema["properties"]) == ["period"]
     assert spec.parameters_json_schema["required"] == ["period"]
@@ -234,7 +242,7 @@ async def test_agent_without_restock_has_no_suggest_restock_tool() -> None:
         user_id=3, shop_id=15, message="m"
     )
 
-    assert model.tool_names() == ["query_shop_data", "suggest_screen"]
+    assert model.tool_names() == ["query_shop_data"]
 
 
 async def test_instructions_are_static_and_carry_the_restock_rules() -> None:

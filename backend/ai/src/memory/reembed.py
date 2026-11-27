@@ -24,8 +24,8 @@ from pydantic_ai import Embedder
 from sqlalchemy import select, update
 
 from src.app_config import app_config
-from src.infra.postgre_db_client import PostgreDBClient
-from src.main import build_memory_embedder
+from src.embedding.factory import build_embedder
+from src.infra.postgres_client import PostgresClient
 from src.memory.repository import EMBEDDING_DIMENSIONS, AgentMemory
 
 logger = logging.getLogger(__name__)
@@ -42,11 +42,17 @@ def main() -> int:
     apply = parser.parse_args().apply
     logging.basicConfig(level=logging.INFO, format="%(message)s")
 
-    embedder = build_memory_embedder()
+    embedder = build_embedder(
+        app_config.AGENT_MEMORY_EMBEDDING_PROVIDER,
+        app_config.AGENT_MEMORY_EMBEDDING_MODEL,
+        EMBEDDING_DIMENSIONS,
+        app_config.CLOUDFLARE_ACCOUNT_ID,
+        app_config.CLOUDFLARE_API_TOKEN,
+    )
     if embedder is None:
         logger.error("no embedder: check AGENT_MEMORY_EMBEDDING_* (see the log above)")
         return 1
-    postgres = PostgreDBClient(app_config.POSTGRES_URL)
+    postgres = PostgresClient(app_config.POSTGRES_URL)
     try:
         rows = _rows(postgres)
         logger.info(
@@ -67,7 +73,7 @@ def main() -> int:
         postgres.close()
 
 
-def _rows(postgres: PostgreDBClient) -> list[tuple[int, str]]:
+def _rows(postgres: PostgresClient) -> list[tuple[int, str]]:
     with postgres.session() as session:
         return [
             (row.id, row.content)
@@ -99,7 +105,7 @@ def _check(vectors: list[list[float]]) -> None:
 
 
 def _write(
-    postgres: PostgreDBClient, ids: list[int], vectors: list[list[float]]
+    postgres: PostgresClient, ids: list[int], vectors: list[list[float]]
 ) -> None:
     with postgres.session() as session:
         session.execute(

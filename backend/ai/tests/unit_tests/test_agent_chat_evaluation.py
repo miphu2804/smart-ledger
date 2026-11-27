@@ -1,12 +1,20 @@
+import asyncio
 import json
 import tomllib
 from types import SimpleNamespace
 
 import pytest
 from evaluation.agent_chat.agent_chat_eval import AgentChatEval
+from evaluation.agent_chat.honeyhive import build_session_payload, sync_scores
+from evaluation.agent_chat.metrics.judge import Judge
+from evaluation.agent_chat.metrics.memory import MemoryEvaluator
+from evaluation.agent_chat.metrics.response_quality import ResponseQualityEvaluator
+from evaluation.agent_chat.metrics.safety import SafetyEvaluator
+from evaluation.agent_chat.metrics.tool_use import ToolUseEvaluator
+from evaluation.agent_chat.target import RESULT_CHARS, AgentTarget
+from evaluation.agent_chat.without_memory_writes import WithoutMemoryWrites
 from evaluation.core import report as reporting
 from evaluation.core.gate import find_gate_failures
-from evaluation.core.honeyhive import build_session_payload, sync_scores
 from evaluation.core.report import (
     LAYERS,
     build_markdown_report,
@@ -14,13 +22,6 @@ from evaluation.core.report import (
     print_report,
 )
 from evaluation.core.schema import Case, CaseResult, MetricResult, Output
-from evaluation.metrics.judge import Judge
-from evaluation.metrics.memory import MemoryEvaluator
-from evaluation.metrics.response_quality import ResponseQualityEvaluator
-from evaluation.metrics.safety import SafetyEvaluator
-from evaluation.metrics.tool_use import ToolUseEvaluator
-from evaluation.targets.agent import RESULT_CHARS, AgentTarget
-from evaluation.targets.without_memory_writes import WithoutMemoryWrites
 from pydantic_ai.models.test import TestModel
 from tests.support import ScriptedModel
 from tests.unit_tests.test_agent_memory import (
@@ -212,7 +213,8 @@ async def test_blocked_memory_writes_store_nothing() -> None:
     service = memory_service(extractor, repository)
     memory = WithoutMemoryWrites(service)
 
-    await memory.remember(15, 3, 9, "gạo nhập của cô Ba", "Dạ.", [])
+    memory.remember_in_background(15, 3, 9, "gạo nhập của cô Ba", "Dạ.", [])
+    await asyncio.gather(*service.writes)
 
     assert repository.added == []
     assert extractor.requests == []

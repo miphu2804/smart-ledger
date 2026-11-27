@@ -1,191 +1,196 @@
-### 2026-11-07 — Block the unused Android data-sync foreground-service permission
+### 2026-11-25 — Show the plans on the landing page and refresh its screenshots
 
 | Area | Change |
 |---|---|
-| Mobile | • Block the transitive background downloader's `FOREGROUND_SERVICE_DATA_SYNC` permission through Expo config and add a regression test<br>• Document rebuilding the AAB and replacing affected Play artifacts instead of claiming an unused backup feature |
+| Web | • The landing page gains a "Bảng giá" section, a nav link and a hero teaser with the plans of the app's plan screen: Miễn phí with 2 lượt/ngày, 1 tháng 99.000đ marked "Phổ biến nhất" and 3 tháng 297.000đ, both 300 lượt/tuần; the FAQ answer on fees says how to buy in Quản lý → Mua gói<br>• `/chinh-sach` replaces the three planned Google Play tiers with the same plans and describes the SePay QR purchase, manual renewal, expiry to Miễn phí, mismatched transfers and SePay as a processor; its date moves to 25/11/2026<br>• Nine app screenshots are recaptured from the mock web build with the five-tab bar, and `ai-answer.webp` with chat UI cards replaces the `ai-recall` image and video, which still showed the removed screen button |
 
-Check: Mobile typecheck, 197 unit tests and web export passed on an isolated branch from staging `875fea99`; Expo introspection emits `tools:node="remove"` for the permission. A rebuilt AAB, device behavior and Play acceptance are not verified. Commit: the commit that adds this entry.
+Check: Web typecheck, oxlint and build passed; desktop and 390 px renders of the hero, gallery, plans and `/chinh-sach` were checked in headless Chrome. Not verified: the policy text has no owner or legal review. Commit: the commit that adds this entry.
 
-### 2026-11-07 — Refuse debug-signed production Android builds
 
-| Area | Change |
-|---|---|
-| CI | • `write-release-keystore.sh` fails an `android-production` build when `ANDROID_KEYSTORE_BASE64` is empty instead of signing with the public debug keystore; `mobile-release.yml` passes it the environment<br>• Found when the release AAB from run 42350017899 built green but was signed `CN=Android Debug`, because the Dopbase `release/production` value was empty |
-
-Check: the script exits 1 for android-production without a keystore, 0 for android-staging and with a keystore; `shellcheck --severity=warning` and `actionlint` passed.
-
-### 2026-11-07 — English file names for product images and icons
+### 2026-11-23 — Plan ads on app open and in the Bobi chat
 
 | Area | Change |
 |---|---|
-| Docs | • Recaptured the 21 marketing screenshots from the mock web build at staging `a1245a1c` under English file names; renamed 14 user flow screenshots without recapture, since they come from staging and not the mock<br>• Translated the Vietnamese comments in the marketing capture scripts |
-| Mobile and Web | • Renamed the Vietnamese-named overview icons in `assets/tab1-overview` and `public/brand/icons` to English and updated their references |
+| Mobile | • `PlanPromo.tsx` shows a plan ad when the app opens (with "Không hiện lại hôm nay") and a "Cần hỏi Bobi nhiều hơn?" popup in the assistant once a day when today's answered questions reach the Free limit from the catalog; a 429 `ai_quota_exhausted` turns it into "Hết lượt hỏi Bobi hôm nay"<br>• Frequency rules in `src/lib/promo.ts`, saved per account (`promoStorage*.ts`): Free accounts only, never on the first app open on a device, during the guide or with a pending payment; at most once per open and 6 hours apart; ads at least 1 hour apart<br>• Same `EXPO_PUBLIC_IN_APP_PURCHASE` gate as the plan screens, so Play builds show no ads; the quick-ask sheet only counts questions<br>• `agentErrorMessage` explains `ai_quota_exhausted` |
+| Docs | • PRD: the ad rules next to the mobile checkout note<br>• User flow: "Quảng cáo gói" above Tổng quan in the Quản lý flow and "Gợi ý mua gói" after Câu trả lời in the Bobi flow, captured on the mock web build |
 
-Check: Web lint, typecheck and build passed; Mobile typecheck passed and `npm test` 196 passed; every renamed image reference resolves to a file; the recaptured images were inspected. The landing page and the app were not opened after the icon rename. Commit: the commit that adds this entry.
-### 2026-11-07 — Unquote Dopbase values in CI
+Check: `npx tsc --noEmit` passes; `node --test` 223 of 223 including 10 new promo tests; Playwright e2e 28 of 28 including first open without an ad, the snooze tick, the plans link and the Bobi popup. Not verified: Android, a real 429 from Core (quota enforcement is off). Commit: the one that adds this entry.
 
-| Area | Change |
-|---|---|
-| CI | • `load-dopbase.sh` strips the double quotes and escapes that `dopbase export --format dotenv` puts around every value, so `VPS_SSH_KEY` decodes and `VPS_KNOWN_HOSTS` is a valid known-hosts line again; staging backend deploys had failed since #553<br>• A multi-line value now fails with a clear error |
-
-Check: a fake `dopbase` printing quoted values loads the exact bytes, a multi-line value is refused, `shellcheck --severity=warning` passed; the stored staging key decodes to an OpenSSH private key once unquoted. CD rerun pending.
-
-### 2026-11-07 — Move document metadata into the .okf bundle
+### 2026-11-21 — Buy a plan from the Quản lý tab
 
 | Area | Change |
 |---|---|
-| Docs | • Human documents carry no frontmatter; their OKF metadata (46 concepts and generated indexes) lives in `.okf/` at mirrored paths and each concept's `resource` points to its document<br>• `scripts/docs/okf_sync.py` sets titles from the first heading, adds stub concepts, regenerates the indexes and, with `--check`, reports drift, frontmatter in a human document and broken relative links<br>• Links to the removed `index.md` files now point to `backend/core/README.md` or the `.okf/` indexes; `AGENTS.md` and the docs conventions describe the new model |
-| CI | • New `docs` area in `scripts/ci/changes.sh` and a `docs` job in `ci.yml` that runs `okf_sync.py --check`, listed in the result summary |
+| Mobile | • A "Mua gói" card under the shop card on Quản lý shows the current plan and opens `app/plans.tsx`: Miễn phí, 1 tháng and 3 tháng from Core's catalog (prices are never hardcoded), "Phổ biến nhất" on the 1-month plan, a benefits table and a pay button<br>• `app/plan-payment.tsx` shows the QR, amount, bank account and `SLP…` code from Core's stored request, counts down to `expiresAt`, re-reads the status every 4 seconds and moves through Chờ thanh toán, Đã nhận thanh toán — đang kích hoạt gói and Gói đã được kích hoạt; a pending request is kept per account so reopening continues it instead of creating a second one<br>• `EXPO_PUBLIC_IN_APP_PURCHASE` hides the card and screens in Google Play builds (Play Billing policy); empty means on for web and the self-updating landing APK<br>• Plan illustrations are SVG in `PlanArt.tsx` (Canva's AI image tool is disabled for the team); the mock Core serves the catalog and pays a request after 15 seconds |
+| Docs | • PRD SePay section: mobile checkout status and the Play rule with its source<br>• FE handoff: the checkout gap is closed, quota display and chat keys remain<br>• User flow: Mua gói, Chuyển khoản and Gói đã kích hoạt in the Quản lý flow, captured on the mock web build |
 
-Check: `okf_sync.py --check` passes and a second write run changes nothing; frontmatter, a missing concept and a wrong title are each reported; `bash -n`, `shellcheck` and `actionlint` pass.
+Check: `npx tsc --noEmit` passes; `node --test` 213 of 213 including 12 new billing tests; Playwright e2e 25 of 25 on the mock web build including the purchase and resume flows; with `EXPO_PUBLIC_IN_APP_PURCHASE=false` the card is gone. Not verified: real Core billing on staging (gates off), a real SePay transfer, Android. Commit: the one that adds this entry.
 
-### 2026-11-07 — Move HoneyHive sync scripts and trim redundant script branches
-
-| Area | Change |
-|---|---|
-| CI | • `sync-evaluators.sh` and `sync-dashboards.sh` move from the repository root to `scripts/honeyhive/`, beside the other script groups; workflows, CODEOWNERS and docs point at the new paths<br>• The Vercel build and deploy scripts build one argument list instead of repeating the command per target, and `apply.sh` drops its undocumented no-op `--keep-all` and `--backup` flags |
-
-Check: `actionlint`, `shellcheck --severity=warning` on every tracked script, `check-evaluator-ids.sh`, `check-provider-coupling.sh` and Ruff passed; the Vercel scripts ran against a stub CLI on bash 3.2 for both targets and still fail when the deploy fails. The HoneyHive and Vercel scripts were not run against the real services. Commit: the commit that adds this entry.
-### 2026-11-07 — Clean README front pages and old document metadata
+### 2026-11-16 — Tighten the turn service and the composition root
 
 | Area | Change |
 |---|---|
-| Docs | • READMEs outside `docs/` no longer carry frontmatter, so GitHub opens them on the title instead of a metadata table; `AGENTS.md` and the docs conventions record the rule<br>• The root README reads as a production overview again: the course-scope paragraph is gone, the boundaries table regains a Runs on column, and the repository layout is a directory tree checked against `staging`<br>• Seven documents (the product set, technical design, API contracts and marketing) fold their metadata table under the title into one intro sentence; BRD, PRD and the product overview no longer label themselves as the EXE201 MVP |
+| AI | • `AgentTurnService.admit` returns `(created, execution)`, without the receipt row that every caller discarded, and `_raise_safe` is annotated `NoReturn`<br>• `build_llm_router` in `main.py` is `build_tier_router`, after the `TierRouter` it builds<br>• The pass over `src/agent/service.py` found nothing worth cutting |
 
-Check: every directory in the layout tree exists on `staging` `a1245a1`; relative links in the edited front pages resolve; `git diff --check` passed. Rendering on GitHub was not checked.
+Check: AI Ruff lint and format passed; pytest passed 635 with 14 skipped against a disposable pgvector PostgreSQL; tests changed only call sites. The OpenAPI document, `prompt_version` with the tool names, the env var names, the log messages and the SQL text are identical to `staging` at `aa394ec2`. Commit: the commit that adds this entry.
 
-### 2026-11-07 — Link onboarding to owned guides and local checks
-
-| Area | Change |
-|---|---|
-| Docs | • Route code changes through service READMEs and owned guides; keep technical-writing manual and model checks distinct from runtime tests<br>• Require owning-document and local-index updates in contributor guidance; use Node 22.18+ in the 22.x line for frontend setup and link the Web guide to that prerequisite |
-
-Check: local documentation paths and anchors resolve apart from the existing illustrative `relative/path` placeholder; `git diff --check` passed. No runtime, native or deployment checks apply to these guidance-only edits. Commit: the commit that adds this entry.
-
-### 2026-11-07 — Restore architecture and delivery diagrams (#555)
+### 2026-11-16 — Name the AI modules after what they hold
 
 | Area | Change |
 |---|---|
-| Docs | • Restored the target architecture, CI/CD, VPS network, Dopbase backup, sign-in and APK release diagrams with their draw.io sources; replaced the Dopbase host and Vercel domains with generic labels and re-exported those two SVGs<br>• Drew the staging and production app stacks in `ci-cd.drawio` as one Production | Staging box, aligned Caddy with Core, added Cloudinary for product images, grouped the Supabase databases and alert channels into titled boxes and rerouted edges so none cross or pass through an icon or title<br>• Restored the root README tech stack and system architecture sections and the diagram explanations in CI/CD, without addresses or server paths<br>• The diagram guide now allows topology drawn from tracked `deploy/` files and keeps domains, IPs, server paths, credentials and access procedures private<br>• Fixed 20 claims that a code check found stale in the API contracts, technical design, AI runtime reference, Mobile operations, Web README and development guides, and pinned every diagram export to a white background<br>• Rendered the Mermaid diagrams to white SVGs from `.mmd` sources, and rewrote the PRD functional requirements, AI runtime reference and Mobile operations guide in terms of behavior instead of class, function and file names; the CI/CD diagram now names each service's role instead of its port |
+| AI | • Files take the name of their class: `agent/turn_repository.py`, `agent/turn_service.py`, `agent/conversation_repository.py`, `infra/postgres_client.py`, `llm/tier_router.py`, `llm/model_factory.py`, `sandbox/code_mode.py`, `calculation/operations.py`; `PostgreDBClient` is `PostgresClient` and `LLMRouterService` is `TierRouter`<br>• The four memory dataclasses live in `memory/models.py`, and `phone_number.py` moves to `src/`, so `memory` no longer imports from `agent`<br>• Logger names follow the module paths; no alert or dashboard in `deploy` or `scripts` is keyed on an old name |
+| Docs | • The runtime reference, the service walkthrough, the credential map source paths and two links of the business requirements audit point at the new paths |
 
-Check: internal links and anchors in 48 changed Markdown files resolve; `git diff --check` passed; no domain, IP or server path remains in the diagrams, README or CI/CD guide; the three edited diagrams were rendered and inspected, and `validate.py` reports no edge crossing in `ci-cd.drawio`; network claims were checked against `deploy/*/compose.yaml`. Commit: the commit that adds this entry.
+Check: AI Ruff lint and format passed; pytest passed 635 with 14 skipped against a disposable pgvector PostgreSQL; tests changed only imports, file names and identifiers. The OpenAPI document, `prompt_version` with the tool names, the env var names, the log messages and the SQL text are identical to `staging` at `aa394ec2`; `okf_sync.py --check` passed. Commit: the commit that adds this entry.
 
-### 2026-11-07 — Re-review fixes for documentation boundaries (#555)
-
-| Area | Change |
-|---|---|
-| Docs and tooling | • The catalog `BIGINT` test now reads the AI draft reference instead of the API contract, which keeps only implemented endpoints<br>• `scripts/secrets/credential_map.py` writes to `~/.smartledger/credential-map/` outside Git and `.gitignore` blocks HTML snapshots in `docs/development/credential-map/`<br>• Restored original document authors, defined `author` as the writer, added a screenshot capture manifest, embedded the logical architecture Mermaid in the diagram guide and corrected AI logging, session ID, draft result and expense-status statements found by a source check |
-
-Check: AI `uv run pytest` 541 passed, 80 skipped; internal links and anchors in 48 changed Markdown files resolve; `git diff --check` passed. The Mermaid render and the credential-map script run against Dopbase were not verified. Commit: the commit that adds this entry.
-
-### 2026-11-07 — Source-verified documentation and private operations boundary (#555)
+### 2026-11-16 — Type the turn values and the turn receipt
 
 | Area | Change |
 |---|---|
-| Docs | • Reconciled three independent fresh-context reviews against staging `a2766ee`; corrected reports, ADMIN contracts, AI authorization/privacy/persistence and current schema boundaries<br>• Removed unimplemented API/schema plans from current references; separated AI architecture from runtime detail<br>• Removed published demo access values, environment credential snapshots and deployment/network diagrams; private infrastructure and access procedures now point to the owner's external knowledge base, while privacy safeguards remain |
+| AI | • `TurnData` in `src/agent/service.py` carries one turn's values, including the optional `save`, in place of the eight or nine positional parameters of the stream path and `_save_turn`<br>• `AgentTurnRepository.get` and `cancel` return a frozen `TurnReceipt` with a `TurnState` enum instead of a mutated row dict; the router maps it to `AgentTurnReceipt`, `_pending` builds that schema, and `AgentTurnService` has type hints |
 
-Check: 72 Markdown documents and 715 internal links passed path/anchor/index/frontmatter checks; DBML matches 25 Core and 4 AI tables. All 14 walkthrough diagrams and the logical architecture rendered; the three changed walkthrough exports were updated. AI auth/observability tests: 37 passed. TypeScript token comparison confirms all three source-file edits are comment-only. BRD and nine ADR statuses are unchanged; PRD changes only diagram navigation. Live environments, private knowledge-base completeness, full secret scanning and Git-history removal were not verified or performed. Commit: the commit that adds this entry.
+Check: AI Ruff lint and format passed; pytest passed 635 with 14 skipped against a disposable pgvector PostgreSQL; tests changed only access syntax. The OpenAPI document, `prompt_version` with the tool names, the env var names, the log messages and the SQL text are identical to `staging` at `aa394ec2`. Commit: the commit that adds this entry.
 
-### 2026-11-07 — Production-first documentation and local ownership (#555)
-
-| Area | Change |
-|---|---|
-| Docs | • Audited the actual tracked tree at staging `a2766ee`; separated production operation from EXE201 delivery scope and implementation/enablement/deployment/acceptance<br>• Made landing pages domain-oriented, kept local indexes, moved service detail into owned Core/AI/Mobile guides, and preserved technical safeguards, dated decisions and rollout evidence<br>• Aligned root/Mobile instructions, English technical prose and lean OKF/plain authors; reconciled source facts and resolved obsolete merge/assignment blockers without claiming live acceptance |
-
-Check: internal paths/anchors, immediate-child index/frontmatter consistency and root navigation reachability passed; BRD/PRD stayed byte-identical, API contract body changed only link targets, all nine ADR decision statuses stayed intact, `config.ts` matched the baseline after removing comments, and `git diff --check` passed. Mobile typecheck passed; `npm test` had 192 pass/2 fail, reproduced with the same failures on baseline `a2766ee`. Source inventory and verification evidence are in the PR. Live deployment, provider/device UAT and acceptance were not verified. Commit: the commit that adds this entry.
-
-### 2026-11-07 — Fix stale setup, CI and mobile docs against the code
+### 2026-11-15 — Give the agent one LLM service
 
 | Area | Change |
 |---|---|
-| CI | • Path-filter table and deploy notes match `changes.sh`, `upload-settings.sh`, `infra-run.yml` and `deploy-backend.yml`: settings come from Dopbase, `container-images` runs only for the `containers` area, and `VPS_*` and the runner token names are the ones the workflows read |
-| AI | • `MODEL_FALLBACKS` is documented as `protocol:model`, as in `app_config.py` |
-| Honeyhive | • The sync workflows load keys from Dopbase `ai/production`, not repository secrets |
-| Mobile | • Sample sign-in, test script, guide steps, Zen ring and Home/Analytics data source match the code |
-| Web | • Bobi brand image names match `frontend/web/public/brand` |
+| AI | • `LLMService` in `src/llm/service.py` holds the default model and the optional tier router; it picks the turn's model, names the model a turn ran on and keeps a turn's tier, so a turn without a selection runs on the default model<br>• `AgentService` takes `llm` instead of `model` and `llm_router`; the "llm router" span and the tier tags stay in `AgentService`, and memory still uses the `chat` model |
 
-Check: each changed claim was checked with grep, `ls` and a read of the cited code at `f2be945`; no build or script was run. Left alone: `backend/core/**` (Core is out of scope under AGENTS.md) and the `github.sh` step in ci-cd. Commit: the one that adds this entry.
+Check: AI Ruff lint and format passed; pytest passed 549 with 100 skipped, because the PostgreSQL and Redis suites were not run, so those suites are unverified; tests changed only imports, constructor calls and attribute paths. The OpenAPI document, `prompt_version` with the tool names, the env var names and the log messages are identical to `staging` at `aa394ec2`. Commit: the commit that adds this entry.
 
-### 2026-11-07 — Align quick-navigation test labels with the app
+### 2026-11-15 — Pass the agent capabilities as one list
 
 | Area | Change |
 |---|---|
-| Mobile | • Update the quick-navigation label expectations to Tạo đơn and Trợ lý Bobi; keep runtime labels, routes and behavior unchanged |
+| AI | • `AgentCapability` in `src/agent/tools.py` pairs one optional prompt section with its tool or Pydantic AI capability; shop data, restock, calculation, memory and run-code each have one<br>• `main.py` builds the ordered list of the capabilities that are on, and `AgentService` takes `capabilities` instead of `shop_data`, `restock`, `calculation` and `sandbox`; `memory` stays a collaborator because it recalls and remembers during the turn |
 
-Check: `npm ci`, `npm test` (196 passed, 0 failed), `npm run typecheck`, mock-mode `npm run export:web` and `git diff --check` passed. Native Firebase files were not supplied; native and GA4 device verification were not performed. Commit: the commit that adds this entry.
+Check: AI Ruff lint and format passed; pytest passed 549 with 100 skipped, because the PostgreSQL and Redis suites were not run, so those suites are unverified; tests changed only imports and constructor calls. The OpenAPI document, `prompt_version` with the tool names, the env var names and the log messages are identical to `staging` at `aa394ec2`. Commit: the commit that adds this entry.
 
-### 2026-11-06 — Mobile usage analytics in GA4 behind a consent prompt
-
-| Area | Change |
-|---|---|
-| Mobile | • `@react-native-firebase/analytics` 26.4.0 with `firebase.json` turning off automatic collection, advertising IDs and automatic screen reporting; Android blocks `AD_ID` and iOS builds without IDFA<br>• `AnalyticsConsentPrompt` asks once per device right after sign-in, and Settings has a "Gửi số liệu sử dụng" switch; nothing is sent until the user agrees, and withdrawing resets on-device Analytics data<br>• Screen views from expo-router segments with `[id]` kept as is, the Core account id as `user_id`, and the events in `analyticsEvents.ts`: `login`, `shop_created`, `sale_completed`, `voice_order_reviewed`, `ai_message_sent`, `product_created`, `expense_created`, with enum or count parameters only; the web build sends nothing |
-| Docs | • ADR-0010, `BR-026`, `FR-039`, `NFR-011`, `AC-119`–`AC-121` as proposed and awaiting approval; Data safety adds device IDs and the Google Analytics processor row with the checks the legal owner still has to make; the mobile README explains DebugView |
-
-Check: `npm run typecheck` passes; `npm test` 194 of 196 pass, and the two failures (`parseOrder` shared names, quick navigation labels) fail the same way on a clean `staging` checkout. Not verified: a native build, the consent dialog on a device, and events in DebugView. Commit: the one that adds this entry.
-
-### 2026-11-06 — Add shared documentation skills for agents
+### 2026-11-15 — Drop the router's second turn gate check
 
 | Area | Change |
 |---|---|
-| Agent tooling | • Add project-scoped `technical-writing`, `writing-for-agents` and `retro` skills with pinned hashes in `skills-lock.json`; expose Claude links through `.claude/skills` symlinks to `.agents/skills` |
+| AI | • The agent router no longer checks the turn flag itself before calling `AgentTurnService`, whose `admit`, `read` and `cancel` check it first; the four turn routes still answer 503 `ai_turn_unavailable` before any repository or model call |
 
-Check: `npx skills list --json` shows all three project skills for Claude Code, Codex, GitHub Copilot, Pi and Zed; `git diff --check`. No runtime changes. Commit: the one that adds this entry.
+Check: AI Ruff lint and format passed; pytest passed 545 with 100 skipped without a database, and 631 with 14 skipped against a disposable pgvector PostgreSQL, where `test_agent_turn_receipts.py` passed 18. The four turn routes with the flag off answer the same status, body and headers as before. The OpenAPI document, `prompt_version`, the SQL text and the 17 log messages are identical to `staging` at `e0811c3e`. Commit: the commit that adds this entry.
 
-### 2026-11-06 — Docs describe SmartLedger as running in production, are in English outside product and carry OKF frontmatter
-
-| Area | Change |
-|---|---|
-| Docs index | • All 31 documents in `docs/` start with OKF v0.2 frontmatter (`type`, `title`, `description`, `owner`, `status`, `generated`, `stale_after`); the owner and last-update rows left the metadata tables<br>• `docs/index.md` lists every document for agents and replaces the hand-kept document map in `docs/README.md`; a one-off script built the indexes and was then removed, so agents keep them by hand under the `AGENTS.md` rules<br>• `AGENTS.md` requires docs to change in the same pull request as the code, refreshed dates, an updated index and no new document for a topic that already has one |
-| Docs language and index | • Every document outside `docs/product/` is in English: technical design, API contracts, the ADRs, design, marketing, the READMEs under `docs/`, the frontend READMEs and `BLOCKERS.md`; anchors changed with the headings and 79 links across the repository were rewritten (0 broken)<br>• The index also covers 23 repository documents outside `docs/` (service READMEs, `backend/core/docs/`, `CONTRIBUTING.md`, `SECURITY.md` and others) with frontmatter, uses strict OKF entries (title, path and description) and gives every folder with two or more entries its own `index.md`<br>• `generated.by` names the person who last changed a document (`human:<GitHub login>`, from Git history for untouched documents) and every timestamp uses `+07:00`; `AGENTS.md` and the docs conventions state the rules<br>• Fixed on the way: the frontend README no longer says web admin has no Core API, the mobile README no longer lists Google sign-in as missing, and the ADR-0003 link to a missing anchor |
-| Docs | • `AGENTS.md`, the docs index, technical design, API contract, ERD description, diagram guide and the mobile README say SmartLedger runs in production and no longer call it documentation-first; the architecture is called the target architecture<br>• Stacked on #550: the product documents keep its EXE201 course MVP priorities and wording, gain frontmatter and index entries, and its new audit and demo documents are listed in `docs/product/index.md`; the EXE201 priority paragraph in technical design §1 is translated to English<br>• Warnings about provisional requirements, unaccepted features and the auth gap stay as they were |
-
-Check: `grep -rniE "\bMVP\b|prototype|documentation-first"` over the Markdown files; the remaining hits are scope or priority labels, dated decisions (ADRs, open questions, the mobile UI migration plan), design prototype references and the diagram label "MVP target" in `architecture.drawio`, left because its SVG and PNG would need a re-export. Commit: the one that adds this entry.
-
-### 2026-11-06 — Tập trung hoàn thành MVP môn EXE201
+### 2026-11-15 — Pass the receipted save to the agent service explicitly
 
 | Area | Change |
 |---|---|
-| Docs | • Chốt ưu tiên demo đầu-cuối, UX và phản hồi người dùng; phân biệt luồng cốt lõi, chức năng có sẵn giữ nguyên và mở rộng có thể hoãn<br>• Thêm kịch bản demo/fixture và mẫu ghi kết quả; đồng bộ overview, BRD, PRD, bản đồ docs và cách đọc tài liệu kỹ thuật/audit; không yêu cầu đầu tư thêm cho tải lớn hoặc kiến trúc mới |
+| AI | • `AgentService.chat` and `stream_chat` take an optional `save` function, which `_save_turn` runs in a worker thread instead of `save_exchange`; a turn without a receipt saves exactly as before<br>• `AgentTurnService` owns the receipted save (complete the receipt, then drop the cached history, in one worker-thread call) and receives the conversation repository from `main.py`<br>• `TurnExecution` moves into `src/agent/receipts.py` without its repository, and `src/agent/turn_context.py` with the `current_turn` context variable is deleted |
 
-Check: 377 link/anchor nội bộ hợp lệ, giữ nguyên 55 FR/NFR và 120 định nghĩa AC so với commit trước, full trace khớp; đối chiếu fixture 70.000đ doanh thu/42.000đ giá vốn/18.000đ lãi sau chi và kiểm tra không có diff runtime. Demo/người dùng chưa chạy trong đợt sửa docs, mẫu kết quả để chưa thử. Commit: commit thêm mục này; giữ log cũ theo yêu cầu append-only.
+Check: AI Ruff lint and format passed; pytest passed 545 with 100 skipped without a database, and 631 with 14 skipped against a disposable pgvector PostgreSQL, the same counts as before the change; `test_agent_turn_receipts.py` passed 18 before and after with only constructor calls changed. The OpenAPI document, `prompt_version`, the SQL text and the 17 log messages are identical to `staging` at `e0811c3e`. Commit: the commit that adds this entry.
 
-### 2026-11-06 — Kiểm định lại BRD bằng ba chuyên môn
-
-| Area | Change |
-|---|---|
-| Docs | • Viết lại BRD theo mục tiêu, vai trò, phạm vi và quy tắc; tách inventory/code và truy vết chi tiết sang phụ lục kiểm định với 13 phát hiện<br>• Sửa AC-020/021/078 và mô tả privacy, Zalo, nhóm nợ; phân biệt context/lịch sử, local/Core, lưu Product/ảnh từng phần và cam kết xóa dữ liệu; không sửa runtime |
-
-Check: ba sub-agent rà độc lập Core, AI/chat và mobile/web, sau đó đọc lại bản sửa; kiểm 153 link/anchor nội bộ, 55 dòng trace, 120 mã AC ổn định (chỉ sửa nội dung AC-020/021/078), mã BO/BR/OQ cũ được giữ và `git diff --check`. Chưa chạy runtime/provider/UAT. Commit: commit thêm mục này; giữ log cũ theo yêu cầu append-only.
-
-### 2026-11-06 — Đối chiếu business requirements với staging
+### 2026-11-15 — Give the turn failure table one owner
 
 | Area | Change |
 |---|---|
-| Docs | • Rà tĩnh Core, AI, mobile và web tại staging `494fa6c`; bổ sung bản đồ tính năng và bằng chứng code trong BRD<br>• Nối đủ 55 FR/NFR với nguồn BRD và AC hiện có; sửa mô tả voice, Zalo, avatar, tồn và media lỗi thời; ghi câu hỏi cần sản phẩm chốt, không đổi AC hoặc nâng scope từ mock/code |
+| AI | • `src/agent/errors.py` holds the one table from an error to its failure code (`failure_code`) and from a stored code to its replay status (`failure_status`), with the 404 and 422 statuses and the guardrail codes declared once<br>• `AgentTurnService` and the stream error helper in the agent router call that table instead of their own copies, and the conversation and guardrail handlers in `main.py` read their status from it; no status, code or log line changes |
 
-Check: kiểm tra 104 liên kết/anchor nội bộ, mã BRD, 55 dòng truy vết và 120 định nghĩa AC giữ nguyên; `git diff --check`. Chưa chạy runtime/provider/UAT vì chỉ sửa tài liệu. Commit: commit thêm mục này. Giữ nguyên log cũ theo yêu cầu append-only của phiên làm việc.
+Check: AI Ruff lint and format passed; pytest passed 545 with 100 skipped, because the PostgreSQL and Redis suites were not run, so the receipt suite is unverified; the turn pins in `test_agent_turns.py` passed with no assertion changed. The OpenAPI document, `prompt_version`, the SQL text and the 17 log messages are identical to `staging` at `e0811c3e`. Commit: the commit that adds this entry.
 
-### 2026-11-06 — Stop spans from asking HoneyHive to create their session
-
-| Area | Change |
-|---|---|
-| AI | • `Observability.start` turns off the SDK's `_session_auto_create` flag, which `skip_backend_session_creation` turned on: every span asked HoneyHive to create its session, and a span arriving after a session update often replaced the session that `start_turn_session` had opened with a bare one (source `api`, start time 0, no inputs), so after #542 production still showed 8 of 9 turns that way<br>• A new test runs a real tracer in test mode and checks that a turn's span carries its session id without the auto-create attribute |
-
-Check: `uv run pytest tests/unit_tests -q` (496 passed, 1 skipped), `ruff check` and `ruff format --check`; the new test fails without the fix. Against real HoneyHive: with a session update before the span, the flag on gave 6 of 8 bare sessions and the flag off 0 of 8; five streamed turns through the local service (uvicorn, local database, OpenAI direct) read back bare 5 of 5 before the fix and complete 5 of 5 after it (source, start time, question, `history_ms`, child spans). Not verified: production after deploy. Commit: the one that adds this entry.
-
-### 2026-11-06 — Bobi refers to itself by name only
+### 2026-11-13 — Give the memory output shapes and diacritic folding one owner
 
 | Area | Change |
 |---|---|
-| AI | • The shop agent prompt says to refer to itself only by the name "Bobi", never by a pronoun, and to address the owner as "anh/chị", because "call yourself Bobi" was read as calling Bobi: a production answer opened with "Bobi ơi", and mercury-3 answered "bạn là ai" with "Tôi", "Tớ" or "Em" in every run |
+| AI | • `MemoryFacts`, `MemorySummary` and `MemoryDecisions` move from `src/memory/service.py` to `src/memory/fact_rules.py`, beside the item shapes they wrap<br>• `src/memory/ranking.py` exposes `unaccented`, and the memory evaluation generator uses it instead of its own copy<br>• The agent evaluation target imports `ToolStarted` from `src/agent/tool_events.py`<br>• The Vietnamese phone number pattern `PHONE_NUMBER` moves from `src/memory/fact_rules.py` to `src/agent/guardrails/phone_number.py`, and its tests move to `test_agent_guardrails.py`; the memory rules import it and still drop every fact that holds a phone number |
 
-Check: `uv run pytest tests/unit_tests -q` (495 passed, 1 skipped) and `ruff check`; five chat cases through the real agent and the local database, three runs on mercury-3 medium and one on gpt-6-luna high: no answer called itself "tôi", "tớ" or "em" or opened with "Bobi ơi", and "bạn là ai" answered with "Bobi" in all runs. Not verified: "Bobi ơi" did not reproduce on the old prompt either, so the fix for it is inferred; mercury-3 still sometimes says "bạn" to the owner. Commit: the one that adds this entry.
+Check: AI Ruff lint and format passed; pytest passed 534 tests with 100 skipped, because the PostgreSQL and Redis suites were not run. The three structured-output JSON schemas, the `terms` output and the regenerated `evaluation/memory/cases.jsonl` are identical to `staging` at `6ddf862d`.
 
-### 2026-11-05 — Line charts, preambles in the thinking line and steadier chat sheets
+### 2026-11-13 — Package the AI evaluation by evaluation
 
 | Area | Change |
 |---|---|
-| AI | • The shop agent prompt draws figures over time as a line chart and keeps bar charts for a few separate items, states only the key figures in words instead of listing every chart point, and reads a short or vague message as a follow-up to the last turns<br>• The `suggest_screen` docstring says the reply still names where the screen is |
-| Mobile | • Text the model writes before a tool call becomes that step's label in the thinking line, at the same size and weight as the waiting phrase, instead of staying in the answer; text before `suggest_screen` stays in the answer<br>• The line chart tooltip grows to fit large amounts and stays inside the chart<br>• Quick transaction chat fades its backdrop in, keeps the conversation when a suggested screen button opens a screen and reopens on return, and puts each disclaimer sentence on its own line<br>• The Bobi history and assistant settings sheets open at one fixed height and fade their content in; memory graph labels use the app font |
+| AI | • `evaluation/core/` holds only what both evaluations share: the HoneyHive sync moves to `agent_chat/`, the one-caller `core/utils.py` is gone and the local database guard joins `core/`<br>• Each evaluation folder owns its `target.py` and evaluators, so `evaluation/targets/` and `evaluation/metrics/` are gone; the moves change only import lines<br>• A distill pass turns the stateless `EvaluationPipeline` into `run_evaluation` and corrects two comments about when the app config is read |
+| Docs | • The evaluation READMEs and the AI evaluation diagram name the new paths |
 
-Check: `uv run pytest tests/unit_tests -q` (495 passed, 1 skipped) and `ruff check`; mobile `npx tsc --noEmit` and `npm test` (192 passed, 2 failing before this change: `parseOrder`, `quickNav`). Ten chat cases on main's prompt and this one through the real agent and the local database, mercury-3 medium and gpt-6-luna high: time series now come back as line charts on both models, "chỗ nào nhỉ" gets the Quản lý → Hàng hoá path, and three more Luna runs of the chart case listed no points and named the right highest day. Not verified: a real device and the deployed models. Commit: the one that adds this entry.
+Check: AI Ruff lint and format passed; pytest passed 534 with 100 skipped (the PostgreSQL suites did not run) after every step, with no assertion changed. The `run.py --help` hash, the memory dry-run plan, `src/`, the case files and `.honeyhive`, `scripts` and `.github` are identical to `staging` `866c49c6`. The `agent_chat` dry-run and real runs were not run, because the local seed is from another day. Commit: the commits on `refactor/ai-evaluation-layout` after `866c49c6`.
+
+### 2026-11-13 — Remove the screen buttons from Mobile chat
+
+| Area | Change |
+|---|---|
+| Mobile | • Chat no longer draws the screen button card under an answer; `withoutActions` still drops the ```actions block that ends answers saved before 2026-11-13, so old answers show no raw JSON<br>• The `suggest_screen` step label and its answer exemption in `preambleBefore` are gone, and the mock answer no longer carries the block<br>• `readUi` drops the `ScreenButton` element, so a stored ```ui card draws without its button, and `chatScreens.ts` is deleted |
+| Docs | • `frontend/mobile/docs/operations.md` describes the hidden block |
+
+Check: `npm test` passed 201 tests, `npm run typecheck` and `npm run export:web` passed, and the rewritten tests failed before the change. Not run on a simulator. Commit: the commit that adds this entry.
+
+### 2026-11-13 — Give embedding its own package
+
+| Area | Change |
+|---|---|
+| AI | • The ONNX and Workers AI embedding models and `build_embedder` move from `src/memory/` to `src/embedding/` (`factory.py`, `onnx_embedding.py`, `workers_ai_embedding.py`), which imports nothing from `src.memory` or `src.agent`<br>• `build_embedder` takes `dimensions`; its callers pass `EMBEDDING_DIMENSIONS`, which stays in `src/memory/repository.py` as the pgvector column width; the factory's logger name becomes `src.embedding.factory` |
+
+Check: AI Ruff lint and format passed; unit pytest passed 487 with 1 skipped. The OpenAPI document is byte-identical to `origin/staging` at `6ddf862d`. Integration suites were not run. Commit: the commit that adds this entry.
+
+### 2026-11-13 — Remove the screen buttons from chat answers
+
+| Area | Change |
+|---|---|
+| AI | • The `suggest_screen` tool, its prompt paragraph and the ```` ```actions ```` block are gone, by owner decision; the app guide still tells the owner where each screen is<br>• History replay still strips the block from answers stored before the change, so the model never reads one back<br>• The evaluators no longer allow or look for `suggest_screen` and the block |
+| HoneyHive | • `invalid-chart` skips a `ScreenButton` in a ```ui card as Mobile does, and still flags a card that has nothing else to draw |
+| Docs | • The chat contract, AI README and runtime reference, the walkthrough diagrams, the AgentTurn statechart, `AC-127` and `OQ-004` drop the button, and the contract's ```ui catalogue drops `ScreenButton` |
+
+Check: AI Ruff lint and format passed; pytest passed 622 tests with 13 live-model skips on disposable PostgreSQL and Redis. OpenAPI is unchanged; `prompt_version` changes for all 32 capability combinations, so traces and evaluation runs start a new prompt group. TLC re-checked AgentTurn with 340 distinct states and no invariant errors. On the local stack, two live chat turns asking where a screen is answered without a block, the second after a block was written into the stored first answer. Commit: the commits on `feat/remove-screen-buttons`.
+
+### 2026-11-13 — Restructure the AI service by responsibility
+
+| Area | Change |
+|---|---|
+| AI | • The memory package owns its embedder factory, background writes, HTTP routes and schema, and the fact screening rules; `src.main` is imported for `app` and `lifespan`, and by one test for `SANDBOX_TOOLS`<br>• Screen-button rules sit in `src/agent/screen_buttons.py`; one `OpenAIModelProvider` builds both OpenAI protocols<br>• `AgentTurnService` receives `AgentService` and owns admission and replay; `AgentTurnRepository.complete` saves a receipted exchange through the public `owned_conversation` and `write_exchange`<br>• Model construction and per-turn tier routing share one `src/llm/` package (`factory.py`, `model_router.py`, `tier.py`, `bifrost_tier_classifier.py`, `openai_model_provider.py`, `session_settings.py`), replacing `src/providers/` and `src/llm_router/`; logger names move to `src.llm.*`<br>• A distill pass over the modules the branch created or reshaped: the factory builds a provider inline, and both chat routes open the agent run through one `AgentService._iter`<br>• `LITELLM_URL` is removed; `QDRANT_URL` and the `HH_*` fields stay pending owner approval |
+
+Check: AI Ruff lint and format passed; pytest passed 631 tests with 13 live-model skips after every step, with the PostgreSQL and Redis suites on disposable local containers. The OpenAPI document and `prompt_version` for all 32 capability combinations are identical to `origin/staging` at `86919eba`. No statechart state or transition changed, so no model was re-checked. Commit: the commits on `refactor/ai-maintainability` after `86919eba`.
+
+### 2026-11-12 — Make agent memory writes exact and ordered
+
+| Area | Change |
+|---|---|
+| AI | • `AgentMemoryRepository.similar` reads the owner's live memories in one statement and ranks them in the service, so reconcile no longer loses its candidates to the HNSW index when one owner holds a large share of the rows<br>• `AgentMemoryService.remember` writes one exchange at a time in turn order, so a follow-up turn is reconciled against the facts the turn before it stored |
+| Docs | • ADR-0002 and the AI runtime reference record both behaviours and the shutdown trade-off |
+
+Check: AI Ruff lint and format passed; pytest passed 630 tests with 14 skipped, with the memory and conversation PostgreSQL suites on a disposable local database. The three new tests failed before the change. The memory recall evaluation is unchanged (recall 0.75 before and after on the ONNX embedder, below its embeddinggemma bounds before the change too). A local `agent_chat` run, each of the 23 questions once on `gpt-6-luna`, scored `correct` 1.00 and `recalled_expected` 1.00; its gate failed only on `answer_faithfulness` 3.00 against 4.00, as the 2026-11-04 run of the same suite did at 2.96. Commit: the commit that adds this entry.
+
+### 2026-11-09 — Keep SePay fulfillment scans fair under retries
+
+| Area | Change |
+|---|---|
+| Billing | • Capture a fixed upper request ID for each scan so both older retries and later eligible payments get a turn even when new requests keep arriving<br>• Test a valid payment after 120 failing requests and verify the scan boundary in PostgreSQL |
+| Integration | • Include both review fixes and integrate staging `2ba4f80`, preserving both sets of progress entries |
+
+Check: Core Maven verify passed 1,595 tests with no failures, errors, or skips. All 21 required PostgreSQL suites and 13 report gate self-tests passed. AI Ruff lint and format passed, and Linux pytest passed 627 tests with 14 optional skips. OKF and diff checks passed. The AI container image built, while the Core image build was stopped when the Windows system drive fell below 300 MB free. Commit: `b685202`.
+
+### 2026-11-09 — Prepare SePay, subscription and AI quota for staging review
+
+| Area | Change |
+|---|---|
+| Billing/AI | • Consolidate the seven approved phases on feat/sepay-payment-design and fast-forward the latest staging revision 9613e47 without conflicts<br>• Retain default-off collection, webhook, grant, receipt, quota admission and recovery gates; no shared migration or deployment |
+| Docs | • Correct the AI protocol guide to describe the implemented Core turn/fence integration<br>• Prepare the staging PR with migration/rollback boundaries, FE handoff and explicit remaining provider/FE acceptance |
+
+Check: retained reports confirm Core verify 1,591 tests and explicit Core–AI integration 9 tests, all without failures/errors/skips; Linux AI has 625 passed and 14 optional skips. Runtime sources did not change after those checks; the three fetched staging commits affect only Mobile and the eval workflow. Fresh Ruff lint/format, 21-suite PostgreSQL report gate, 13 gate self-tests, 123 added-document links, traceability, OKF (52 concepts, Linux read-only checker), proposed-file credential-pattern and diff checks passed. Exact Compose image builds were attempted twice but blocked by auth.docker.io connection resets before compilation; CI image-build verification remains required. Dopbase CLI is unavailable, so private credential-map regeneration was attempted but not completed. No live provider, transfer, FE acceptance, shared DB/configuration or deployment was exercised. Commit: included in this change.
+
+### 2026-11-09 — Define GA4 system boundaries and native verification
+
+| Area | Change |
+|---|---|
+| Docs | • Extend ADR-0010 with verified event semantics and proposed consent, reporting and rollout safeguards; link the native verification matrix<br>• Add GA4 system boundaries and separate staging validation from production insights; rebalance logical architecture around business capabilities, rename the combined runtime/delivery diagram to system design, and add SVG-renderer-compatible labels and PNG preview |
+
+Check: source inspected at staging `9613e47e`; Mobile typecheck, 205 unit tests and mock web export passed; OKF/link and diff checks passed. Three SVGs render white in light/dark; logical SVG text renders in librsvg, but Zed is not independently verified. GA4 validator: 0 warnings; system design: 0 errors/crossings, with existing warnings. Native delivery, Console settings and product/legal acceptance remain unverified; no runtime changes. Commit: the commits that add this entry.
+
+### 2026-11-09 — Grafana monitors only the system
+
+| Area | Change |
+|---|---|
+| Deploy | • Overview drops its environment picker and repeats the Health and Services rows for each environment, with the alert list above them; Resources drops its unused picker<br>• Removed the product analytics dashboard, its two PostgreSQL datasources, the playbook tasks and template that wrote their login, and `GRAFANA_PG_*` from the monitor template, `run.sh` and the credential map, since GA4 now measures usage |
+| Docs | • ADR-0003 is superseded by ADR-0010, and ADR-0010 records the removal |
+
+Check: `scripts/infra/lint.sh` and `okf_sync.py --check` passed; a local Grafana 13.3.0 with fake `probe_success` metrics showed only the Infra folder, one Health and Services row per environment and no environment picker on Overview or Resources. Not verified on the VPS; `check-templates.sh` needs Dopbase and will flag `GRAFANA_PG_*` until those keys are deleted there. Commit: the commit that adds this entry.
+
+### 2026-11-08 — Verify Core–AI integration and hand off billing/quota to FE
+
+| Area | Change |
+|---|---|
+| Integration tests | • Explicit CoreAiQuotaIT uses real loopback Core HTTP → Python AI HTTP and disposable PostgreSQL, retaining production router/receipt/save/cancel logic<br>• Nine cases cover JSON/SSE replay, done-after-debit, pending/last slot, rollback/restart, fenced cancellation, failure, deletion, unavailable protocol and paid expiry |
+| Handoff/docs | • Add client payment/fulfillment state handling, stable chat attempts/202/429/410, quota display, rollout compatibility and rerun instructions<br>• Sync implementation/FR status, metadata and remaining phase-six descriptions; no FE/runtime behavior or migration changes |
+
+Check: explicit integration suite passed 9/9 without skips; Firebase verification/preliminary shop lookup, model and cache are fixtures. Restart recreates the Core context/facade and the AI process, not a separate Core JVM; paid activation is a SQL fixture, not SePay acceptance. Full Core verify passed (1,591 tests, no failures/errors/skips), all 21 required PostgreSQL suites and 13 gate self-tests passed. Linux AI Ruff lint/format passed (141 files); pytest passed (625 passed, 14 optional skips: 13 live-model and 1 Redis case). Local links/traceability, OKF (52 concepts) and diff checks passed. Dopbase CLI is missing, so credential-map generation remains blocked; only the nonsecret test-interpreter source entry was added. No shared DB/configuration, provider/real transfer, deployed FE acceptance, commit or push was performed.
