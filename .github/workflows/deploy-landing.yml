@@ -51,7 +51,8 @@ jobs:
       - name: Install Vercel CLI
         # A job-local prefix, so the self-hosted machine's own CLI (e.g. Homebrew's) is neither clashed with nor replaced.
         run: scripts/ci/install-vercel.sh
-      - run: vercel pull --yes --environment="$VERCEL_TARGET" --token="$VERCEL_TOKEN"
+      # The CLI reads VERCEL_TOKEN from the job env, as in deploy-web.yml.
+      - run: vercel pull --yes --environment="$VERCEL_TARGET"
       - run: scripts/ci/vercel-build.sh
       # Admin follows the GitHub environment only: without VITE_ADMIN_ENABLED=true there must be no admin code (a value set
       # in the Vercel project would otherwise slip in through `vercel pull`); with it, the admin must be the real one.
