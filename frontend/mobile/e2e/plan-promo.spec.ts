@@ -58,7 +58,10 @@ test('hỏi Bobi đủ lượt Miễn phí trong tuần thì gợi ý mua gói m
     await page.getByRole('button', { name: 'Gửi tin nhắn' }).click();
     await expect(page.getByText(q, { exact: true })).toBeVisible();
   };
+  // Số lượt lấy từ Core (bản mock bật trừ lượt): mở màn là thấy, trả lời xong thì giảm
+  await expect(page.getByTestId('ai-quota')).toContainText('Còn 100/100 lượt hỏi Bobi · lượt mới từ 00:00 T2');
   await ask('Doanh thu hôm nay bao nhiêu?');
+  await expect(page.getByTestId('ai-quota')).toContainText('Còn 99/100 lượt hỏi Bobi', { timeout: 20_000 });
   await page.waitForTimeout(8_000);
   await expect(page.getByText('Cần hỏi Bobi nhiều hơn?', { exact: true })).toHaveCount(0);
 

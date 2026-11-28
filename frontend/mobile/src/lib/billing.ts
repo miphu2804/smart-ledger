@@ -27,7 +27,7 @@ export interface BillingPlan {
   aiQuota: AiQuotaPolicy;
 }
 
-export type PaymentStatus = 'PENDING' | 'EXPIRED' | 'PAID';
+export type PaymentStatus = 'PENDING' | 'EXPIRED' | 'PAID' | 'CANCELLED';
 export type FulfillmentStatus = 'NOT_STARTED' | 'PENDING' | 'APPLIED';
 
 export interface PaymentRequest {
@@ -46,6 +46,8 @@ export interface PaymentRequest {
   createdAt: string;
   expiresAt: string;
   paidAt: string | null;
+  /** Thời điểm OWNER huỷ; Core cũ (trước V22) không gửi trường này */
+  cancelledAt?: string | null;
   recipient: { bankCode: string; accountNumber: string; accountName: string };
   /** Chỉ có khi yêu cầu còn PENDING và chưa hết hạn */
   qrUrl: string | null;
@@ -108,7 +110,7 @@ export function defaultPlanCode(plans: BillingPlan[]): string | null {
   return (paid.find((p) => p.planCode === POPULAR_PLAN_CODE) ?? paid[0])?.planCode ?? null;
 }
 
-export type PaymentStage = 'awaiting' | 'expired' | 'activating' | 'active';
+export type PaymentStage = 'awaiting' | 'expired' | 'cancelled' | 'activating' | 'active';
 
 export interface PaymentView {
   stage: PaymentStage;
@@ -140,6 +142,17 @@ export function paymentView(req: PaymentRequest, nowMs: number): PaymentView {
       review,
     };
   }
+  if (req.status === 'CANCELLED') {
+    return {
+      stage: 'cancelled',
+      title: 'Yêu cầu thanh toán đã huỷ',
+      message:
+        'Tiền chuyển với nội dung của yêu cầu này sẽ không tự kích hoạt gói mà phải chờ đối soát. Muốn mua gói thì tạo yêu cầu mới.',
+      showQr: false,
+      secondsLeft: 0,
+      review,
+    };
+  }
   if (req.status === 'EXPIRED' || secondsLeft === 0) {
     return {
       stage: 'expired',
@@ -165,6 +178,7 @@ export const EXPIRED_GRACE_MS = 2 * 60 * 1000;
 
 export function shouldPoll(req: PaymentRequest, nowMs: number): boolean {
   if (req.status === 'PAID') return req.fulfillmentStatus !== 'APPLIED';
+  if (req.status === 'CANCELLED') return false;
   return nowMs < Date.parse(req.expiresAt) + EXPIRED_GRACE_MS;
 }
 
@@ -197,6 +211,8 @@ export function billingErrorMessage(err: { status?: number; code?: string; messa
       return 'Giá gói vừa thay đổi. Hãy tải lại danh sách gói rồi chọn lại.';
     case 'billing_request_not_found':
       return 'Không tìm thấy yêu cầu thanh toán này.';
+    case 'billing_request_already_paid':
+      return 'Yêu cầu này đã nhận thanh toán nên không huỷ được. Gói sẽ tự kích hoạt.';
     case 'billing_idempotency_conflict':
       return 'Yêu cầu trước chưa xong. Hãy mở lại màn mua gói rồi thử lại.';
   }

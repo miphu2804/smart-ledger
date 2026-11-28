@@ -1,3 +1,12 @@
+### 2026-11-28 — Send stable chat keys and cancel payments through Core
+
+| Area | Change |
+|---|---|
+| Mobile | • When `GET /agent/quota` reports `enforcementEnabled`, both chat routes send one `Idempotency-Key` per question; a retry of the same question in the same conversation reuses it, and a `400 ai_turn_key_invalid` retries once with a key<br>• `202` pending retries the same key every 2 seconds for up to 45 seconds; `429` shows `nextAvailableAt`, and the new turn codes have their own messages<br>• The assistant shows remaining, in-progress and the next reset from Core under the composer<br>• "Huỷ yêu cầu" calls `POST /billing/payment-requests/{id}/cancel`, locks while sending, clears tracking only after `CANCELLED`/`EXPIRED`, and refreshes on `409 billing_request_already_paid`; a `CANCELLED` request shows its own state and stops polling |
+| Docs | • The FE handoff gap list and the PRD mobile note record what the app now does |
+
+Check: `npm run typecheck`, `npm test` (233 tests) and Playwright `plans`, `plan-promo`, `smoke` and `onboarding` (10 tests) pass on the mock Core; a web screenshot shows the quota line. Not verified: a real Core with quota enforcement or V22 cancellation (#616), and native devices. Commit: the one that adds this entry.
+
 ### 2026-11-28 — Cancel owned payment requests durably in Core
 
 | Area | Change |
@@ -187,12 +196,3 @@ Check: AI Ruff lint and format passed; pytest passed 631 tests with 13 live-mode
 | Docs | • ADR-0002 and the AI runtime reference record both behaviours and the shutdown trade-off |
 
 Check: AI Ruff lint and format passed; pytest passed 630 tests with 14 skipped, with the memory and conversation PostgreSQL suites on a disposable local database. The three new tests failed before the change. The memory recall evaluation is unchanged (recall 0.75 before and after on the ONNX embedder, below its embeddinggemma bounds before the change too). A local `agent_chat` run, each of the 23 questions once on `gpt-6-luna`, scored `correct` 1.00 and `recalled_expected` 1.00; its gate failed only on `answer_faithfulness` 3.00 against 4.00, as the 2026-11-04 run of the same suite did at 2.96. Commit: the commit that adds this entry.
-
-### 2026-11-09 — Keep SePay fulfillment scans fair under retries
-
-| Area | Change |
-|---|---|
-| Billing | • Capture a fixed upper request ID for each scan so both older retries and later eligible payments get a turn even when new requests keep arriving<br>• Test a valid payment after 120 failing requests and verify the scan boundary in PostgreSQL |
-| Integration | • Include both review fixes and integrate staging `2ba4f80`, preserving both sets of progress entries |
-
-Check: Core Maven verify passed 1,595 tests with no failures, errors, or skips. All 21 required PostgreSQL suites and 13 report gate self-tests passed. AI Ruff lint and format passed, and Linux pytest passed 627 tests with 14 optional skips. OKF and diff checks passed. The AI container image built, while the Core image build was stopped when the Windows system drive fell below 300 MB free. Commit: `b685202`.

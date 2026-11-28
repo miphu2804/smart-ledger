@@ -101,6 +101,16 @@ describe('trạng thái thanh toán', () => {
     assert.equal(v.review, true);
   });
 
+  it('đã huỷ thì ẩn QR, nói rõ tiền chuyển sau đó phải đối soát và ngừng hỏi Core', () => {
+    const req = request({ status: 'CANCELLED', cancelledAt: '2026-11-21T09:55:00+07:00', qrUrl: null });
+    const view = paymentView(req, NOW);
+    assert.equal(view.stage, 'cancelled');
+    assert.equal(view.showQr, false);
+    assert.match(view.message, /đối soát/);
+    assert.equal(shouldPoll(req, NOW), false);
+    assert.equal(keepStoredPayment(req, NOW), false);
+  });
+
   it('ngừng hỏi Core khi đã kích hoạt hoặc quá hạn hai phút', () => {
     assert.equal(shouldPoll(request(), NOW), true);
     assert.equal(shouldPoll(request({ status: 'PAID', fulfillmentStatus: 'PENDING' }), NOW), true);
@@ -142,6 +152,7 @@ describe('gói hiện tại', () => {
 
 describe('lời báo lỗi', () => {
   it('đổi mã lỗi billing của Core thành câu dễ hiểu', () => {
+    assert.match(billingErrorMessage({ status: 409, code: 'billing_request_already_paid' }), /đã nhận thanh toán/);
     assert.match(billingErrorMessage({ status: 503, code: 'billing_unavailable' }), /Chưa mở bán/);
     assert.match(billingErrorMessage({ status: 403, code: 'forbidden' }), /chủ tiệm/);
     assert.equal(billingErrorMessage({ status: 500, code: 'x', message: 'Lỗi máy chủ' }), 'Lỗi máy chủ');

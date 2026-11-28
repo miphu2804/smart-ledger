@@ -29,6 +29,7 @@ import type {
   SalesSeriesPoint,
   SalesSeriesView,
 } from '../data/types';
+import type { AiQuota } from './aiQuota';
 import { ApiError } from './apiError';
 import type { BillingPlan, PaymentRequest as BillingPaymentRequest, Subscription } from './billing';
 import { dayKey, normalizeText, vnd } from './format';
@@ -1505,7 +1506,30 @@ function agentChat(body: AgentChatRequest): AgentChatMessageView {
   const reply: AgentMessageView = { message_id: nextAgentMessageId++, role: 'ASSISTANT', content: answer, created_at: now };
   conversation.messages.push(reply);
   conversation.last_message_at = now;
+  mockAiCommitted++;
   return { conversation_id: conversation.conversation_id, message_id: reply.message_id, answer };
+}
+
+// Lượt hỏi Bobi như Core khi bật trừ lượt: Miễn phí 100 câu/tuần từ 00:00 thứ Hai.
+const MOCK_FREE_LIMIT = 100;
+let mockAiCommitted = 0;
+
+function mockAiQuota(): AiQuota {
+  const d = new Date();
+  const start = new Date(d.getFullYear(), d.getMonth(), d.getDate() - ((d.getDay() + 6) % 7));
+  const end = new Date(start.getFullYear(), start.getMonth(), start.getDate() + 7).toISOString();
+  return {
+    effectiveTier: 'FREE',
+    limit: MOCK_FREE_LIMIT,
+    committed: mockAiCommitted,
+    reserved: 0,
+    remaining: Math.max(0, MOCK_FREE_LIMIT - mockAiCommitted),
+    windowStart: start.toISOString(),
+    windowEnd: end,
+    nextResetAt: end,
+    accessExpiresAt: null,
+    enforcementEnabled: true,
+  };
 }
 
 function listAgentConversations(): AgentConversationSummary[] {
@@ -1608,11 +1632,23 @@ function createBillingRequest(body: { planCode?: string; planVersion?: number })
     createdAt: new Date(now).toISOString(),
     expiresAt: new Date(now + PAYMENT_WINDOW_MS).toISOString(),
     paidAt: null,
+    cancelledAt: null,
     recipient: { bankCode: 'MB', accountNumber: '0000123456789', accountName: 'SO NGHE LOI (MOCK)' },
     qrUrl: 'mock:qr',
   };
   billingRequests.push(req);
   return req;
+}
+
+/** Như Core: huỷ yêu cầu còn chờ; đã trả tiền → 409; đã hết hạn/đã huỷ thì trả trạng thái hiện tại. */
+function cancelBillingRequest(id: number): BillingPaymentRequest {
+  const current = readBillingRequest(id);
+  if (current.status === 'PAID') throw apiErr(409, 'billing_request_already_paid', 'This payment request is already paid.');
+  if (current.status !== 'PENDING') return current;
+  const req = billingRequests[id - 1];
+  req.status = 'CANCELLED';
+  req.cancelledAt = new Date().toISOString();
+  return readBillingRequest(id);
 }
 
 function readBillingRequest(id: number): BillingPaymentRequest {
@@ -1763,6 +1799,11 @@ export function mockCoreRequest<T>(path: string, method: string, body: unknown, 
     return readBillingRequest(Number(segments[2])) as unknown as T;
   }
 
+  if (segments[0] === 'billing' && segments[1] === 'payment-requests' && segments[3] === 'cancel' && method === 'POST') {
+    return cancelBillingRequest(Number(segments[2])) as unknown as T;
+  }
+
+  if (path === '/agent/quota' && method === 'GET') return mockAiQuota() as unknown as T;
   if (path === '/agent/chat' && method === 'POST') return agentChat(body as AgentChatRequest) as unknown as T;
   if (path === '/agent/conversations' && method === 'GET') return listAgentConversations() as unknown as T;
   if (segments[0] === 'agent' && segments[1] === 'conversations' && segments.length === 3) {

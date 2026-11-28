@@ -32,6 +32,7 @@ import type {
   ThoughtStep,
 } from '../src/data/types';
 import { agentApi, agentErrorMessage } from '../src/lib/agentApi';
+import { quotaLine, type AiQuota } from '../src/lib/aiQuota';
 import { usePlanPromo } from '../src/components/PlanPromo';
 import { track } from '../src/lib/analytics';
 import { ApiError } from '../src/lib/api';
@@ -107,6 +108,12 @@ export default function Ai() {
   const [steps, setSteps] = useState<ThoughtStep[]>([]);
   const [conversationId, setConversationId] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
+  // Lượt hỏi do Core tính; đọc khi mở màn và sau mỗi câu hỏi (xong hay lỗi). Lỗi thì giữ số cũ.
+  const [quota, setQuota] = useState<AiQuota | null>(null);
+  const refreshQuota = () => {
+    agentApi.quota().then(setQuota, () => undefined);
+  };
+  useEffect(refreshQuota, []);
   const [msgs, setMsgs] = useState<ChatMessage[]>(() => [welcome(app.user.name)]);
   const [historyOpen, setHistoryOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
@@ -206,6 +213,7 @@ export default function Ai() {
       // Khung hình còn chờ sẽ đặt lại chữ cũ sau khi bong bóng nháp đã được xoá.
       if (frame !== null) cancelAnimationFrame(frame);
       sending.current = false;
+      refreshQuota();
       setDraft('');
       setSteps([]);
       setTyping(false);
@@ -360,6 +368,11 @@ export default function Ai() {
           </ScrollView>
         ) : null}
         <ChatComposer value={text} onChangeText={setText} onSend={() => send(text)} busy={typing} />
+        {quotaLine(quota) ? (
+          <T size={11} color={colors.muted} style={styles.quotaLine} testID="ai-quota">
+            {quotaLine(quota)}
+          </T>
+        ) : null}
       </View>
 
       {/* Sau thanh nhập để menu và lớp chạm-ra-ngoài nằm trên mọi thứ của màn chat. */}
@@ -896,6 +909,7 @@ const styles = StyleSheet.create({
     backgroundColor: 'transparent',
     borderTopWidth: 0,
   },
+  quotaLine: { textAlign: 'center', marginTop: 6 },
   errorCard: {
     gap: 6,
     marginBottom: 10,

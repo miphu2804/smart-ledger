@@ -107,6 +107,7 @@ export async function apiRequest<T>(
   }
 
   if (!res.ok) throw await errorFrom(res, method, path, took(), opts.handle401 !== false);
+  if (res.status === 202) throw pending(method, path, took());
   debugLog('api', '✓', method, path, res.status, took());
   if (res.status === 204) return undefined as T;
   return (await res.json()) as T;
@@ -134,7 +135,7 @@ function imageForm(image: UploadImage): FormData {
  */
 export async function apiStream(
   path: string,
-  opts: { body: unknown; withShop?: boolean; timeoutMs?: number },
+  opts: { body: unknown; withShop?: boolean; timeoutMs?: number; idempotencyKey?: string },
   onEvent: (event: string, data: unknown) => void,
 ): Promise<void> {
   const started = Date.now();
@@ -153,11 +154,14 @@ export async function apiStream(
         Accept: 'text/event-stream, application/json',
         ...(token ? { Authorization: `Bearer ${token}` } : {}),
         ...(opts.withShop && activeShopId ? { 'X-Shop-Id': activeShopId } : {}),
+        ...(opts.idempotencyKey ? { 'Idempotency-Key': opts.idempotencyKey } : {}),
       },
       body: JSON.stringify(opts.body),
       signal: ctrl.signal,
     });
     if (!res.ok) throw await errorFrom(res as unknown as Response, 'POST', path, took(), true);
+    // 202 là JSON `{ turnId, status: "PENDING" }`, không phải luồng sự kiện: không mở reader.
+    if (res.status === 202) throw pending('POST', path, took());
 
     const reader = res.body!.getReader();
     const decoder = new TextDecoder();
@@ -192,6 +196,15 @@ export async function apiStream(
   } finally {
     clearTimeout(timer);
   }
+}
+
+/**
+ * Core trả 202 cho chat khi cùng lượt hỏi (cùng Idempotency-Key) còn đang xử lý: chưa có câu trả lời, gọi lại đúng lượt đó
+ * sau ít giây (xem `untilSettled` ở aiQuota.ts). Chỉ chat có 202 nên báo thành lỗi riêng thay vì trả body như kết quả.
+ */
+function pending(method: string, path: string, took: string) {
+  debugLog('api', '…', method, path, 202, took);
+  return new ApiError(202, 'ai_turn_pending', 'Trợ lý vẫn đang xử lý câu hỏi này.');
 }
 
 /** Đọc lỗi Core `{ code, message, details?, traceId }` hoặc lỗi AI `{ detail }` thành ApiError; 401 → đăng xuất. */
