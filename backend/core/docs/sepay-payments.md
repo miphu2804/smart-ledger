@@ -66,6 +66,14 @@ After a separately approved Test-mode rollout, first verify PAID/PENDING with th
 
 Run SubscriptionPostgresTest for independent-worker races, mixed renewals, leap/month-end arithmetic, exact expiry/new epoch, disabled owners, silent-write rollback/retry, Free midnight and paid final-window counters, unsupported snapshots and unavailable storage. SubscriptionControllerWebTest covers Firebase/no-store/time/error envelopes; SubscriptionPolicyTest covers original-anchor calendar cases; SubscriptionFulfillmentWorkerTest covers failed-row progress and cursor wrap. These are local tests, not provider or FE acceptance. No new migration is added in phase four.
 
+## Payment cancellation on V22
+
+An active OWNER can POST `/api/v1/billing/payment-requests/{id}/cancel` without a shop, body or idempotency key. The operation locks the request before the user, following the grant worker's lock order. Repeated cancellation returns the same cancellation timestamp, expired requests return their expired projection, and PAID requests return `billing_request_already_paid` with HTTP 409. Collection and webhook flags do not disable cancellation. The [API contract](../../../docs/contracts/api-contracts.md#9-sepay-fee-payments--570) owns response details.
+
+V22 adds `cancelled_at`, CANCELLED request status and the `CANCELLED_REQUEST` reconciliation reason. It preserves V21 snapshots, keys, RLS, grants and immutable bank evidence. A webhook that loses the request lock race to cancellation is recorded for review and cannot grant a subscription. A webhook that commits PAID first causes cancellation to return 409. Cancellation does not refund money. The existing FE button must be wired to Core before claiming backend cancellation in the UI.
+
+The new Core keeps existing catalog, creation, status, receipt and grant operations working on V21. Before V22, cancellation returns `503 billing_unavailable` and leaves the request pending. Apply the reviewed V22 from merged code and upgrade all Core writers before exposing cancellation to clients. The new timestamp constraint makes an old writer's attempt to mark a cancelled request PAID roll back instead of accepting money incorrectly, but mixed versions can produce unsuccessful delivery. Preserve webhook retries and reconciliation until all writers are upgraded. Rollback keeps V22 and every cancelled request. Run the cancellation PostgreSQL and controller tests on a disposable database, then verify migrated staging and client behavior before a separately approved production rollout.
+
 ## Restricted reconciliation
 
 An authorized operator may inspect these projections using an approved read-only role; do not expose them through OWNER endpoints or give Grafana/AI bank-table access automatically:

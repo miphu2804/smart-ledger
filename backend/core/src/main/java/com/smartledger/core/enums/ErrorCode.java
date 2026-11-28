@@ -114,7 +114,8 @@ public enum ErrorCode {
     BILLING_UNAVAILABLE(HttpStatus.SERVICE_UNAVAILABLE, "billing_unavailable", "Billing is unavailable. Please try again later."),
     BILLING_IDEMPOTENCY_CONFLICT(HttpStatus.CONFLICT, "billing_idempotency_conflict", "This key already belongs to another payment request."),
     BILLING_OFFER_UNAVAILABLE(HttpStatus.CONFLICT, "billing_offer_unavailable", "This plan version is unavailable."),
-    BILLING_REQUEST_NOT_FOUND(HttpStatus.NOT_FOUND, "billing_request_not_found", "This payment request is unavailable.");
+    BILLING_REQUEST_NOT_FOUND(HttpStatus.NOT_FOUND, "billing_request_not_found", "This payment request is unavailable."),
+    BILLING_REQUEST_ALREADY_PAID(HttpStatus.CONFLICT, "billing_request_already_paid", "This payment request is already paid.");
 
     private final HttpStatus httpStatus;
     private final String code;

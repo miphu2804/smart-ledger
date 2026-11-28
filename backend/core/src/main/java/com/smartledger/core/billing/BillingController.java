@@ -58,6 +58,13 @@ public class BillingController {
         return ResponseEntity.ok().cacheControl(CacheControl.noStore()).body(service.get(token, id));
     }
 
+    @PostMapping("/payment-requests/{id}/cancel")
+    @Operation(summary = "Cancel an unpaid owned request; repeated cancellation returns its current state",
+            description = "No body, shop header or idempotency key required. Paid requests return 409.")
+    public ResponseEntity<BillingPaymentResponse> cancel(@AuthenticationPrincipal VerifiedFirebaseToken token, @PathVariable long id) {
+        return ResponseEntity.ok().cacheControl(CacheControl.noStore()).body(service.cancel(token, id));
+    }
+
     static boolean jsonContent(HttpServletRequest request) {
         String type = request.getContentType();
         return type != null && type.split(";", 2)[0].strip().equalsIgnoreCase("application/json");

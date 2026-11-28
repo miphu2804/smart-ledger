@@ -325,6 +325,166 @@ class SePayPaymentsPostgresTest {
         assertThat(billing.get(TOKEN, request.id()).status()).isEqualTo("PAID");
     }
 
+    @Test
+    void v21BillingRemainsAvailableUntilCancellationMigrationIsApplied() {
+        // Rebuild only this generated fixture at the exact deployed schema version.
+        sql.execute("DROP SCHEMA " + schema + " CASCADE");
+        sql.execute("CREATE SCHEMA " + schema);
+        Flyway.configure().dataSource(source).schemas(schema).defaultSchema(schema).target("21").load().migrate();
+        owner("billing-owner", "OWNER", "ACTIVE");
+        assertThat(billing.plans(TOKEN)).hasSize(3);
+        var first = billing.create(TOKEN, "v21-live", MONTHLY);
+        assertThat(billing.get(TOKEN, first.id())).isEqualTo(first);
+        assertCode(() -> billing.cancel(TOKEN, first.id()), ErrorCode.BILLING_UNAVAILABLE);
+        assertThat(billing.get(TOKEN, first.id()).status()).isEqualTo("PENDING");
+        assertThat(billing.create(TOKEN, "v21-live", MONTHLY)).isEqualTo(first);
+        receive(payload("100", first.paymentCode(), "in", 99000, "0000000001", null));
+        var grants = new SubscriptionService(repository, new SubscriptionRepository(sql), new SubscriptionProperties(true), clock, manager);
+        assertThat(grants.fulfill(first.id())).isTrue();
+        assertThat(billing.get(TOKEN, first.id()).fulfillmentStatus()).isEqualTo("APPLIED");
+        var second = billing.create(TOKEN, "v21-then-v22", MONTHLY);
+        Flyway.configure().dataSource(source).schemas(schema).defaultSchema(schema).load().migrate();
+        assertThat(billing.cancel(TOKEN, second.id()).status()).isEqualTo("CANCELLED");
+        assertThat(billing.get(TOKEN, first.id()).fulfillmentStatus()).isEqualTo("APPLIED");
+    }
+
+    @Test
+    void cancellationRetriesPreserveSnapshotAndWorkWithCollectionDisabled() throws Exception {
+        var first = billing.create(TOKEN, "cancel-replay", MONTHLY);
+        // A V21 snapshot has no cancellation property. It must remain readable and unchanged.
+        sql.update("UPDATE billing_payment_requests SET original_response=original_response-'cancelledAt' WHERE id=?", first.id());
+        String snapshot = sql.queryForObject("SELECT original_response::text FROM billing_payment_requests WHERE id=?", String.class, first.id());
+        var disabled = new BillingService(repository, settings(false, false), json, clock, manager);
+        var start = new CountDownLatch(1);
+        try (var workers = Executors.newFixedThreadPool(2)) {
+            var a = workers.submit(() -> { start.await(); return disabled.cancel(TOKEN, first.id()); });
+            var b = workers.submit(() -> { start.await(); return billing.cancel(TOKEN, first.id()); });
+            start.countDown();
+            assertThat(a.get(10, TimeUnit.SECONDS)).isEqualTo(b.get(10, TimeUnit.SECONDS));
+        }
+        var cancelled = disabled.get(TOKEN, first.id());
+        assertThat(cancelled.status()).isEqualTo("CANCELLED");
+        assertThat(cancelled.cancelledAt()).isEqualTo(first.createdAt());
+        assertThat(cancelled.qrUrl()).isNull();
+        assertThat(disabled.create(TOKEN, "cancel-replay", MONTHLY)).isEqualTo(first);
+        assertThat(sql.queryForObject("SELECT original_response::text FROM billing_payment_requests WHERE id=?", String.class, first.id()))
+                .isEqualTo(snapshot);
+        clock.advance(3600);
+        assertThat(disabled.cancel(TOKEN, first.id())).isEqualTo(cancelled);
+        assertThat(count("billing_bank_transactions")).isZero();
+        assertThat(billing.create(TOKEN, "replacement", MONTHLY).id()).isNotEqualTo(first.id());
+    }
+
+    @Test
+    void cancellationGuardsHideOtherOwnersAndPreservePaidAndExpiredRequests() {
+        var request = billing.create(TOKEN, "cancel-guards", MONTHLY);
+        owner("other-cancel-owner", "OWNER", "ACTIVE"); owner("cancel-admin", "ADMIN", "ACTIVE");
+        assertCode(() -> billing.cancel(token("other-cancel-owner"), request.id()), ErrorCode.BILLING_REQUEST_NOT_FOUND);
+        assertCode(() -> billing.cancel(token("cancel-admin"), request.id()), ErrorCode.SHOP_ACCESS_DENIED);
+        assertCode(() -> billing.cancel(token("missing-cancel-owner"), request.id()), ErrorCode.AUTH_PROFILE_NOT_FOUND);
+        assertCode(() -> billing.cancel(TOKEN, 0), ErrorCode.INVALID_BILLING_REQUEST);
+        assertCode(() -> billing.cancel(TOKEN, Long.MAX_VALUE), ErrorCode.BILLING_REQUEST_NOT_FOUND);
+        sql.update("UPDATE users SET status='DISABLED' WHERE id=(SELECT user_id FROM auth_identities WHERE provider_subject='billing-owner')");
+        assertCode(() -> billing.cancel(TOKEN, request.id()), ErrorCode.ACCOUNT_DISABLED);
+        sql.update("UPDATE users SET status='ACTIVE'");
+        receive(payload("101", request.paymentCode(), "in", 99000, "0000000001", null));
+        assertCode(() -> billing.cancel(TOKEN, request.id()), ErrorCode.BILLING_REQUEST_ALREADY_PAID);
+        assertThat(billing.get(TOKEN, request.id()).status()).isEqualTo("PAID");
+        assertThat(billing.get(TOKEN, request.id()).cancelledAt()).isNull();
+        var expired = billing.create(TOKEN, "cancel-expired", MONTHLY);
+        clock.current.set(expired.expiresAt().toInstant());
+        assertThat(billing.cancel(TOKEN, expired.id()).status()).isEqualTo("EXPIRED");
+        assertThat(sql.queryForObject("SELECT status FROM billing_payment_requests WHERE id=?", String.class, expired.id())).isEqualTo("PENDING");
+        assertThat(billing.get(TOKEN, expired.id()).cancelledAt()).isNull();
+    }
+
+    @Test
+    void webhookAfterCancellationIsDurableReviewAndNeverGrants() {
+        var request = billing.create(TOKEN, "cancel-bank", MONTHLY);
+        billing.cancel(TOKEN, request.id());
+        var body = payload("102", request.paymentCode(), "in", 99000, "0000000001", null);
+        receive(body); receive(body);
+        assertThat(reason("102")).isEqualTo("CANCELLED_REQUEST");
+        assertThat(count("billing_bank_transactions")).isEqualTo(1);
+        var state = billing.get(TOKEN, request.id());
+        assertThat(state.status()).isEqualTo("CANCELLED");
+        assertThat(state.reviewRequired()).isTrue();
+        assertThat(state.fulfillmentStatus()).isEqualTo("NOT_STARTED");
+        var grants = new SubscriptionService(repository, new SubscriptionRepository(sql), new SubscriptionProperties(true), clock, manager);
+        assertThat(grants.fulfill(request.id())).isFalse();
+        assertThat(count("billing_subscription_grants")).isZero();
+        assertThat(count("billing_subscription_periods")).isZero();
+        assertThatThrownBy(() -> sql.update("DELETE FROM billing_bank_transactions"))
+                .isInstanceOf(org.springframework.dao.DataAccessException.class);
+    }
+
+    @Test
+    void cancellationWinsRequestLockBeforeWaitingWebhook() throws Exception {
+        var request = billing.create(TOKEN, "cancel-first", MONTHLY);
+        var reachedLock = new CountDownLatch(1);
+        var waiting = new BillingRepository(sql) {
+            @Override java.util.Optional<Request> lockCode(String integration, String code) {
+                reachedLock.countDown(); return super.lockCode(integration, code);
+            }
+        };
+        var receiver = new SePayWebhookService(waiting, settings(true, true), json, clock, manager);
+        var body = payload("103", request.paymentCode(), "in", 99000, "0000000001", null);
+        var timestamp = Long.toString(clock.instant().getEpochSecond());
+        try (var workers = Executors.newSingleThreadExecutor()) {
+            var holder = new org.springframework.transaction.support.TransactionTemplate(manager);
+            var delivery = holder.execute(status -> {
+                repository.lockCode("test", request.paymentCode());
+                var future = workers.submit(() -> receiver.accept("test", timestamp, signature(timestamp, body), body));
+                try { assertThat(reachedLock.await(5, TimeUnit.SECONDS)).isTrue(); }
+                catch (InterruptedException interrupted) { Thread.currentThread().interrupt(); throw new AssertionError(interrupted); }
+                assertThat(billing.cancel(TOKEN, request.id()).status()).isEqualTo("CANCELLED");
+                return future;
+            });
+            delivery.get(10, TimeUnit.SECONDS);
+        }
+        assertThat(reason("103")).isEqualTo("CANCELLED_REQUEST");
+        assertThat(billing.get(TOKEN, request.id()).status()).isEqualTo("CANCELLED");
+    }
+
+    @Test
+    void webhookWinsRequestLockBeforeWaitingCancellation() throws Exception {
+        var request = billing.create(TOKEN, "payment-first", MONTHLY);
+        var reachedLock = new CountDownLatch(1);
+        var waiting = new BillingRepository(sql) {
+            @Override java.util.Optional<Request> lockOwned(String uid, long id) {
+                reachedLock.countDown(); return super.lockOwned(uid, id);
+            }
+        };
+        var canceller = new BillingService(waiting, settings(true, true), json, clock, manager);
+        try (var workers = Executors.newSingleThreadExecutor()) {
+            var holder = new org.springframework.transaction.support.TransactionTemplate(manager);
+            var cancellation = holder.execute(status -> {
+                repository.lockCode("test", request.paymentCode());
+                var future = workers.submit(() -> {
+                    assertCode(() -> canceller.cancel(TOKEN, request.id()), ErrorCode.BILLING_REQUEST_ALREADY_PAID);
+                });
+                try { assertThat(reachedLock.await(5, TimeUnit.SECONDS)).isTrue(); }
+                catch (InterruptedException interrupted) { Thread.currentThread().interrupt(); throw new AssertionError(interrupted); }
+                receive(payload("104", request.paymentCode(), "in", 99000, "0000000001", null));
+                return future;
+            });
+            cancellation.get(10, TimeUnit.SECONDS);
+        }
+        assertThat(reason("104")).isEqualTo("MATCHED");
+        assertThat(billing.get(TOKEN, request.id()).status()).isEqualTo("PAID");
+        assertThat(billing.get(TOKEN, request.id()).cancelledAt()).isNull();
+    }
+
+    @Test
+    void silentSkippedCancellationFailsClosedWithoutSuccessResponse() {
+        var request = billing.create(TOKEN, "skip-cancel", MONTHLY);
+        sql.execute("CREATE FUNCTION skip_cancel() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN RETURN NULL; END $$");
+        sql.execute("CREATE TRIGGER skip_cancel BEFORE UPDATE ON billing_payment_requests FOR EACH ROW EXECUTE FUNCTION skip_cancel()");
+        assertCode(() -> billing.cancel(TOKEN, request.id()), ErrorCode.BILLING_UNAVAILABLE);
+        assertThat(billing.get(TOKEN, request.id()).status()).isEqualTo("PENDING");
+        assertThat(billing.get(TOKEN, request.id()).cancelledAt()).isNull();
+    }
+
     private void receive(byte[] body) {
         String timestamp = Long.toString(clock.instant().getEpochSecond());
         webhook.accept("test", timestamp, signature(timestamp, body), body);

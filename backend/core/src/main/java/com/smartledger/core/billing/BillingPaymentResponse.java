@@ -6,12 +6,13 @@ import java.time.OffsetDateTime;
 public record BillingPaymentResponse(long id, String planCode, int planVersion, long amountVnd, String currency,
         int durationMonths, int quotaPolicyVersion, String paymentCode, String status, boolean reviewRequired,
         String fulfillmentStatus, OffsetDateTime createdAt, OffsetDateTime expiresAt, OffsetDateTime paidAt,
-        Recipient recipient, String qrUrl) {
+        Recipient recipient, String qrUrl, OffsetDateTime cancelledAt) {
     public record Recipient(String bankCode, String accountNumber, String accountName) {}
 
-    BillingPaymentResponse current(String state, boolean review, String fulfillment, OffsetDateTime paid) {
+    BillingPaymentResponse current(String state, boolean review, String fulfillment, OffsetDateTime paid,
+            OffsetDateTime cancelled) {
         return new BillingPaymentResponse(id, planCode, planVersion, amountVnd, currency, durationMonths,
                 quotaPolicyVersion, paymentCode, state, review, fulfillment, createdAt, expiresAt, paid,
-                recipient, "PENDING".equals(state) ? qrUrl : null);
+                recipient, "PENDING".equals(state) ? qrUrl : null, cancelled);
     }
 }

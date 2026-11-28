@@ -19,10 +19,12 @@ public class BillingRepository {
 
     public record Request(long id, long owner, String integration, String hash, String originalResponse,
             String code, long amount, String bank, String account, String status, String fulfillment,
-            OffsetDateTime created, OffsetDateTime expires, OffsetDateTime paid, boolean review) {}
+            OffsetDateTime created, OffsetDateTime expires, OffsetDateTime paid, OffsetDateTime cancelled, boolean review) {}
 
+    // JSON lookup keeps existing billing reads usable on V21 before the approved V22 rollout.
     private static final String SELECT_REQUEST = """
-            SELECT r.*, EXISTS(SELECT 1 FROM billing_bank_transactions b WHERE b.matched_request_id=r.id
+            SELECT r.*, (to_jsonb(r)->>'cancelled_at')::timestamptz AS cancellation_time,
+                EXISTS(SELECT 1 FROM billing_bank_transactions b WHERE b.matched_request_id=r.id
                 AND b.disposition='REVIEW_REQUIRED') AS review_required FROM billing_payment_requests r
             """;
     private static final RowMapper<Request> REQUEST = (rs, row) -> new Request(rs.getLong("id"), rs.getLong("payer_user_id"),
@@ -30,7 +32,8 @@ public class BillingRepository {
             rs.getString("payment_code"), rs.getLong("amount_vnd"), rs.getString("recipient_bank_code"),
             rs.getString("recipient_account_number"), rs.getString("status"), rs.getString("fulfillment_status"),
             rs.getObject("created_at", OffsetDateTime.class), rs.getObject("expires_at", OffsetDateTime.class),
-            rs.getObject("paid_at", OffsetDateTime.class), rs.getBoolean("review_required"));
+            rs.getObject("paid_at", OffsetDateTime.class), rs.getObject("cancellation_time", OffsetDateTime.class),
+            rs.getBoolean("review_required"));
 
     void deadlines() {
         jdbc.execute("SET LOCAL lock_timeout = '2s'");
@@ -60,6 +63,20 @@ public class BillingRepository {
         if (code == null) return Optional.empty();
         return jdbc.query(SELECT_REQUEST + " WHERE r.integration_key=? AND r.payment_code=? FOR UPDATE OF r",
                 REQUEST, integration, code).stream().findFirst();
+    }
+    /** Lock request before its OWNER, matching the fulfillment worker's lock order. */
+    Optional<Request> lockOwned(String uid, long id) {
+        return jdbc.query(SELECT_REQUEST + """
+                WHERE r.id=? AND r.payer_user_id=(SELECT user_id FROM auth_identities
+                    WHERE provider='FIREBASE' AND provider_subject=?) FOR UPDATE OF r
+                """, REQUEST, id, uid).stream().findFirst();
+    }
+    void cancel(long request, OffsetDateTime cancelled) {
+        int updated = jdbc.update("""
+                UPDATE billing_payment_requests SET status='CANCELLED',cancelled_at=?
+                WHERE id=? AND status='PENDING' AND created_at<=? AND expires_at>?
+                """, cancelled, request, cancelled, cancelled);
+        if (updated != 1) throw new IllegalStateException("Cancellation could not be committed");
     }
     long nextRequestId() { return jdbc.queryForObject("SELECT nextval(pg_get_serial_sequence('billing_payment_requests','id'))", Long.class); }
 

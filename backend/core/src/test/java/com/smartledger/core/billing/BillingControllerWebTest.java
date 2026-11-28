@@ -42,6 +42,7 @@ class BillingControllerWebTest {
     @Test void billingRoutesRemainFirebaseProtectedWithoutShopHeader() throws Exception {
         mvc.perform(get("/api/v1/billing/plans")).andExpect(status().isUnauthorized());
         mvc.perform(get("/api/v1/billing/payment-requests/1")).andExpect(status().isUnauthorized());
+        mvc.perform(post("/api/v1/billing/payment-requests/1/cancel")).andExpect(status().isUnauthorized());
         mvc.perform(post("/api/v1/billing/payment-requests").contentType(MediaType.APPLICATION_JSON).content("{}"))
                 .andExpect(status().isUnauthorized());
         verifyNoInteractions(billing);
@@ -122,10 +123,27 @@ class BillingControllerWebTest {
                 .andExpect(jsonPath("$.traceId").isNotEmpty());
     }
 
+    @Test void cancellationIsProtectedShoplessNoStoreAndUsesExistingErrorEnvelope() throws Exception {
+        var cancelled = response().current("CANCELLED", false, "NOT_STARTED", null,
+                OffsetDateTime.parse("2026-11-08T00:01:00Z"));
+        when(billing.cancel(any(), eq(9L))).thenReturn(cancelled);
+        mvc.perform(post("/api/v1/billing/payment-requests/9/cancel").header("Authorization", "Bearer valid"))
+                .andExpect(status().isOk()).andExpect(header().string("Cache-Control", "no-store"))
+                .andExpect(jsonPath("$.status").value("CANCELLED"))
+                .andExpect(jsonPath("$.cancelledAt").value("2026-11-08T07:01:00+07:00"))
+                .andExpect(jsonPath("$.qrUrl").isEmpty());
+        when(billing.cancel(any(), eq(10L))).thenThrow(new BusinessException(ErrorCode.BILLING_REQUEST_ALREADY_PAID));
+        mvc.perform(post("/api/v1/billing/payment-requests/10/cancel").header("Authorization", "Bearer valid"))
+                .andExpect(status().isConflict()).andExpect(jsonPath("$.code").value("billing_request_already_paid"));
+        when(billing.cancel(any(), eq(11L))).thenThrow(new BusinessException(ErrorCode.BILLING_REQUEST_NOT_FOUND));
+        mvc.perform(post("/api/v1/billing/payment-requests/11/cancel").header("Authorization", "Bearer valid"))
+                .andExpect(status().isNotFound()).andExpect(jsonPath("$.code").value("billing_request_not_found"));
+    }
+
     private static BillingPaymentResponse response() {
         var now = OffsetDateTime.parse("2026-11-08T00:00:00Z");
         return new BillingPaymentResponse(9, "FULL_MONTHLY", 1, 99000, "VND", 1, 1, "SLPAAAAAAAAAAAA", "PENDING", false,
                 "NOT_STARTED", now, now.plusMinutes(30), null,
-                new BillingPaymentResponse.Recipient("TPBank", "0000000001", "SIMULATED RECIPIENT"), "https://vietqr.app/img");
+                new BillingPaymentResponse.Recipient("TPBank", "0000000001", "SIMULATED RECIPIENT"), "https://vietqr.app/img", null);
     }
 }

@@ -55,6 +55,7 @@ public class SePayWebhookService {
             else if (request == null && payload.code() != null) reason = "UNKNOWN_CODE";
             else if (request != null) {
                 if (request.status().equals("PAID")) reason = "EXTRA_TRANSFER";
+                else if (request.status().equals("CANCELLED")) reason = "CANCELLED_REQUEST";
                 else if (!payload.bank().equalsIgnoreCase(request.bank()) || !payload.account().equals(request.account())
                         || payload.subAccount() != null) reason = "RECIPIENT_MISMATCH";
                 else if (payload.amount() != request.amount()) reason = "AMOUNT_MISMATCH";

@@ -77,7 +77,7 @@ public class BillingService {
                         .queryParam("acc", recipient.accountNumber()).queryParam("bank", recipient.bankCode())
                         .queryParam("amount", plan.amountVnd()).queryParam("des", paymentCode).build().encode().toUriString();
                 var response = new BillingPaymentResponse(id, code, version, plan.amountVnd(), "VND", plan.durationMonths(),
-                        1, paymentCode, "PENDING", false, "NOT_STARTED", now, now.plusMinutes(30), null, recipient, qr);
+                        1, paymentCode, "PENDING", false, "NOT_STARTED", now, now.plusMinutes(30), null, recipient, qr, null);
                 if (repository.create(owner, properties.integrationKey(), key, hash, response, json.write(response))) return response;
             }
             throw new BusinessException(ErrorCode.BILLING_UNAVAILABLE);
@@ -90,9 +90,31 @@ public class BillingService {
         return inTransaction(() -> {
             long owner = repository.owner(token.uid(), false);
             var row = repository.owned(owner, id).orElseThrow(() -> new BusinessException(ErrorCode.BILLING_REQUEST_NOT_FOUND));
-            String status = "PAID".equals(row.status()) ? "PAID" : !clock.instant().isBefore(row.expires().toInstant()) ? "EXPIRED" : "PENDING";
-            return json.snapshot(row.originalResponse()).current(status, row.review(), row.fulfillment(), row.paid());
+            return current(row);
         });
+    }
+
+    /** Retry-safe OWNER cancellation, serialized with the provider receipt and fulfillment. */
+    public BillingPaymentResponse cancel(VerifiedFirebaseToken token, long id) {
+        if (id <= 0) throw new BusinessException(ErrorCode.INVALID_BILLING_REQUEST);
+        return inTransaction(() -> {
+            var row = repository.lockOwned(token.uid(), id).orElse(null);
+            repository.owner(token.uid(), false);
+            if (row == null) throw new BusinessException(ErrorCode.BILLING_REQUEST_NOT_FOUND);
+            if ("PAID".equals(row.status())) throw new BusinessException(ErrorCode.BILLING_REQUEST_ALREADY_PAID);
+            var now = OffsetDateTime.ofInstant(clock.instant().truncatedTo(ChronoUnit.MICROS), ZoneOffset.UTC);
+            if ("PENDING".equals(row.status()) && now.isBefore(row.expires())) {
+                repository.cancel(id, now);
+                row = repository.owned(row.owner(), id).orElseThrow(() -> new IllegalStateException("Cancelled request unavailable"));
+            }
+            return current(row);
+        });
+    }
+
+    private BillingPaymentResponse current(BillingRepository.Request row) {
+        String status = row.status();
+        if ("PENDING".equals(status) && !clock.instant().isBefore(row.expires().toInstant())) status = "EXPIRED";
+        return json.snapshot(row.originalResponse()).current(status, row.review(), row.fulfillment(), row.paid(), row.cancelled());
     }
 
     private String paymentCode() {
@@ -105,5 +127,6 @@ public class BillingService {
         try { return transaction.execute(status -> { repository.deadlines(); return operation.get(); }); }
         catch (DataAccessException exception) { throw new BusinessException(ErrorCode.BILLING_UNAVAILABLE); }
         catch (org.springframework.transaction.TransactionException exception) { throw new BusinessException(ErrorCode.BILLING_UNAVAILABLE); }
+        catch (IllegalStateException exception) { throw new BusinessException(ErrorCode.BILLING_UNAVAILABLE); }
     }
 }

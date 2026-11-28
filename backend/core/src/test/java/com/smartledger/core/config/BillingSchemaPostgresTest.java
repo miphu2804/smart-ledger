@@ -264,6 +264,67 @@ class BillingSchemaPostgresTest {
         return new JdbcTemplate(source).update("UPDATE ai_quota_windows SET reserved_count=reserved_count+1 WHERE id=? AND committed_count+reserved_count<limit_count", id);
     }
 
+    @Test
+    void cancellationUpgradePreservesV21EvidenceAndEnforcesCancelledState() {
+        flyway("21").migrate();
+        long owner = user();
+        long request = request(owner, "test", "v21-pending");
+        long paidRequest = request(owner, "test", "v21-paid");
+        long payment = bank(owner, paidRequest, "test", "500", "ACCEPTED", "MATCHED");
+        long period = period(owner);
+        sql.update("UPDATE billing_payment_requests SET status='PAID',paid_at=now(),fulfillment_status='PENDING' WHERE id=?", paidRequest);
+        long grant = grant(owner, paidRequest, payment, period);
+        sql.update("UPDATE billing_payment_requests SET fulfillment_status='APPLIED',fulfilled_grant_id=? WHERE id=?", grant, paidRequest);
+        var paidBefore = sql.queryForMap("SELECT * FROM billing_payment_requests WHERE id=?", paidRequest);
+        var paymentBefore = sql.queryForMap("SELECT * FROM billing_bank_transactions WHERE id=?", payment);
+        var grantBefore = sql.queryForMap("SELECT * FROM billing_subscription_grants WHERE id=?", grant);
+        var original = sql.queryForMap("SELECT * FROM billing_payment_requests WHERE id=?", request);
+        var history = sql.queryForList("SELECT * FROM flyway_schema_history ORDER BY installed_rank");
+        assertThat(flyway("22").migrate().migrationsExecuted).isEqualTo(1);
+        assertThat(flyway("22").migrate().migrationsExecuted).isZero();
+        assertThat(flyway("22").validateWithResult().validationSuccessful).isTrue();
+        var upgraded = sql.queryForMap("SELECT * FROM billing_payment_requests WHERE id=?", request);
+        assertThat(upgraded.remove("cancelled_at")).isNull();
+        assertThat(upgraded).isEqualTo(original);
+        var paidAfter = sql.queryForMap("SELECT * FROM billing_payment_requests WHERE id=?", paidRequest);
+        assertThat(paidAfter.remove("cancelled_at")).isNull();
+        assertThat(paidAfter).isEqualTo(paidBefore);
+        assertThat(sql.queryForMap("SELECT * FROM billing_bank_transactions WHERE id=?", payment)).isEqualTo(paymentBefore);
+        assertThat(sql.queryForMap("SELECT * FROM billing_subscription_grants WHERE id=?", grant)).isEqualTo(grantBefore);
+        assertThat(sql.queryForList("SELECT * FROM flyway_schema_history ORDER BY installed_rank").subList(0, history.size())).isEqualTo(history);
+        assertThatThrownBy(() -> sql.update("UPDATE billing_payment_requests SET status='CANCELLED' WHERE id=?", request))
+                .isInstanceOf(DataIntegrityViolationException.class);
+        assertThatThrownBy(() -> sql.update("UPDATE billing_payment_requests SET status='CANCELLED',cancelled_at=created_at WHERE id=?", paidRequest))
+                .isInstanceOf(DataIntegrityViolationException.class);
+        sql.update("UPDATE billing_payment_requests SET status='CANCELLED',cancelled_at=created_at WHERE id=?", request);
+        assertThatThrownBy(() -> sql.update("UPDATE billing_payment_requests SET status='PENDING' WHERE id=?", request))
+                .isInstanceOf(DataIntegrityViolationException.class);
+        assertThatThrownBy(() -> sql.update("UPDATE billing_payment_requests SET cancelled_at=expires_at WHERE id=?", request))
+                .isInstanceOf(DataIntegrityViolationException.class);
+        bank(owner, request, "test", "501", "REVIEW_REQUIRED", "CANCELLED_REQUEST");
+        assertThatThrownBy(() -> sql.update("DELETE FROM billing_bank_transactions"))
+                .isInstanceOf(DataAccessException.class);
+        for (var table : TABLES) assertPrivate(table);
+    }
+
+    @Test
+    void cancellationConstraintCollisionRollsBackAndKeepsV21Usable() {
+        flyway("21").migrate();
+        // Fail the second ALTER after the request table was changed, proving transactional DDL rollback.
+        sql.execute("ALTER TABLE billing_bank_transactions RENAME CONSTRAINT billing_bank_transactions_reason_check TO test_original_reason");
+        assertThatThrownBy(() -> flyway("22").migrate()).isInstanceOf(org.flywaydb.core.api.FlywayException.class);
+        assertThat(sql.queryForObject("SELECT count(*) FROM flyway_schema_history WHERE version='22'", Integer.class)).isZero();
+        assertThat(sql.queryForObject("SELECT count(*) FROM information_schema.columns WHERE table_schema=? AND table_name='billing_payment_requests' AND column_name='cancelled_at'", Integer.class, schema)).isZero();
+        long owner = user();
+        long request = request(owner, "test", "collision");
+        assertThatThrownBy(() -> sql.update("UPDATE billing_payment_requests SET status='CANCELLED' WHERE id=?", request))
+                .isInstanceOf(DataIntegrityViolationException.class);
+        assertThatThrownBy(() -> bank(owner, request, "test", "502", "REVIEW_REQUIRED", "CANCELLED_REQUEST"))
+                .isInstanceOf(DataIntegrityViolationException.class);
+        sql.execute("ALTER TABLE billing_bank_transactions RENAME CONSTRAINT test_original_reason TO billing_bank_transactions_reason_check");
+        assertThat(flyway("21").validateWithResult().validationSuccessful).isTrue();
+    }
+
     private void assertPrivate(String table) {
         assertThat(sql.queryForObject("SELECT relrowsecurity FROM pg_class WHERE oid=?::regclass", Boolean.class, table)).isTrue();
         assertThat(sql.queryForObject("SELECT count(*) FROM pg_policies WHERE schemaname=? AND tablename=?", Integer.class, schema, table)).isZero();

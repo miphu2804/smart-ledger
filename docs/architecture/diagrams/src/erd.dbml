@@ -1034,13 +1034,14 @@ Table billing_payment_requests {
   created_at timestamptz [not null]
   expires_at timestamptz [not null]
   paid_at timestamptz
+  cancelled_at timestamptz [note: 'V22; present only for CANCELLED, created_at <= cancelled_at < expires_at.']
   fulfilled_grant_id bigint
   indexes {
     (integration_key, payment_code) [unique]
     (payer_user_id, idempotency_key) [unique]
     (id, payer_user_id, integration_key) [unique]
   }
-  Note: 'V21; default-off payment/grant writers. Immutable offer/recipient and original response; 30-minute expiry. Scoped grant FK binds phase-four atomic fulfillment.'
+  Note: 'V21 plus V22 cancellation; PENDING/EXPIRED/PAID/CANCELLED. Immutable offer/recipient and original response; 30-minute expiry. Scoped grant FK binds phase-four atomic fulfillment.'
 }
 
 Table billing_bank_transactions {
@@ -1065,7 +1066,7 @@ Table billing_bank_transactions {
     (integration_key, provider_transaction_id) [unique]
     (id, matched_request_id, payer_user_id, integration_key, disposition) [unique]
   }
-  Note: 'V21; private RLS and append-only triggers. Partial UNIQUE matched_request_id WHERE ACCEPTED; SQL owns exact disposition checks.'
+  Note: 'V21; V22 adds CANCELLED_REQUEST review reason. Private RLS and append-only triggers. Partial UNIQUE matched_request_id WHERE ACCEPTED; SQL owns exact disposition checks.'
 }
 
 Table billing_subscription_periods {

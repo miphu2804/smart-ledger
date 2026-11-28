@@ -11,11 +11,12 @@ Call Core only, using the existing Firebase ID token/session client. Do not send
 | GET /api/v1/billing/plans | No | Render the returned offer version, price, calendar duration and allowance; Free has no purchase action |
 | POST /api/v1/billing/payment-requests | No | Send only planCode/planVersion and a stable Idempotency-Key; retain the owned returned ID |
 | GET /api/v1/billing/payment-requests/{id} | No | Read current payment/fulfillment state; creation replay is the original snapshot |
+| POST /api/v1/billing/payment-requests/{id}/cancel | No | No body or idempotency header. Await Core response before clearing tracking. 200 may be CANCELLED or EXPIRED; 409 billing_request_already_paid requires refreshing the request and continuing fulfillment polling. |
 | GET /api/v1/billing/subscription | No | Read effective access, actual expiry and manual-renewal state |
 | GET /api/v1/agent/quota | No | Read committed/reserved/remaining, window dates and enforcementEnabled |
 | POST /api/v1/agent/chat and /chat/stream | Required | Retain a key per logical question and original message/conversation/shop; both transports share it |
 
-An OWNER without a shop can read or purchase a plan; asking the assistant still requires an owned ACTIVE shop. Switching shops does not create another allowance. All tiers retain existing features; Free is 2 successful turns per Vietnam day, paid plans share 300 per activation-anchored seven days. Never advertise unlimited AI or imply that a three-month purchase provides a separate larger weekly quota.
+An OWNER without a shop can read or purchase a plan; asking the assistant still requires an owned ACTIVE shop. Switching shops does not create another allowance. All tiers retain existing features; Free is 100 successful turns per calendar week resetting at 00:00 Monday Vietnam time, paid plans share 300 per activation-anchored seven days. Never advertise unlimited AI or imply that a three-month purchase provides a separate larger weekly quota.
 
 ## Payment flow
 
@@ -24,11 +25,13 @@ An OWNER without a shop can read or purchase a plan; asking the assistant still 
 3. Read current state with GET after creation/replay. A POST replay always returns the original 201 snapshot, even after payment or expiry; it is not a live polling response. Display QR/recipient/amount/paymentCode from the stored server snapshot. Hide expired or null QR and use Core expiresAt as the countdown authority. Do not rebuild a QR with a different amount or code.
 4. Poll the owned status while the payment view is active, with bounded retries/backoff and a stop when the view closes or the status becomes terminal. A countdown, redirect, screenshot or “I have transferred” click is never evidence of payment. Closing the view does not cancel money already in flight; do not automatically mint a second purchase request when reopening.
 5. Once fulfillment is APPLIED, refresh subscription and quota. Render dates returned by Core; renewal adds calendar months and does not reset the current weekly allowance. Do not activate locally merely because status is PAID or a QR disappeared.
+6. For intentional cancellation, confirm with the OWNER and POST the owned request ID to `/cancel`. Keep tracking until Core confirms CANCELLED or EXPIRED. On an uncertain network/5xx result, GET the request or retry the same cancellation; retain the ID. On 409 `billing_request_already_paid`, refresh and continue activation polling. A cancelled request stays cancelled after its original expiry, and its `cancelledAt` remains stable on retry. A deliberate new purchase needs a new creation key; replaying the old key still returns the old original snapshot.
 
 | Status / fulfillment | Suggested Vietnamese copy | Behavior |
 |---|---|---|
 | PENDING / NOT_STARTED, not expired | Chờ thanh toán | Show current QR and server deadline |
 | EXPIRED | Yêu cầu thanh toán đã hết hạn | Hide QR; explain that already-sent money can need reconciliation; a new purchase is an explicit action |
+| CANCELLED / NOT_STARTED | Yêu cầu thanh toán đã hủy | Hide QR and stop polling; money sent to the old code goes to reconciliation and does not automatically activate a plan |
 | PAID / PENDING | Đã nhận thanh toán — đang kích hoạt gói | Retain request ID and show recoverable activation state; do not ask the user to pay again |
 | PAID / APPLIED | Gói đã được kích hoạt | Refresh the effective term and quota; the last purchased plan is not the length of the whole continuous term |
 | reviewRequired=true | Có khoản chuyển cần đối soát | Preserve the underlying payment/fulfillment state; this flag can coexist with a valid applied purchase after an extra transfer |
