@@ -69,6 +69,8 @@ test('huỷ yêu cầu đang chờ thì về màn chọn gói và tạo được
 
   await page.getByRole('button', { name: 'Huỷ yêu cầu' }).first().click();
   await page.getByRole('button', { name: 'Huỷ yêu cầu' }).last().click();
+  // Chỉ báo đã huỷ sau khi Core xác nhận CANCELLED
+  await expect(page.getByText('Đã huỷ yêu cầu thanh toán', { exact: true })).toBeVisible();
   await expect(page).toHaveURL(/plans/);
   await expect(page.getByRole('button', { name: 'Mở yêu cầu thanh toán đang chờ' })).toHaveCount(0);
 

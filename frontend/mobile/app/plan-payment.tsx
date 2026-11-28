@@ -18,7 +18,8 @@ import {
   type PaymentRequest,
   type SubscriptionSummary,
 } from '../src/lib/billing';
-import { getPaymentRequest, getSubscription } from '../src/lib/billingApi';
+import { ApiError } from '../src/lib/api';
+import { cancelPaymentRequest, getPaymentRequest, getSubscription } from '../src/lib/billingApi';
 import { clearStoredPayment } from '../src/lib/billingStorage';
 import { ddmmyyyy, vnd } from '../src/lib/format';
 import { billingOwnerKey } from '../src/lib/useBillingStatus';
@@ -32,7 +33,8 @@ const POLL_MAX_MS = 30000;
 /**
  * Chuyển khoản cho một yêu cầu thanh toán (contract §9). QR, số tiền, tài khoản nhận và nội dung đều lấy từ yêu cầu Core
  * đã lưu, không tự dựng lại. Chỉ trạng thái của Core quyết định đã trả hay chưa; đóng màn không huỷ khoản đang chuyển.
- * "Huỷ yêu cầu" chỉ bỏ theo dõi trên máy để tạo yêu cầu khác: Core chưa có API huỷ, nên yêu cầu vẫn nhận tiền tới hạn.
+ * "Huỷ yêu cầu" gọi API huỷ của Core và chỉ bỏ theo dõi trên máy khi Core xác nhận CANCELLED/EXPIRED. Core báo đã nhận tiền
+ * (409) thì đọc lại trạng thái và tiếp tục chờ kích hoạt; lỗi khác giữ nguyên yêu cầu để thử lại.
  */
 export default function PlanPayment() {
   const app = useApp();
@@ -44,14 +46,33 @@ export default function PlanPayment() {
   const [term, setTerm] = useState<SubscriptionSummary | null>(null);
   const delay = useRef(POLL_MS);
   const [cancelOpen, setCancelOpen] = useState(false);
+  const [cancelling, setCancelling] = useState(false);
+  const [cancelError, setCancelError] = useState<string | null>(null);
   const toast = useToast();
 
   const cancel = async () => {
-    const owner = billingOwnerKey(app.userId);
-    if (owner) await clearStoredPayment(owner);
-    setCancelOpen(false);
-    toast('Đã huỷ yêu cầu thanh toán');
-    router.dismissTo('/plans');
+    if (cancelling) return;
+    setCancelling(true);
+    setCancelError(null);
+    try {
+      const next = await cancelPaymentRequest(requestId);
+      setReq(next);
+      const owner = billingOwnerKey(app.userId);
+      if (owner) await clearStoredPayment(owner);
+      setCancelOpen(false);
+      toast(next.status === 'CANCELLED' ? 'Đã huỷ yêu cầu thanh toán' : 'Yêu cầu thanh toán đã hết hạn');
+      router.dismissTo('/plans');
+    } catch (e) {
+      if (e instanceof ApiError && e.code === 'billing_request_already_paid') {
+        setCancelOpen(false);
+        toast(billingErrorMessage(e));
+        void refresh();
+      } else {
+        setCancelError('Chưa huỷ được. Yêu cầu vẫn đang chờ thanh toán, bạn thử lại sau nhé.');
+      }
+    } finally {
+      setCancelling(false);
+    }
   };
 
   const refresh = useCallback(async () => {
@@ -133,7 +154,7 @@ export default function PlanPayment() {
       footer={
         done ? (
           <Button title="Xong" onPress={() => router.dismissTo('/(tabs)/more')} />
-        ) : view.stage === 'expired' ? (
+        ) : view.stage === 'expired' || view.stage === 'cancelled' ? (
           <Button title="Chọn gói và tạo yêu cầu mới" onPress={() => router.dismissTo('/plans')} />
         ) : view.stage === 'awaiting' ? (
           <Button title="Huỷ yêu cầu" icon="x-circle" variant="outline" onPress={() => setCancelOpen(true)} />
@@ -220,13 +241,24 @@ export default function PlanPayment() {
 
       {view.stage === 'activating' ? <LoadingState compact label="Đang kích hoạt gói…" /> : null}
 
-      <Sheet visible={cancelOpen} onClose={() => setCancelOpen(false)} title="Huỷ yêu cầu thanh toán?">
+      <Sheet visible={cancelOpen} onClose={() => !cancelling && setCancelOpen(false)} title="Huỷ yêu cầu thanh toán?">
         <T size={13} color={colors.inkSecondary} style={styles.cancelText}>
-          Nếu bạn đã chuyển khoản thì đừng huỷ: khoản tiền vẫn được ghi nhận và gói sẽ tự kích hoạt. Sau khi huỷ, đừng chuyển tiền
-          với nội dung {req.paymentCode} nữa.
+          Nếu bạn đã chuyển khoản thì đừng huỷ: chờ vài phút để gói tự kích hoạt. Sau khi huỷ, tiền chuyển với nội dung{' '}
+          {req.paymentCode} không kích hoạt gói mà phải chờ đối soát.
         </T>
-        <Button title="Huỷ yêu cầu" variant="danger" onPress={() => void cancel()} />
-        <Button title="Tiếp tục thanh toán" variant="ghost" onPress={() => setCancelOpen(false)} style={{ marginTop: 8 }} />
+        {cancelError ? (
+          <T size={12.5} color={colors.red} style={styles.cancelText} accessibilityRole="alert">
+            {cancelError}
+          </T>
+        ) : null}
+        <Button title="Huỷ yêu cầu" variant="danger" loading={cancelling} disabled={cancelling} onPress={() => void cancel()} />
+        <Button
+          title="Tiếp tục thanh toán"
+          variant="ghost"
+          disabled={cancelling}
+          onPress={() => setCancelOpen(false)}
+          style={{ marginTop: 8 }}
+        />
       </Sheet>
     </Screen>
   );
@@ -245,11 +277,24 @@ function InfoRow({ label, value, strong, last }: { label: string; value: string;
   );
 }
 
-const statusIcon = { awaiting: 'clock', expired: 'x-circle', activating: 'loader', active: 'check-circle' } as const;
-const statusColor = { awaiting: colors.brand, expired: colors.red, activating: colors.brand, active: colors.green };
+const statusIcon = {
+  awaiting: 'clock',
+  expired: 'x-circle',
+  cancelled: 'x-circle',
+  activating: 'loader',
+  active: 'check-circle',
+} as const;
+const statusColor = {
+  awaiting: colors.brand,
+  expired: colors.red,
+  cancelled: colors.red,
+  activating: colors.brand,
+  active: colors.green,
+};
 const statusTone = StyleSheet.create({
   awaiting: { backgroundColor: colors.brandTint, borderColor: colors.brandBorder },
   expired: { backgroundColor: colors.redSoft, borderColor: '#EDC2BB' },
+  cancelled: { backgroundColor: colors.redSoft, borderColor: '#EDC2BB' },
   activating: { backgroundColor: colors.brandTint, borderColor: colors.brandBorder },
   active: { backgroundColor: colors.greenSoft, borderColor: '#C9E4B9' },
 });

@@ -19,6 +19,14 @@ export function getPaymentRequest(id: number): Promise<PaymentRequest> {
   return apiRequest<PaymentRequest>(`/billing/payment-requests/${id}`);
 }
 
+/**
+ * POST /billing/payment-requests/{id}/cancel — không cần body hay key: gọi lại chỉ trả trạng thái hiện tại.
+ * 200 là CANCELLED hoặc EXPIRED (hết hạn trước khi huỷ); đã nhận tiền thì `409 billing_request_already_paid`.
+ */
+export function cancelPaymentRequest(id: number): Promise<PaymentRequest> {
+  return apiRequest<PaymentRequest>(`/billing/payment-requests/${id}/cancel`, { method: 'POST' });
+}
+
 // Một key cho một lần mua: bấm hai lần chỉ tạo một yêu cầu; lỗi mạng/5xx thì gửi lại đúng key cũ để không tạo yêu cầu
 // thứ hai. Thành công hoặc 4xx thì lần mua sau dùng key mới (xem idempotency.ts).
 const createSender = createIdempotentSender();
